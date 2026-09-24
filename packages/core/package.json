@@ -1,0 +1,13 @@
+{
+  "name": "@bilan/core",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "type-check": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  }
+}
