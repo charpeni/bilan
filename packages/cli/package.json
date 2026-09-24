@@ -1,0 +1,28 @@
+{
+  "name": "github-bilan",
+  "version": "0.0.1",
+  "description": "Pull-request analytics for any GitHub repository, as a self-contained HTML report.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "bilan": "./bin/bilan.mjs"
+  },
+  "files": [
+    "bin",
+    "dist"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "type-check": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@bilan/core": "workspace:*",
+    "@bilan/store-file": "workspace:*",
+    "@bilan/ui": "workspace:*",
+    "esbuild": "0.28.2"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}
