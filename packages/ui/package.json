@@ -1,0 +1,25 @@
+{
+  "name": "@bilan/ui",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./dist/bilan-ui.js": "./dist/bilan-ui.js",
+    "./dist/bilan-ui.css": "./dist/bilan-ui.css"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "type-check": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@bilan/core": "workspace:*",
+    "esbuild": "0.28.2",
+    "happy-dom": "20.14.5"
+  }
+}
