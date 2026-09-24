@@ -1,0 +1,57 @@
+---
+import { env } from 'cloudflare:workers';
+
+import { isOauthConfigured } from '../lib/oauth.ts';
+
+import type { SessionUser } from '../lib/session.ts';
+
+interface Props {
+  user: SessionUser | null;
+  /** Where to land after signing in; defaults to the current page. */
+  next?: string;
+}
+
+const { user } = Astro.props;
+const next = Astro.props.next ?? Astro.url.pathname + Astro.url.search;
+const loginHref = `/auth/github/start?next=${encodeURIComponent(next)}`;
+const configured = isOauthConfigured(env);
+---
+
+{
+  user ? (
+    <div class="user-menu">
+      {user.avatarUrl && <img class="avatar" src={user.avatarUrl} alt="" width="24" height="24" />}
+      <a href="/me">{user.login}</a>
+      <form method="post" action="/auth/logout">
+        <button class="button" type="submit">
+          Sign out
+        </button>
+      </form>
+    </div>
+  ) : configured ? (
+    <a class="button" href={loginHref}>
+      Sign in with GitHub
+    </a>
+  ) : (
+    <span class="user-menu">
+      <button class="button" type="button" disabled title="GITHUB_CLIENT_ID is not set">
+        Sign in with GitHub
+      </button>
+      <span class="muted">Login is not configured on this deployment.</span>
+    </span>
+  )
+}
+
+<style>
+  .user-menu {
+    display: inline-flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+  .user-menu form {
+    margin: 0;
+  }
+  .avatar {
+    border-radius: 50%;
+  }
+</style>

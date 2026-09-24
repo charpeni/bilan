@@ -1,0 +1,1 @@
+ALTER TABLE `repos` ADD `open_prs_synced_at` text;

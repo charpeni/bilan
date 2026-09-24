@@ -1,0 +1,9 @@
+{
+  "extends": ["../../tsconfig.base.json", "astro/tsconfigs/strict"],
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["@cloudflare/workers-types", "astro/client"]
+  },
+  "include": [".astro/types.d.ts", "src/**/*", "astro.config.ts", "vitest.config.ts"],
+  "exclude": ["dist", ".wrangler"]
+}

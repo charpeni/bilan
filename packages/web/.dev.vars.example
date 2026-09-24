@@ -1,0 +1,22 @@
+# Server token: a classic PAT with NO scopes. Used for EXAMPLE_REPO (cron and
+# signed-out viewers) and for public repositories the GitHub App is not
+# installed on, since a GitHub App user token only reaches repos the app is
+# installed on.
+GITHUB_TOKEN=ghp_replace_me
+
+# AES-256-GCM key for per-user GitHub tokens at rest. Generate with:
+#   openssl rand -base64 32
+TOKEN_ENCRYPTION_KEY=replace_me
+
+# Login is a GitHub App (user-to-server OAuth), not an OAuth App. Create one at
+# https://github.com/settings/apps/new (or under your organisation's settings):
+#   - Callback URL: http://localhost:8788/auth/github/callback
+#   - "Request user authorization (OAuth) during installation": ON
+#   - "Expire user authorization tokens": ON (bilan refreshes them itself)
+#   - Webhook: inactive
+#   - Repository permissions: Pull requests → Read-only, Metadata → Read-only
+#   - "Where can this GitHub App be installed?": Any account
+# Then generate a client secret and paste both values here. The app's URL slug
+# (https://github.com/apps/<slug>) goes in `GITHUB_APP_SLUG` in wrangler.jsonc.
+GITHUB_CLIENT_ID=replace_me
+GITHUB_CLIENT_SECRET=replace_me

@@ -1,0 +1,55 @@
+// Secrets (set with `wrangler secret put`, or in .dev.vars locally):
+//   GITHUB_TOKEN          server token used only to sync EXAMPLE_REPO
+//   TOKEN_ENCRYPTION_KEY  key for encrypting per-user GitHub tokens at rest
+//   GITHUB_CLIENT_ID      the bilan GitHub App (user-to-server OAuth login)
+//   GITHUB_CLIENT_SECRET
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "bilan",
+  // Worker entry: re-exports the Astro fetch handler plus `scheduled` and the workflow class.
+  "main": "./src/worker.ts",
+  "compatibility_date": "2026-07-24",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "./dist",
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "bilan",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "../store-d1/migrations",
+    },
+  ],
+  "r2_buckets": [
+    {
+      "binding": "PAYLOADS",
+      "bucket_name": "bilan-payloads",
+    },
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "CACHE",
+      "id": "00000000000000000000000000000000",
+    },
+  ],
+  "workflows": [
+    {
+      "binding": "SYNC_REPO",
+      "name": "sync-repo",
+      "class_name": "SyncRepoWorkflow",
+    },
+  ],
+  "triggers": {
+    "crons": ["0 6 * * *"],
+  },
+  "vars": {
+    "EXAMPLE_REPO": "withastro/astro",
+    // URL slug of the GitHub App (https://github.com/apps/<slug>); the 404 page links to its install screen.
+    "GITHUB_APP_SLUG": "bilan",
+  },
+  "observability": {
+    "enabled": true,
+  },
+}

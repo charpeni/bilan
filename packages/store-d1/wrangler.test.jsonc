@@ -1,0 +1,15 @@
+// Bindings for the vitest-pool-workers test runner only; the real worker lives in packages/web.
+{
+  "$schema": "../web/node_modules/wrangler/config-schema.json",
+  "name": "bilan-store-d1-test",
+  "compatibility_date": "2026-07-24",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "bilan-test",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations",
+    },
+  ],
+}

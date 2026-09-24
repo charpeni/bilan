@@ -1,0 +1,118 @@
+---
+import { parseRepo } from '@bilan/core';
+import { listRepoViews } from '@bilan/store-d1';
+import { env } from 'cloudflare:workers';
+
+import UserMenu from '../components/UserMenu.astro';
+import Base from '../layouts/Base.astro';
+import { accessDeps, checkRepoAccess } from '../lib/access.ts';
+import { getDb } from '../lib/db.ts';
+import { installUrl, loginHref } from '../lib/oauth.ts';
+import { filterVisibleViews } from '../lib/views.ts';
+
+const user = Astro.locals.user;
+if (!user) return Astro.redirect(loginHref('/me'), 302);
+
+// The "open a repository" form posts back here with `?repo=owner/name`.
+const requested = Astro.url.searchParams.get('repo');
+let openError: string | null = null;
+if (requested) {
+  try {
+    const ref = parseRepo(requested);
+    return Astro.redirect(`/${encodeURIComponent(ref.owner)}/${encodeURIComponent(ref.name)}`, 302);
+  } catch (error) {
+    openError = error instanceof Error ? error.message : String(error);
+  }
+}
+
+// A repo stays listed only while the viewer may still see it, public rows
+// included (a public repo may have gone private, been replaced, or vanished):
+// the same check as the repo page, cached for 15 minutes per viewer and repo
+// (and per repo for the public visibility probe).
+const deps = accessDeps(env);
+const views = await filterVisibleViews(await listRepoViews(getDb(env), user.id), (view) =>
+  checkRepoAccess(deps, user, {
+    id: view.repoId,
+    owner: view.owner,
+    name: view.name,
+    isPrivate: view.isPrivate,
+  }),
+);
+const install = installUrl(env);
+---
+
+<Base title="Your repositories · bilan">
+  <nav class="topbar">
+    <a href="/">bilan</a>
+    <span class="spacer"></span>
+    <UserMenu user={user} />
+  </nav>
+  <main class="site">
+    <h1>Your repositories</h1>
+    <form method="get" action="/me" class="actions">
+      <input
+        name="repo"
+        type="text"
+        placeholder="owner/name"
+        value={requested ?? ''}
+        required
+        pattern="[\w.\-]+/[\w.\-]+"
+        aria-label="Repository owner/name"
+      />
+      <button class="button primary" type="submit">Open</button>
+      {openError && <span class="muted">{openError}</span>}
+    </form>
+    <p class="muted">
+      Public repositories work right away. Private repositories need bilan installed on your
+      organization{install && <> (<a href={install}>install it on GitHub</a>)</>}.
+    </p>
+    {
+      views.length === 0 ? (
+        <p>
+          Nothing yet. Open any <code>owner/name</code> above, or try{' '}
+          <a href={`/${env.EXAMPLE_REPO}`}>{env.EXAMPLE_REPO}</a>.
+        </p>
+      ) : (
+        <table class="repo-list">
+          <thead>
+            <tr>
+              <th>Repository</th>
+              <th>Last viewed</th>
+              <th>Coverage</th>
+              <th>Synced</th>
+            </tr>
+          </thead>
+          <tbody>
+            {views.map((view) => (
+              <tr>
+                <td>
+                  <a href={`/${view.owner}/${view.name}`}>
+                    {view.owner}/{view.name}
+                  </a>
+                  {view.isPrivate && <span class="badge">private</span>}
+                </td>
+                <td>
+                  <time datetime={view.lastViewedAt}>{view.lastViewedAt.slice(0, 10)}</time>
+                </td>
+                <td>
+                  {view.lastSyncedAt === null
+                    ? '—'
+                    : view.coverageSince === null
+                      ? 'full history'
+                      : `since ${view.coverageSince.slice(0, 10)}`}
+                </td>
+                <td>
+                  {view.lastSyncedAt === null ? (
+                    'not yet'
+                  ) : (
+                    <time datetime={view.lastSyncedAt}>{view.lastSyncedAt}</time>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )
+    }
+  </main>
+</Base>

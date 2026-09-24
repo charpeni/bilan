@@ -1,0 +1,47 @@
+---
+import { env } from 'cloudflare:workers';
+
+import UserMenu from '../components/UserMenu.astro';
+import Base from '../layouts/Base.astro';
+import { installUrl } from '../lib/oauth.ts';
+
+const exampleRepo = env.EXAMPLE_REPO;
+const user = Astro.locals.user;
+const install = installUrl(env);
+---
+
+<Base title="bilan">
+  <nav class="topbar">
+    <a href="/">bilan</a>
+    <span class="spacer"></span>
+    <UserMenu user={user} next="/me" />
+  </nav>
+  <main class="site">
+    <h1>bilan</h1>
+    <p>
+      Pull-request analytics for any GitHub repository: throughput, cycle time, and review load,
+      anchored to when a PR became ready for review rather than when it was opened, so time spent
+      in draft is never charged to the reviewers.
+    </p>
+    <div class="actions">
+      <a class="button primary" href={`/${exampleRepo}`}>See the {exampleRepo} dashboard</a>
+      {
+        user ? (
+          <a class="button" href="/me">
+            Your repositories
+          </a>
+        ) : (
+          <UserMenu user={null} next="/me" />
+        )
+      }
+    </div>
+    <p class="muted">
+      Sign in to sync any repository you can read on GitHub, on your own token; reports are
+      shared with coworkers who can see the same repo.
+    </p>
+    <p class="muted">
+      Private repositories need bilan installed on your organization
+      {install && <>(<a href={install}>install it on GitHub</a>)</>}.
+    </p>
+  </main>
+</Base>

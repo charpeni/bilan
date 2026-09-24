@@ -1,0 +1,1 @@
+ALTER TABLE `repos` ADD `sync_started_at` text;

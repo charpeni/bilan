@@ -1,0 +1,61 @@
+---
+import { env } from 'cloudflare:workers';
+
+import { installUrl, loginHref } from '../lib/oauth.ts';
+
+import type { SessionUser } from '../lib/session.ts';
+
+/**
+ * The one 404 page for a repository, whether it is unknown to bilan, does not
+ * exist on GitHub, or is private and invisible to the viewer: its output
+ * depends only on the label and the viewer (plus the deployment's app slug),
+ * never on what the database holds or what GitHub answered.
+ */
+interface Props {
+  label: string;
+  user: SessionUser | null;
+}
+
+const { label, user } = Astro.props;
+const install = installUrl(env);
+Astro.response.status = 404;
+---
+
+<main class="site">
+  <h1>{label}</h1>
+  <p>This repository was not found, or you do not have access to it on GitHub.</p>
+  {
+    user !== null && (
+      <section>
+        <h2>Is this a private repository?</h2>
+        <p>
+          bilan reads private repositories through its GitHub App, which must be installed on the
+          organisation (or the repository) that owns <code>{label}</code>. It only ever reads
+          pull-request metadata; it never writes to your repositories.
+        </p>
+        <p class="muted">
+          Installing takes an organisation owner or a repository admin. Anyone else can request
+          the install from the same page and GitHub notifies the owners.
+        </p>
+        <div class="actions">
+          {install && (
+            <a class="button primary" href={install}>
+              Install bilan on GitHub
+            </a>
+          )}
+          <a class="button" href="/me">
+            Back to your repositories
+          </a>
+        </div>
+      </section>
+    )
+  }
+  {
+    user === null && (
+      <p class="muted">
+        <a href={loginHref(Astro.url.pathname)}>Sign in</a> to sync repositories on your own GitHub
+        token.
+      </p>
+    )
+  }
+</main>
