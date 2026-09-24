@@ -1,0 +1,35 @@
+# build output
+dist/
+
+# generated files
+.astro/
+.wrangler/
+.turbo/
+
+# dependencies
+node_modules/
+
+# environment files
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+
+# local sync caches and reports
+.bilan/
+*.report.html
+
+# logs
+*.log
+
+# editor and OS files
+.DS_Store
+.idea/
+.serena/
+.vscode/
+
+# working documents stay local
+PLAN.md
+*.plan.md
