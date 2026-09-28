@@ -21,6 +21,14 @@
   --seq-6: #184f95;
   --seq-7: #0d366b;
   --ghost: rgba(11, 11, 11, 0.05);
+  --accent: #2a78d6;
+  --accent-ink: #ffffff;
+  --warn-bg: #fff4d6;
+  --warn-fg: #7a5200;
+  --font-sans: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -44,6 +52,10 @@
     --seq-6: #9ec5f4;
     --seq-7: #cde2fb;
     --ghost: rgba(255, 255, 255, 0.06);
+    --accent: #3987e5;
+    --accent-ink: #ffffff;
+    --warn-bg: #3a2f10;
+    --warn-fg: #ffd77a;
     color-scheme: dark;
   }
 }
@@ -67,6 +79,10 @@
   --seq-6: #9ec5f4;
   --seq-7: #cde2fb;
   --ghost: rgba(255, 255, 255, 0.06);
+  --accent: #3987e5;
+  --accent-ink: #ffffff;
+  --warn-bg: #3a2f10;
+  --warn-fg: #ffd77a;
   color-scheme: dark;
 }
 
@@ -77,12 +93,12 @@ body {
   margin: 0;
   background: var(--page);
   color: var(--ink);
-  font:
-    14px/1.5 system-ui,
-    -apple-system,
-    'Segoe UI',
-    sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+/* The dashboard's own type scale, kept off <body> so a host page can set its own. */
+.wrap,
+.tt {
+  font: 14px/1.5 var(--font-sans);
 }
 .wrap {
   max-width: 1400px;
@@ -138,9 +154,22 @@ header.page .spacer {
   border-radius: 6px;
   cursor: pointer;
   white-space: nowrap;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    transform 120ms var(--ease-out);
 }
 .seg button:hover {
   background: var(--ghost);
+}
+.seg button:active {
+  transform: scale(0.97);
+}
+.seg button:focus-visible,
+select.dim:focus-visible,
+label.check:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 .seg button[aria-pressed='true'] {
   background: var(--ink);
@@ -484,7 +513,7 @@ ul.insights .ico {
   font-variant-numeric: tabular-nums;
 }
 a {
-  color: var(--s1);
+  color: var(--accent);
 }
 details.table-view {
   margin-top: 12px;

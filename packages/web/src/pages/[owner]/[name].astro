@@ -4,10 +4,10 @@ import { getRepoByName, touchRepoView } from '@bilan/store-d1';
 import { env } from 'cloudflare:workers';
 
 import RepoNotFound from '../../components/RepoNotFound.astro';
-import UserMenu from '../../components/UserMenu.astro';
 import Base from '../../layouts/Base.astro';
 import { accessDeps, checkRepoAccess } from '../../lib/access.ts';
 import { getDb } from '../../lib/db.ts';
+import { fmtCoverage, fmtSyncedAt } from '../../lib/format.ts';
 import {
   findActiveJob,
   startSync,
@@ -109,31 +109,44 @@ const canSync = user !== null || example;
 const autoRefresh = user !== null && view === 'ready' && repo !== undefined && needsRefresh(repo);
 ---
 
-<Base title={`${label} · bilan`}>
+<Base
+  title={`${label} · bilan`}
+  user={user}
+  crumb={{ owner, name, isPrivate: repo?.isPrivate ?? false }}
+  hideTheme={view === 'ready'}
+>
+  <Fragment slot="status">
+    {
+      view === 'ready' && syncedAt !== null && (
+        <span class="chip" id="sync-chip" data-stale={stale ? '' : undefined}>
+          <span class="dot" />
+          <span>
+            synced <time id="synced-at" datetime={syncedAt}>{fmtSyncedAt(syncedAt)}</time>
+          </span>
+          <span>· {fmtCoverage(repo?.coverageSince ?? null)}</span>
+          {stale && <span>· stale</span>}
+        </span>
+      )
+    }
+  </Fragment>
+  <Fragment slot="actions">
+    {
+      view === 'ready' && canSync && (
+        <button class="btn btn-sm" type="button" id="resync">
+          Refresh
+        </button>
+      )
+    }
+  </Fragment>
   {
     view === 'ready' && (
       <>
-        <nav class="topbar">
-          <a href="/">bilan</a>
-          <span class="muted">{label}</span>
-          {repo?.isPrivate && <span class="badge">private</span>}
-          <span class="spacer" />
-          <span class="muted">
-            synced <time datetime={syncedAt}>{syncedAt}</time>
-          </span>
-          {stale && <span class="badge">stale</span>}
-          {canSync && (
-            <button class="button" type="button" id="resync">
-              Refresh
-            </button>
-          )}
-          <UserMenu user={user} />
-        </nav>
-        <div class="status" id="status" hidden />
+        <div class="notice" id="status" hidden />
         <div id="bilan" data-auto-refresh={autoRefresh ? '1' : '0'} />
         <script>
-          import '@bilan/ui/dist/bilan-ui.css';
           import { mount } from '@bilan/ui';
+
+          import { fmtSyncedAt } from '../../lib/format.ts';
 
           import {
             jobPollOutcome,
@@ -147,7 +160,7 @@ const autoRefresh = user !== null && view === 'ready' && repo !== undefined && n
 
           import type { JobProbe, PollOutcome, SyncWatch } from '../../lib/poll.ts';
           import type { Payload } from '@bilan/core';
-          import type { Mounted, Range } from '@bilan/ui';
+          import type { Mounted, Range, Theme } from '@bilan/ui';
 
           const root = document.getElementById('bilan') as HTMLElement;
           const status = document.getElementById('status') as HTMLElement;
@@ -191,17 +204,23 @@ const autoRefresh = user !== null && view === 'ready' && repo !== undefined && n
             return (await response.json()) as Payload;
           }
 
+          /** The site's theme (see Base.astro), so mounting never resets it. */
+          const currentTheme = (): Theme => {
+            const t = document.documentElement.dataset.theme;
+            return t === 'light' || t === 'dark' ? t : 'auto';
+          };
+
           function render(payload: Payload, initialRange?: Range): void {
             mounted?.destroy();
             mounted = mount(root, payload, {
-              theme: 'auto',
+              theme: currentTheme(),
               ...(initialRange === undefined ? {} : { initialRange }),
               onLoadMore: (range) => void loadMore(range),
             });
-            const time = document.querySelector<HTMLTimeElement>('.topbar time');
+            const time = document.getElementById('synced-at') as HTMLTimeElement | null;
             if (time && payload.syncedAt) {
               time.dateTime = payload.syncedAt;
-              time.textContent = payload.syncedAt;
+              time.textContent = fmtSyncedAt(payload.syncedAt);
             }
           }
 
@@ -311,17 +330,17 @@ const autoRefresh = user !== null && view === 'ready' && repo !== undefined && n
   }
   {
     view === 'syncing' && (
-      <main class="site">
-        <h1>{label}</h1>
-        <p id="message">
-          {syncError ?? 'Syncing this repository for the first time…'}
-        </p>
-        <p class="muted" id="detail" />
-        {!canSync && (
-          <p class="muted">
-            <a href={loginHref}>Sign in</a> to sync this repository on your own GitHub token.
-          </p>
-        )}
+      <main class="state">
+        <div class="state-card">
+          <h1>{label}</h1>
+          <p id="message">{syncError ?? 'Syncing this repository for the first time…'}</p>
+          <div class="progress" id="progress" hidden={syncError !== null} />
+          <p class="muted small" id="detail" />
+          {!canSync && (
+            <p class="muted small">
+              <a href={loginHref}>Sign in</a> to sync this repository on your own GitHub token.
+            </p>
+          )}
         <div
           id="sync"
           data-api-base={apiBase}
@@ -329,6 +348,7 @@ const autoRefresh = user !== null && view === 'ready' && repo !== undefined && n
           data-sync-active={syncActive ? '1' : '0'}
           data-auto-start={canSync && syncError === null ? '1' : '0'}
         />
+        </div>
         <script>
           import {
             jobPollOutcome,
@@ -344,6 +364,7 @@ const autoRefresh = user !== null && view === 'ready' && repo !== undefined && n
           const sync = document.getElementById('sync') as HTMLElement;
           const message = document.getElementById('message') as HTMLElement;
           const detail = document.getElementById('detail') as HTMLElement;
+          const progress = document.getElementById('progress') as HTMLElement;
           const apiBase = sync.dataset.apiBase as string;
           const ownJobId = sync.dataset.ownJobId || null;
           const syncActive = sync.dataset.syncActive === '1';
@@ -383,10 +404,12 @@ const autoRefresh = user !== null && view === 'ready' && repo !== undefined && n
               }
               if (outcome.kind === 'failed') {
                 message.textContent = outcome.message;
+                progress.hidden = true;
                 return;
               }
               if (outcome.kind === 'stopped') {
                 message.textContent = 'The sync ended without publishing; reload to try again.';
+                progress.hidden = true;
                 return;
               }
               watch = nextWatch(watch, outcome, null);
@@ -403,6 +426,7 @@ const autoRefresh = user !== null && view === 'ready' && repo !== undefined && n
             const watch = watchAfterSyncResponse(response.status, body, null);
             if (watch === null) {
               message.textContent = body.message ?? `Sync refused (${response.status}).`;
+              progress.hidden = true;
               return;
             }
             await waitForSync(watch);
@@ -418,10 +442,15 @@ const autoRefresh = user !== null && view === 'ready' && repo !== undefined && n
   {view === 'not-found' && <RepoNotFound label={label} user={user} />}
   {
     view === 'unavailable' && (
-      <main class="site">
-        <h1>{label}</h1>
-        <p>GitHub is unavailable right now, so bilan cannot tell whether you may see this repository.</p>
-        <p class="muted">Try again in a minute.</p>
+      <main class="state">
+        <div class="state-card">
+          <h1>{label}</h1>
+          <p>
+            GitHub is unavailable right now, so bilan cannot tell whether you may see this
+            repository.
+          </p>
+          <p class="muted small">Try again in a minute.</p>
+        </div>
       </main>
     )
   }

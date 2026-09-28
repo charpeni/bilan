@@ -3,10 +3,10 @@ import { parseRepo } from '@bilan/core';
 import { listRepoViews } from '@bilan/store-d1';
 import { env } from 'cloudflare:workers';
 
-import UserMenu from '../components/UserMenu.astro';
 import Base from '../layouts/Base.astro';
 import { accessDeps, checkRepoAccess } from '../lib/access.ts';
 import { getDb } from '../lib/db.ts';
+import { fmtCoverage, fmtDay, fmtSyncedAt } from '../lib/format.ts';
 import { installUrl, loginHref } from '../lib/oauth.ts';
 import { filterVisibleViews } from '../lib/views.ts';
 
@@ -41,78 +41,70 @@ const views = await filterVisibleViews(await listRepoViews(getDb(env), user.id),
 const install = installUrl(env);
 ---
 
-<Base title="Your repositories · bilan">
-  <nav class="topbar">
-    <a href="/">bilan</a>
-    <span class="spacer"></span>
-    <UserMenu user={user} />
-  </nav>
-  <main class="site">
-    <h1>Your repositories</h1>
-    <form method="get" action="/me" class="actions">
-      <input
-        name="repo"
-        type="text"
-        placeholder="owner/name"
-        value={requested ?? ''}
-        required
-        pattern="[\w.\-]+/[\w.\-]+"
-        aria-label="Repository owner/name"
-      />
-      <button class="button primary" type="submit">Open</button>
-      {openError && <span class="muted">{openError}</span>}
-    </form>
-    <p class="muted">
+<Base title="Your repositories · bilan" user={user}>
+  <main class="container">
+    <h1 class="page-title">Your repositories</h1>
+    <div class="panel">
+      <form method="get" action="/me" class="panel-head">
+        <input
+          class="input"
+          name="repo"
+          type="text"
+          placeholder="owner/name"
+          value={requested ?? ''}
+          required
+          pattern="[\w.\-]+/[\w.\-]+"
+          aria-label="Repository owner/name"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button class="btn btn-primary" type="submit">Open a repository</button>
+        {openError && <span class="err">{openError}</span>}
+      </form>
+      {
+        views.length === 0 ? (
+          <p class="empty-state">
+            Nothing yet. Open any <code>owner/name</code> above, or try{' '}
+            <a href={`/${env.EXAMPLE_REPO}`}>{env.EXAMPLE_REPO}</a>.
+          </p>
+        ) : (
+          <ul class="rows">
+            <li class="rows-head" aria-hidden="true">
+              <span>Repository</span>
+              <span>Last viewed</span>
+              <span>Coverage</span>
+              <span>Synced</span>
+            </li>
+            {views.map((view) => (
+              <li class="row">
+                <a class="name" href={`/${view.owner}/${view.name}`}>
+                  {view.owner}/{view.name}
+                  {view.isPrivate && (
+                    <svg class="icon" viewBox="0 0 16 16" role="img" aria-label="Private">
+                      <title>Private</title>
+                      <path
+                        fill="currentColor"
+                        d="M4 6V4.5a4 4 0 1 1 8 0V6h.5A1.5 1.5 0 0 1 14 7.5v6a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 13.5v-6A1.5 1.5 0 0 1 3.5 6H4Zm1.5 0h5V4.5a2.5 2.5 0 0 0-5 0V6Z"
+                      />
+                    </svg>
+                  )}
+                </a>
+                <time datetime={view.lastViewedAt}>{fmtDay(view.lastViewedAt)}</time>
+                <span>{view.lastSyncedAt === null ? '—' : fmtCoverage(view.coverageSince)}</span>
+                {view.lastSyncedAt === null ? (
+                  <span class="muted">not yet</span>
+                ) : (
+                  <time datetime={view.lastSyncedAt}>{fmtSyncedAt(view.lastSyncedAt)}</time>
+                )}
+              </li>
+            ))}
+          </ul>
+        )
+      }
+    </div>
+    <p class="muted small">
       Public repositories work right away. Private repositories need bilan installed on your
       organization{install && <> (<a href={install}>install it on GitHub</a>)</>}.
     </p>
-    {
-      views.length === 0 ? (
-        <p>
-          Nothing yet. Open any <code>owner/name</code> above, or try{' '}
-          <a href={`/${env.EXAMPLE_REPO}`}>{env.EXAMPLE_REPO}</a>.
-        </p>
-      ) : (
-        <table class="repo-list">
-          <thead>
-            <tr>
-              <th>Repository</th>
-              <th>Last viewed</th>
-              <th>Coverage</th>
-              <th>Synced</th>
-            </tr>
-          </thead>
-          <tbody>
-            {views.map((view) => (
-              <tr>
-                <td>
-                  <a href={`/${view.owner}/${view.name}`}>
-                    {view.owner}/{view.name}
-                  </a>
-                  {view.isPrivate && <span class="badge">private</span>}
-                </td>
-                <td>
-                  <time datetime={view.lastViewedAt}>{view.lastViewedAt.slice(0, 10)}</time>
-                </td>
-                <td>
-                  {view.lastSyncedAt === null
-                    ? '—'
-                    : view.coverageSince === null
-                      ? 'full history'
-                      : `since ${view.coverageSince.slice(0, 10)}`}
-                </td>
-                <td>
-                  {view.lastSyncedAt === null ? (
-                    'not yet'
-                  ) : (
-                    <time datetime={view.lastSyncedAt}>{view.lastSyncedAt}</time>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )
-    }
   </main>
 </Base>
