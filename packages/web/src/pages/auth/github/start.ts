@@ -11,7 +11,7 @@ import {
   oauthCookieOptions,
   safeNext,
 } from '../../../lib/oauth.ts';
-import { isLocalhost } from '../../../lib/session.ts';
+import { isPlainHttp } from '../../../lib/session.ts';
 
 import type { APIRoute } from 'astro';
 
@@ -29,7 +29,7 @@ export const GET: APIRoute = ({ url, cookies, redirect }) => {
   cookies.set(
     OAUTH_COOKIE,
     encodeOauthState({ state, next }),
-    oauthCookieOptions(!isLocalhost(url)),
+    oauthCookieOptions(!isPlainHttp(url)),
   );
   const authorize = githubProvider(env, url.origin).createAuthorizationURL(state, [
     ...LOGIN_SCOPES,

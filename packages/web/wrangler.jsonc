@@ -47,7 +47,7 @@
   "vars": {
     "EXAMPLE_REPO": "withastro/astro",
     // URL slug of the GitHub App (https://github.com/apps/<slug>); the 404 page links to its install screen.
-    "GITHUB_APP_SLUG": "bilan",
+    "GITHUB_APP_SLUG": "bilan-app",
   },
   "observability": {
     "enabled": true,

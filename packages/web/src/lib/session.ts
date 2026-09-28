@@ -21,15 +21,19 @@ export function sessionExpiry(now: number = Date.now()): string {
   return new Date(now + SESSION_TTL_MS).toISOString();
 }
 
-/** Only plain http on localhost gets a non-Secure cookie, so `wrangler dev` works. */
-export function isLocalhost(url: URL): boolean {
-  return url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]';
+/**
+ * Cookies are Secure whenever the request came over https. Plain http only
+ * happens in local development (`wrangler dev` on localhost or a LAN address);
+ * production on Workers is always https.
+ */
+export function isPlainHttp(url: URL): boolean {
+  return url.protocol !== 'https:';
 }
 
 export function sessionCookieOptions(url: URL, expiresAt: string): AstroCookieSetOptions {
   return {
     httpOnly: true,
-    secure: !isLocalhost(url),
+    secure: !isPlainHttp(url),
     sameSite: 'lax',
     path: '/',
     expires: new Date(expiresAt),
@@ -37,5 +41,5 @@ export function sessionCookieOptions(url: URL, expiresAt: string): AstroCookieSe
 }
 
 export function clearedCookieOptions(url: URL): AstroCookieSetOptions {
-  return { httpOnly: true, secure: !isLocalhost(url), sameSite: 'lax', path: '/' };
+  return { httpOnly: true, secure: !isPlainHttp(url), sameSite: 'lax', path: '/' };
 }

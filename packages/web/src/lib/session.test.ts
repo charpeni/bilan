@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   clearedCookieOptions,
   generateSessionId,
-  isLocalhost,
+  isPlainHttp,
   SESSION_TTL_MS,
   sessionCookieOptions,
   sessionExpiry,
@@ -47,10 +47,10 @@ describe('cookie options', () => {
     });
   });
 
-  it('only treats loopback hosts as local', () => {
-    expect(isLocalhost(new URL('http://localhost/'))).toBe(true);
-    expect(isLocalhost(new URL('http://127.0.0.1/'))).toBe(true);
-    expect(isLocalhost(new URL('http://localhost.evil.com/'))).toBe(false);
-    expect(isLocalhost(new URL('https://bilan.example/'))).toBe(false);
+  it('treats any plain-http origin as local development', () => {
+    expect(isPlainHttp(new URL('http://localhost/'))).toBe(true);
+    expect(isPlainHttp(new URL('http://127.0.0.1/'))).toBe(true);
+    expect(isPlainHttp(new URL('http://192.168.4.244:8788/'))).toBe(true);
+    expect(isPlainHttp(new URL('https://bilan.example/'))).toBe(false);
   });
 });
