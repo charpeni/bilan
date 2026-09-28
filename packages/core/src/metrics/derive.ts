@@ -45,8 +45,10 @@ export function derive(prs: readonly PayloadPr[]): MetricPr[] {
       // p.r is null for PRs that never left draft; they have no review latency.
       toReady: p.d && p.r !== null ? p.r - p.c : null,
       toFirst: first !== null && p.r !== null ? Math.max(0, first - p.r) : null,
-      // `p.r` coerces to 0 when null, exactly as the original arithmetic did.
-      toMerge: p.m !== null ? Math.max(0, p.m - (p.r ?? 0)) : null,
+      // A PR merged straight from draft was never reviewable, so it has no
+      // ready-anchored merge time (the original arithmetic coerced the missing
+      // ready time to the epoch and produced decades).
+      toMerge: p.m !== null && p.r !== null ? Math.max(0, p.m - p.r) : null,
       lead: p.m !== null ? p.m - p.c : null,
       selfMerged: merged && p.mb !== null && p.mb === p.a,
       unreviewed: merged && p.rv.length === 0,

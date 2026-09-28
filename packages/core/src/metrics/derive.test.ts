@@ -44,9 +44,10 @@ describe('derive', () => {
     expect(isReady(p)).toBe(false);
   });
 
-  it('measures toMerge from the epoch when a merged PR has no ready time (original quirk)', () => {
+  it('gives a PR merged straight from draft no ready-anchored merge time', () => {
     const p = one({ r: null, d: 1 });
-    expect(p.toMerge).toBe(T0 + DAY_MS);
+    expect(p.toMerge).toBeNull();
+    expect(p.lead).not.toBeNull();
   });
 
   it('clamps a review that predates ready-for-review to zero latency', () => {
