@@ -34,6 +34,10 @@ export function svgEl<K extends keyof SVGElementTagNameMap>(
 export const num = (v: number | null | undefined): string =>
   v === null || v === undefined ? '—' : Math.round(v).toLocaleString();
 
+/** `1 author`, `3 authors`: a count with its noun, English plural by `s`. */
+export const plural = (n: number, noun: string): string =>
+  `${n.toLocaleString()} ${noun}${n === 1 ? '' : 's'}`;
+
 export const pctFmt = (v: number | null): string =>
   v === null || Number.isNaN(v) ? '—' : `${Math.round(v * 100)}%`;
 

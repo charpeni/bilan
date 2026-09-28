@@ -1,6 +1,6 @@
 import { RepoNotFoundError, catchUpSince } from '@bilan/core';
 import { schema, upsertRepo } from '@bilan/store-d1';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, count, desc, eq, inArray } from 'drizzle-orm';
 
 import { getDb } from './db.ts';
 import { DEFAULT_DEPTH, depthToSince } from './depth.ts';
@@ -45,6 +45,20 @@ export function findActiveJob(db: Db, repoId: string): Promise<SyncJob | undefin
     .get();
 }
 
+/**
+ * Pull requests stored for a repo: while a job runs, how far it got (each
+ * page's rows are written as the page lands), which the page shows as
+ * progress. Never used to decide anything.
+ */
+export async function countStoredPrs(db: Db, repoId: string): Promise<number> {
+  const row = await db
+    .select({ n: count() })
+    .from(schema.pullRequests)
+    .where(eq(schema.pullRequests.repoId, repoId))
+    .get();
+  return row?.n ?? 0;
+}
+
 export function getJob(db: Db, id: string): Promise<SyncJob | undefined> {
   return db.select().from(schema.syncJobs).where(eq(schema.syncJobs.id, id)).get();
 }
@@ -58,8 +72,7 @@ export interface StartSyncOptions {
    * The signed-in user asking for the sync: the job runs on their token when
    * it sees the repo (else on the server token for a public one, see
    * `resolveTokenSource`) and counts against their per-repo limit. Omit for
-   * the cron and for signed-out viewers of the example repo: server token,
-   * never rate limited.
+   * the cron: server token, never rate limited.
    */
   requestedBy?: number | null;
   /**
@@ -98,7 +111,7 @@ export async function startSync(
     (await resolveTokenSource(tokenSourceDeps(env), userId === null ? null : { id: userId }, ref));
   if (source.source === 'not-found') throw new RepoNotFoundError(ref);
   if (source.source === 'login-required') {
-    throw new Error(`Only ${env.EXAMPLE_REPO} can be synced without a signed-in user`);
+    throw new Error('A sync needs a signed-in user');
   }
   const { meta } = source;
 

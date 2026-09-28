@@ -1,8 +1,9 @@
-# Server token: a classic PAT with NO scopes. Used for EXAMPLE_REPO (cron and
-# signed-out viewers) and for public repositories the GitHub App is not
-# installed on, since a GitHub App user token only reaches repos the app is
-# installed on.
-GITHUB_TOKEN=ghp_replace_me
+# Optional server token: a classic PAT with NO scopes. Only a safety net, read
+# when a signed-in viewer opens a public repository their own GitHub App token
+# cannot reach (in practice user tokens do read public repos without an
+# install). Leave it unset to run without one; the built-in example dashboards
+# are static and never need a token.
+# GITHUB_TOKEN=ghp_replace_me
 
 # AES-256-GCM key for per-user GitHub tokens at rest. Generate with:
 #   openssl rand -base64 32

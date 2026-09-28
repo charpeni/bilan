@@ -177,8 +177,48 @@ label.check:has(input:focus-visible) {
 }
 .seg button.needs-load {
   color: var(--muted);
-  border-bottom: 1px dashed var(--muted);
-  border-radius: 0;
+}
+/* "+": this range is not synced yet; selecting it syncs more history. */
+.load-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 5px;
+  border-radius: 50%;
+  background: var(--ghost);
+  color: var(--ink-2);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  vertical-align: 0;
+}
+.seg button[aria-busy='true'] {
+  color: var(--ink);
+  cursor: progress;
+}
+.seg button[aria-busy='true'] .load-mark {
+  color: transparent;
+  background: none;
+  border: 1.5px solid var(--ink-2);
+  border-top-color: transparent;
+  animation: bilan-spin 700ms linear infinite;
+}
+@keyframes bilan-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 label.check {
   display: inline-flex;
@@ -210,9 +250,33 @@ select.dim {
 .filters .load-note {
   margin-left: 0;
   color: var(--ink-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
 }
 .filters .load-note[hidden] {
   display: none;
+}
+.filters .load-note[data-kind='busy']::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: bilan-pulse 1.2s ease-in-out infinite;
+}
+.filters .load-note[data-kind='error'] {
+  color: var(--critical);
+}
+.filters .load-note a {
+  color: var(--accent);
+  font-weight: 500;
+}
+@keyframes bilan-pulse {
+  50% {
+    opacity: 0.35;
+  }
 }
 
 /* ---- cards & grid ---- */
@@ -266,6 +330,29 @@ select.dim {
   border-radius: 12px;
   overflow: hidden;
   margin-bottom: 16px;
+}
+/*
+ * In the dashboard the tiles sit in a frame and draw their own separators;
+ * the grid overhangs the frame by 1px so the outer ones are clipped. A short
+ * last row then reads as surface, not as a grey hole.
+ */
+.tiles-frame {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface);
+  margin-bottom: 16px;
+}
+.tiles-frame > .tiles {
+  gap: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  margin: 0 -1px -1px 0;
+}
+.tiles-frame .tile {
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
 }
 .tile {
   background: var(--surface);
@@ -406,6 +493,10 @@ svg {
   overflow-x: auto;
   margin: 0 -20px -14px;
   padding: 0 20px 14px;
+  /* A shadow on the right edge while more columns sit off to the side. */
+  background:
+    linear-gradient(to left, transparent, var(--surface) 70%) right / 32px 100% no-repeat local,
+    linear-gradient(to left, var(--border), transparent) right / 12px 100% no-repeat scroll;
 }
 table {
   border-collapse: collapse;
@@ -432,11 +523,19 @@ thead th {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   border-bottom: 1px solid var(--border);
-  cursor: pointer;
   user-select: none;
+}
+thead th .sort {
+  all: unset;
+  cursor: pointer;
+  border-radius: 4px;
 }
 thead th:hover {
   color: var(--ink);
+}
+thead th .sort:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 thead th[aria-sort] {
   color: var(--ink);
@@ -458,6 +557,8 @@ tbody tr:hover td {
 tbody td:first-child {
   color: var(--ink);
   font-weight: 500;
+  /* Logins and titles: Inter's tabular forms would space out their hyphens. */
+  font-variant-numeric: normal;
 }
 tbody tr:hover td:first-child {
   background: var(--ghost);
@@ -546,6 +647,44 @@ details.table-view > summary:hover {
   font-size: 12px;
   color: var(--muted);
   margin: 0 0 14px;
+}
+.brief-compare {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: -6px 0 14px;
+}
+.brief-compare .desc {
+  margin: 0;
+}
+.brief-load {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 10px;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    transform 120ms var(--ease-out);
+}
+.brief-load:hover {
+  background: var(--ghost);
+}
+.brief-load:active {
+  transform: scale(0.97);
+}
+.brief-load:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.brief-load[aria-busy='true'] {
+  color: var(--muted);
+  cursor: progress;
 }
 .brief-grid {
   display: grid;
@@ -636,5 +775,57 @@ details.table-view > summary:hover {
   margin-left: auto;
   color: var(--muted);
   white-space: nowrap;
-  font-variant-numeric: tabular-nums;
+}
+
+/* ---- small screens and touch ---- */
+@media (max-width: 600px) {
+  .wrap {
+    padding: 20px 16px 64px;
+  }
+  .filters {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .filters .range-seg,
+  .filters .note {
+    grid-column: 1 / -1;
+  }
+  .filters .note {
+    margin-left: 0;
+  }
+  .range-seg button {
+    flex: 1;
+    padding-inline: 4px;
+  }
+  .range-seg .rl {
+    display: none;
+  }
+  .filters select.dim,
+  .filters label.check {
+    width: 100%;
+    min-width: 0;
+  }
+  .brief-grid {
+    grid-template-columns: 1fr;
+  }
+  .hero {
+    font-size: 40px;
+  }
+}
+@media (pointer: coarse) {
+  .seg button,
+  select.dim,
+  label.check {
+    min-height: 40px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .seg button[aria-busy='true'] .load-mark,
+  .filters .load-note[data-kind='busy']::before {
+    animation: none;
+  }
+  .seg button:active,
+  .brief-load:active {
+    transform: none;
+  }
 }

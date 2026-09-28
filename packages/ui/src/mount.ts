@@ -15,49 +15,78 @@ export type { Range } from './range.ts';
 
 export interface MountOptions {
   theme?: Theme;
+  /**
+   * Render the dashboard's own Auto/Light/Dark control. Defaults to true (the
+   * standalone CLI report); a host page that carries its own theme control
+   * passes false. Either way the dashboard redraws when `data-theme` changes.
+   */
+  themeControl?: boolean;
   /** Range pressed at mount; falls back to `'30'` when omitted or not covered by the payload. */
   initialRange?: Range;
   /**
    * Called when a range the payload does not cover is clicked; the host is
    * expected to sync deeper and mount again. Without it, the dashboard shows a
-   * note explaining how to re-sync from the CLI.
+   * note explaining how to re-sync from the CLI. When it returns a promise the
+   * range button stays busy until it settles, and a rejection is shown next to
+   * the range buttons (with a link when it is a `LoadMoreError` carrying one).
    */
-  onLoadMore?: (range: Range) => void;
+  onLoadMore?: (range: Range) => void | Promise<void>;
 }
 
 export interface Mounted {
+  /** The range on screen, so a host that mounts again can keep it. */
+  range(): Range;
+  /** Replace the text beside the range buttons while a load is running (progress from the host). */
+  status(text: string): void;
   destroy(): void;
 }
 
+/** A failed load the dashboard can offer a way out of, e.g. "Sign in again". */
+export class LoadMoreError extends Error {
+  readonly action: { label: string; href: string } | undefined;
+  constructor(message: string, action?: { label: string; href: string }) {
+    super(message);
+    this.name = 'LoadMoreError';
+    this.action = action;
+  }
+}
+
+/** What the busy note says while the host syncs `range`. */
+export const loadingText = (range: Range): string =>
+  range === 'all' ? 'Syncing the full history…' : `Syncing the last ${range} days…`;
+
+const THEME_SEG = `<div class="seg" role="group" aria-label="Theme">
+      <button type="button" data-theme-set="auto" aria-pressed="true">Auto</button>
+      <button type="button" data-theme-set="light" aria-pressed="false">Light</button>
+      <button type="button" data-theme-set="dark" aria-pressed="false">Dark</button>
+    </div>`;
+
 /** The static shell: same ids and classes as the original report body. */
-const SHELL = `<div class="wrap">
+const shell = (themeControl: boolean): string => `<div class="wrap">
   <header class="page">
     <div>
       <h1 id="repo-title">Repository dashboard</h1>
       <div class="sub" id="repo-sub"></div>
     </div>
     <div class="spacer"></div>
-    <div class="seg" role="group" aria-label="Theme">
-      <button data-theme-set="auto" aria-pressed="true">Auto</button>
-      <button data-theme-set="light" aria-pressed="false">Light</button>
-      <button data-theme-set="dark" aria-pressed="false">Dark</button>
-    </div>
+    ${themeControl ? THEME_SEG : ''}
   </header>
 
   <section class="brief" id="brief" aria-label="Last 30 days at a glance"></section>
 
   <div class="filters">
-    <div class="seg" role="group" aria-label="Date range">
-      <button data-range="30" aria-pressed="false">Last 30 days</button>
-      <button data-range="90" aria-pressed="false">Last 90 days</button>
-      <button data-range="180" aria-pressed="false">Last 180 days</button>
-      <button data-range="all" aria-pressed="false">All time</button>
+    <div class="seg range-seg" role="group" aria-label="Date range">
+      <button type="button" data-range="30" aria-pressed="false"><span class="rl">Last </span>30 days</button>
+      <button type="button" data-range="90" aria-pressed="false"><span class="rl">Last </span>90 days</button>
+      <button type="button" data-range="180" aria-pressed="false"><span class="rl">Last </span>180 days</button>
+      <button type="button" data-range="all" aria-pressed="false">All time</button>
     </div>
     <select class="dim" id="area-filter" aria-label="Area"></select>
     <select class="dim" id="person-filter" aria-label="Contributor"></select>
     <label class="check"><input type="checkbox" id="hide-bots" checked> Exclude bots</label>
-    <span class="note load-note" id="load-note" role="status" hidden></span>
+    <span class="note load-note" id="load-note" role="status" aria-live="polite" hidden></span>
     <span class="note" id="scope-note"></span>
+    <span class="sr-only" id="load-desc"></span>
   </div>
 
   <main id="app"></main>
@@ -66,7 +95,7 @@ const SHELL = `<div class="wrap">
 
 export function mount(root: HTMLElement, payload: Payload, options: MountOptions = {}): Mounted {
   const theme: Theme = options.theme ?? 'auto';
-  root.innerHTML = SHELL;
+  root.innerHTML = shell(options.themeControl ?? true);
 
   const must = <T extends Element>(sel: string): T => {
     const node = root.querySelector<T>(sel);
@@ -97,8 +126,7 @@ export function mount(root: HTMLElement, payload: Payload, options: MountOptions
 
   /* ---- wiring ---- */
   must('#repo-title').textContent = payload.repo;
-  must('#repo-sub').textContent =
-    `Pull request activity from ${fmtDate(firstActivity(prs))} to ${fmtDate(last)}`;
+  must('#repo-sub').textContent = activitySpan(payload.coverageSince, firstActivity(prs), last);
 
   // Populate the dimension filters from the data itself.
   const areaSel = must<HTMLSelectElement>('#area-filter');
@@ -123,49 +151,90 @@ export function mount(root: HTMLElement, payload: Payload, options: MountOptions
 
   const draw = (): void => render(ctx);
 
-  // Ranges the payload cannot back stay clickable but say so, and never become active.
+  // Ranges the payload cannot back stay clickable and say so (a "+" and a
+  // description), but never become the active range until the host loads them.
   const loadNote = must<HTMLElement>('#load-note');
+  const loadDesc = must<HTMLElement>('#load-desc');
+  loadDesc.textContent = options.onLoadMore
+    ? 'Not synced yet. Selecting it syncs more history.'
+    : 'Not in this report. Re-run the CLI to include it.';
   const rangeButtons = [...root.querySelectorAll<HTMLButtonElement>('[data-range]')];
   for (const b of rangeButtons) {
     const range = b.dataset.range;
-    if (!isRange(range)) continue;
-    if (covered(range)) {
-      b.classList.remove('needs-load');
-      b.removeAttribute('aria-disabled');
-      b.removeAttribute('title');
-    } else {
-      b.classList.add('needs-load');
-      b.setAttribute('aria-disabled', 'true');
-      b.title = 'Load more history';
-    }
+    if (!isRange(range) || covered(range)) continue;
+    b.classList.add('needs-load');
+    b.title = options.onLoadMore
+      ? 'Not synced yet: click to sync more history'
+      : 'Not in this report';
+    b.setAttribute('aria-describedby', 'load-desc');
+    b.append(el('span', { class: 'load-mark', 'aria-hidden': 'true', text: '+' }));
   }
   const setRange = (range: Range): void => {
     state.range = covered(range) ? range : DEFAULT_RANGE;
     press(state.range, 'data-range');
     draw();
   };
+
+  /** Show `text` beside the range buttons; an action link is appended when given. */
+  const note = (text: string, kind?: 'busy' | 'error', action?: LoadMoreError['action']): void => {
+    loadNote.textContent = text;
+    if (kind) loadNote.dataset.kind = kind;
+    else delete loadNote.dataset.kind;
+    if (action) {
+      loadNote.append(' ', el('a', { href: action.href, text: action.label }));
+    }
+    loadNote.hidden = false;
+  };
+  let loading: Range | null = null;
+  const setBusy = (range: Range | null): void => {
+    loading = range;
+    for (const b of root.querySelectorAll<HTMLElement>('[data-load-range]')) {
+      if (range !== null && b.dataset.loadRange === range) b.setAttribute('aria-busy', 'true');
+      else b.removeAttribute('aria-busy');
+    }
+  };
+  let destroyed = false;
   const requestMore = (range: Range): void => {
     if (options.onLoadMore) {
-      options.onLoadMore(range);
+      if (loading !== null) return;
+      const pending = options.onLoadMore(range);
+      if (!(pending instanceof Promise)) return;
+      setBusy(range);
+      note(loadingText(range), 'busy');
+      pending.then(
+        () => {
+          if (destroyed) return;
+          setBusy(null);
+          loadNote.hidden = true;
+        },
+        (error: unknown) => {
+          if (destroyed) return;
+          setBusy(null);
+          const message = error instanceof Error ? error.message : String(error);
+          note(message, 'error', error instanceof LoadMoreError ? error.action : undefined);
+        },
+      );
       return;
     }
     const since = rangeSinceDate(range, last);
     const cmd = `bilan ${payload.repo}`;
-    loadNote.textContent =
+    note(
       since === null
         ? `Not synced yet. Re-run \`${cmd} --full\`.`
-        : `Not synced yet. Re-run \`${cmd} --since ${since}\` or \`${cmd} --full\`.`;
-    loadNote.hidden = false;
+        : `Not synced yet. Re-run \`${cmd} --since ${since}\` or \`${cmd} --full\`.`,
+    );
   };
+  ctx.requestMore = options.onLoadMore ? requestMore : undefined;
   for (const b of rangeButtons) {
+    const range = b.dataset.range;
+    if (isRange(range) && !covered(range)) b.dataset.loadRange = range;
     b.addEventListener('click', () => {
-      const range = b.dataset.range;
       if (!isRange(range)) return;
       if (!covered(range)) {
         requestMore(range);
         return;
       }
-      loadNote.hidden = true;
+      if (loading === null) loadNote.hidden = true;
       setRange(range);
     });
   }
@@ -174,8 +243,6 @@ export function mount(root: HTMLElement, payload: Payload, options: MountOptions
     b.addEventListener('click', () => {
       const v = b.dataset.themeSet ?? 'auto';
       html.dataset.theme = v;
-      press(v, 'data-theme-set');
-      draw();
     });
   }
   areaSel.addEventListener('change', () => {
@@ -204,13 +271,30 @@ export function mount(root: HTMLElement, payload: Payload, options: MountOptions
   window.addEventListener('scroll', onScroll, true);
   window.addEventListener('resize', onResize);
   mq.addEventListener('change', onScheme);
+  // Charts read colour tokens when drawn, so any theme switch (this control or
+  // the host page's) redraws them.
+  let shownTheme: string | undefined = html.dataset.theme;
+  const themeObserver = new MutationObserver(() => {
+    const next = html.dataset.theme;
+    if (next === shownTheme) return;
+    shownTheme = next;
+    press(next ?? 'auto', 'data-theme-set');
+    draw();
+  });
+  themeObserver.observe(html, { attributes: true, attributeFilter: ['data-theme'] });
 
   renderBrief(ctx);
   draw();
 
   return {
+    range: (): Range => (isRange(state.range) ? state.range : DEFAULT_RANGE),
+    status(text: string): void {
+      if (loading !== null) note(text, 'busy');
+    },
     destroy(): void {
+      destroyed = true;
       clearTimeout(resizeTimer);
+      themeObserver.disconnect();
       window.removeEventListener('scroll', onScroll, true);
       window.removeEventListener('resize', onResize);
       mq.removeEventListener('change', onScheme);
@@ -219,4 +303,17 @@ export function mount(root: HTMLElement, payload: Payload, options: MountOptions
       root.textContent = '';
     },
   };
+}
+
+/**
+ * The header's one-line span. A bounded sync also carries every open PR, some
+ * of them far older than the coverage, so the span starts at the coverage
+ * bound rather than at the oldest PR, and says the older open ones are in.
+ */
+export function activitySpan(coverageSince: string | null, first: number, last: number): string {
+  const since = coverageSince === null ? Number.NaN : Date.parse(coverageSince);
+  if (Number.isNaN(since) || since <= first) {
+    return `Pull request activity from ${fmtDate(first)} to ${fmtDate(last)}`;
+  }
+  return `Pull request activity from ${fmtDate(since)} to ${fmtDate(last)}, plus older open PRs`;
 }

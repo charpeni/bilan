@@ -24,19 +24,22 @@ Astro.response.status = 404;
 <main class="state">
   <div class="state-card">
     <h1>{label}</h1>
-    <p>This repository was not found, or you do not have access to it on GitHub.</p>
+    <p>
+      bilan could not find this repository, or your GitHub account cannot see it. Check the
+      spelling of the owner and the name.
+    </p>
     {
       user !== null && (
         <>
           <h2>Is this a private repository?</h2>
           <p>
             bilan reads private repositories through its GitHub App, which must be installed on
-            the organisation (or the repository) that owns <code>{label}</code>. It only ever reads
+            the organization (or the repository) that owns <code>{label}</code>. It only ever reads
             pull-request metadata; it never writes to your repositories.
           </p>
           <p class="muted small">
-            Installing takes an organisation owner or a repository admin. Anyone else can request
-            the install from the same page and GitHub notifies the owners.
+            Installing takes an organization owner or a repository admin. Anyone else can request
+            the install from the same page, and GitHub notifies the owners.
           </p>
           <div class="actions">
             {install && (

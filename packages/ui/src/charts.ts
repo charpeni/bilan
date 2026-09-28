@@ -66,7 +66,12 @@ export function timeChart(
   const W = host.clientWidth || 800;
   const H = height;
   const pad = { t: 10, r: 14, b: 26, l: 46 };
-  const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, height: H, role: 'img' });
+  const svg = svgEl('svg', {
+    viewBox: `0 0 ${W} ${H}`,
+    height: H,
+    role: 'img',
+    'aria-label': host.dataset.label,
+  });
   host.append(svg);
   if (!xs.length) {
     host.append(el('div', { class: 'empty', text: 'No data in range' }));
@@ -259,7 +264,12 @@ export function barChart<R extends BarRow>(
   const labelW = Math.min(190, Math.max(...rows.map((r) => r.label.length)) * 7 + 12);
   const pad = { l: labelW, r: 52 };
   const top = max ?? Math.max(1, ...rows.map((r) => r.value));
-  const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, height: H, role: 'img' });
+  const svg = svgEl('svg', {
+    viewBox: `0 0 ${W} ${H}`,
+    height: H,
+    role: 'img',
+    'aria-label': host.dataset.label,
+  });
   host.append(svg);
   rows.forEach((r, i) => {
     const y = i * rowH + 4;
@@ -334,7 +344,12 @@ export function columnChart(
   const W = host.clientWidth || 700;
   const H = height;
   const pad = { t: 12, r: 8, b: 30, l: 42 };
-  const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, height: H, role: 'img' });
+  const svg = svgEl('svg', {
+    viewBox: `0 0 ${W} ${H}`,
+    height: H,
+    role: 'img',
+    'aria-label': host.dataset.label,
+  });
   host.append(svg);
   if (!bins.length || bins.every((b) => !b.value)) {
     host.append(el('div', { class: 'empty', text: 'No data in range' }));
@@ -416,7 +431,12 @@ export function heatmap(
   const cw = (W - pad.l - pad.r) / colLabels.length;
   const ch = 22;
   const H = pad.t + rowLabels.length * ch + pad.b;
-  const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, height: H, role: 'img' });
+  const svg = svgEl('svg', {
+    viewBox: `0 0 ${W} ${H}`,
+    height: H,
+    role: 'img',
+    'aria-label': host.dataset.label,
+  });
   host.append(svg);
   const max = Math.max(1, ...cells.flat());
   const ramp = ['--seq-1', '--seq-2', '--seq-3', '--seq-4', '--seq-5', '--seq-6', '--seq-7'].map(

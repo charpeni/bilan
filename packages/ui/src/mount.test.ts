@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { mount } from './index.ts';
+import { LoadMoreError, mount } from './index.ts';
+import { activitySpan } from './mount.ts';
+import { hoursFmt } from './render.ts';
 
+import type { Mounted } from './mount.ts';
 import type { Payload, PayloadPr, PayloadReview, PayloadReviewRequest } from '@bilan/core';
 
 const HOUR = 3600e3;
@@ -268,7 +271,7 @@ const heroValue = (root: ParentNode): string =>
 
 describe('mount', () => {
   let root: HTMLElement;
-  let handle: { destroy(): void } | undefined;
+  let handle: Mounted | undefined;
 
   afterEach(() => {
     handle?.destroy();
@@ -336,6 +339,7 @@ describe('mount', () => {
     click('all');
     expect(pressed('all')).toBe('true');
     expect(pressed('30')).toBe('false');
+    expect(handle?.range()).toBe('all');
     const after = heroValue(root);
     expect(after).not.toBe(before);
     // Every human PR, all time.
@@ -355,10 +359,16 @@ describe('mount', () => {
       expect(needsLoad()).toEqual(['90', '180', 'all']);
       for (const range of ['90', '180', 'all']) {
         const btn = root.querySelector(`[data-range="${range}"]`);
-        expect(btn?.getAttribute('aria-disabled')).toBe('true');
-        expect(btn?.getAttribute('title')).toBe('Load more history');
+        // Still operable: described as not synced, never announced as disabled.
+        expect(btn?.getAttribute('aria-disabled')).toBeNull();
+        expect(btn?.getAttribute('aria-describedby')).toBe('load-desc');
+        expect(btn?.querySelector('.load-mark')?.getAttribute('aria-hidden')).toBe('true');
       }
-      expect(root.querySelector('[data-range="30"]')?.getAttribute('aria-disabled')).toBeNull();
+      expect(root.querySelector('#load-desc')?.textContent).toBe(
+        'Not in this report. Re-run the CLI to include it.',
+      );
+      expect(root.querySelector('[data-range="30"]')?.getAttribute('aria-describedby')).toBeNull();
+      expect(root.querySelector('[data-range="30"] .load-mark')).toBeNull();
       expect(root.querySelector('#scope-note')?.textContent).toMatch(
         /· covers activity since [A-Z][a-z]{2} \d{1,2}, \d{4} · open PRs partially synced$/,
       );
@@ -380,7 +390,7 @@ describe('mount', () => {
     it('marks nothing when the payload is full history', () => {
       setup(payload(null));
       expect(needsLoad()).toEqual([]);
-      expect(root.querySelectorAll('[data-range][aria-disabled]').length).toBe(0);
+      expect(root.querySelectorAll('[data-range][aria-describedby], .load-mark').length).toBe(0);
     });
 
     it('asks the host to load more instead of switching range', () => {
@@ -393,6 +403,72 @@ describe('mount', () => {
       expect(pressed('all')).toBe('false');
       expect(heroValue(root)).toBe(before);
       expect(root.querySelector<HTMLElement>('#load-note')?.hidden).toBe(true);
+    });
+
+    it('keeps the range button busy while the host loads, then clears it', async () => {
+      let finish: (() => void) | undefined;
+      const onLoadMore = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            finish = resolve;
+          }),
+      );
+      setup(payload(thirtyDays()), { onLoadMore });
+      expect(root.querySelector('#load-desc')?.textContent).toBe(
+        'Not synced yet. Selecting it syncs more history.',
+      );
+      const note = root.querySelector<HTMLElement>('#load-note');
+      click('90');
+      const btn = root.querySelector('[data-range="90"]');
+      expect(btn?.getAttribute('aria-busy')).toBe('true');
+      expect(note?.hidden).toBe(false);
+      expect(note?.dataset.kind).toBe('busy');
+      expect(note?.textContent).toBe('Syncing the last 90 days…');
+      // A second click while busy does not start another load.
+      click('180');
+      expect(onLoadMore).toHaveBeenCalledTimes(1);
+      handle?.status('412 pull requests synced so far');
+      expect(note?.textContent).toBe('412 pull requests synced so far');
+      finish?.();
+      await flush();
+      expect(btn?.getAttribute('aria-busy')).toBeNull();
+      expect(note?.hidden).toBe(true);
+    });
+
+    it('shows a failed load beside the range buttons, with its way out', async () => {
+      const onLoadMore = vi.fn(() =>
+        Promise.reject(
+          new LoadMoreError('Your GitHub session expired.', {
+            label: 'Sign in again',
+            href: '/auth/github/start?next=%2Facme%2Fwidgets',
+          }),
+        ),
+      );
+      setup(payload(thirtyDays()), { onLoadMore });
+      click('all');
+      await flush();
+      const note = root.querySelector<HTMLElement>('#load-note');
+      expect(note?.dataset.kind).toBe('error');
+      expect(note?.textContent).toBe('Your GitHub session expired. Sign in again');
+      expect(note?.querySelector('a')?.getAttribute('href')).toBe(
+        '/auth/github/start?next=%2Facme%2Fwidgets',
+      );
+      expect(root.querySelector('[data-range="all"]')?.getAttribute('aria-busy')).toBeNull();
+      expect(pressed('30')).toBe('true');
+    });
+
+    it('offers the comparison sync from the brief when the host can load more', () => {
+      const onLoadMore = vi.fn();
+      setup(payload(thirtyDays()), { onLoadMore });
+      const btn = root.querySelector<HTMLButtonElement>('.brief-load');
+      expect(btn?.textContent).toBe('Sync 90 days');
+      btn?.click();
+      expect(onLoadMore).toHaveBeenCalledWith('90');
+    });
+
+    it('has no comparison action without a host callback', () => {
+      setup(payload(thirtyDays()));
+      expect(root.querySelector('.brief-load')).toBeNull();
     });
 
     it('explains how to re-sync from the CLI when there is no host callback', () => {
@@ -485,7 +561,7 @@ describe('mount', () => {
     sel.value = 'alice';
     sel.dispatchEvent(new Event('change'));
     expect(heroValue(root)).toBe('5');
-    expect(root.querySelector('.tile .d')?.textContent).toBe('1 authors');
+    expect(root.querySelector('.tile .d')?.textContent).toBe('1 author');
   });
 
   it('includes bot PRs when the checkbox is unticked', () => {
@@ -513,6 +589,52 @@ describe('mount', () => {
     expect(document.documentElement.dataset.theme).toBeUndefined();
   });
 
+  it('leaves the theme control to the host when asked', async () => {
+    setup(payload(), { theme: 'light', themeControl: false });
+    expect(root.querySelector('[data-theme-set]')).toBeNull();
+    const before = root.querySelector('#app svg');
+    document.documentElement.dataset.theme = 'dark';
+    await flush();
+    await flush();
+    // A theme switch by the host page redraws the charts with the new tokens.
+    expect(root.querySelector('#app svg')).not.toBe(before);
+  });
+
+  it('follows a theme switched outside the dashboard on its own control', async () => {
+    setup(payload(), { theme: 'auto' });
+    document.documentElement.dataset.theme = 'dark';
+    await flush();
+    expect(root.querySelector('[data-theme-set="dark"]')?.getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+  });
+
+  it('sorts tables from real, labelled header buttons', () => {
+    setup();
+    const table = root.querySelector('#app table');
+    const heads = [...(table?.querySelectorAll('th') ?? [])];
+    expect(heads.every((th) => th.querySelector('button.sort') !== null)).toBe(true);
+    const opened = heads.find((th) => th.textContent === 'Opened');
+    const merged = heads.find((th) => th.textContent === 'Merged');
+    expect(opened?.getAttribute('aria-sort')).toBe('descending');
+    merged?.querySelector('button')?.click();
+    expect(merged?.getAttribute('aria-sort')).toBe('descending');
+    expect(opened?.getAttribute('aria-sort')).toBeNull();
+    merged?.querySelector('button')?.click();
+    expect(merged?.getAttribute('aria-sort')).toBe('ascending');
+  });
+
+  it('names every chart after its card', async () => {
+    setup();
+    await flush();
+    const labels = [...root.querySelectorAll('#app svg[role="img"]')].map((svg) =>
+      svg.getAttribute('aria-label'),
+    );
+    expect(labels.length).toBeGreaterThanOrEqual(8);
+    expect(labels).toContain('Cycle time trend');
+    expect(labels.every((l) => l !== null && CARD_TITLES.includes(l))).toBe(true);
+  });
+
   it('empties the root on destroy', () => {
     setup();
     expect(root.childNodes.length).toBeGreaterThan(0);
@@ -520,5 +642,40 @@ describe('mount', () => {
     handle = undefined;
     expect(root.childNodes.length).toBe(0);
     expect(root.innerHTML).toBe('');
+  });
+});
+
+describe('activitySpan', () => {
+  const first = Date.UTC(2025, 11, 3);
+  const last = Date.UTC(2026, 8, 28);
+
+  it('spans the whole payload on full history', () => {
+    expect(activitySpan(null, first, last)).toMatch(/^Pull request activity from .+ to .+$/);
+    expect(activitySpan(null, first, last)).not.toContain('older open PRs');
+  });
+
+  it('starts at the coverage bound when older open PRs stretch the payload', () => {
+    const since = new Date(Date.UTC(2026, 7, 29)).toISOString();
+    const text = activitySpan(since, first, last);
+    expect(text).toMatch(/, plus older open PRs$/);
+    expect(text).toContain(new Date(Date.UTC(2026, 7, 29)).getFullYear().toString());
+    expect(text).not.toBe(activitySpan(null, first, last));
+  });
+
+  it('ignores a bound that is before the oldest PR, or unparseable', () => {
+    expect(activitySpan(new Date(first - DAY).toISOString(), first, last)).toBe(
+      activitySpan(null, first, last),
+    );
+    expect(activitySpan('nope', first, last)).toBe(activitySpan(null, first, last));
+  });
+});
+
+describe('hoursFmt', () => {
+  it('prints hours as the dashboard durations, so large values fit the axis', () => {
+    expect(hoursFmt(0)).toBe('0');
+    expect(hoursFmt(5)).toBe('5.0h');
+    expect(hoursFmt(36)).toBe('1.5d');
+    expect(hoursFmt(24 * 200)).toBe('6.7mo');
+    expect(hoursFmt(30_000)).toBe('3.4y');
   });
 });

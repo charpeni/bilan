@@ -35,7 +35,22 @@ costs roughly one GitHub rate-limit point per PR, out of 5,000 per hour.
 ## Web app
 
 Sign in with GitHub, open any `owner/name`, and bilan syncs it into a shared
-D1/R2 cache. Signed-out visitors only see the example repo.
+D1/R2 cache. Signed-out visitors only see the built-in examples.
+
+### Built-in examples
+
+Two dashboards ship with the app as static data: `withastro/astro` and
+`cloudflare/workers-sdk`, each a full-history snapshot under
+`packages/web/public/examples/` (about 1.4 MB gzipped in total, plus an
+`index.json` the landing page reads at build time). They work with no GitHub
+token, no database row, no cron, and no login, and they are never synced live:
+`POST /api/repos/<owner>/<name>/sync` answers 405 for them. Regenerate the
+snapshots occasionally (a token is needed for the sync; `GITHUB_TOKEN`, else
+`gh auth token`):
+
+```sh
+pnpm examples:build
+```
 
 Access rules: public repos are open to any signed-in viewer; a private repo
 is checked against GitHub with the viewer's own token (cached 15 minutes) and
@@ -58,22 +73,23 @@ Login is a **GitHub App** (user-to-server OAuth), not an OAuth App:
   repo admin from `https://github.com/apps/<slug>/installations/new`; other
   members can request it from that page. No per-user OAuth approval.
 
-Because a user token does not reach repos the app is not installed on, public
-repos elsewhere are read with the **server token** (`GITHUB_TOKEN`, a classic
-PAT with no scopes; a 25-PR page costs one rate-limit point). Which token a
-sync or first read runs on (`packages/web/src/lib/token-source.ts`):
+Should a user token not reach a public repo the app is not installed on, it
+is read with the optional **server token** (`GITHUB_TOKEN`, a classic PAT
+with no scopes; a 25-PR page costs one rate-limit point). Which token a sync
+or first read runs on (`packages/web/src/lib/token-source.ts`):
 
 | viewer     | user token sees it | server token sees it | token used     |
 | ---------- | ------------------ | -------------------- | -------------- |
 | signed in  | yes                | —                    | user           |
 | signed in  | no                 | yes, and public      | server         |
 | signed in  | no                 | no, or private       | not found      |
-| signed out | —                  | example repo         | server         |
-| signed out | —                  | anything else        | login required |
+| signed out | —                  | —                    | login required |
 
-One assumption here is unverified against real credentials: that a GitHub App
-user token cannot read a public repo the app is not installed on, as the docs
-say. If it can, the server fallback simply never triggers.
+It was verified on 2026-09-28 that a GitHub App user token does read public
+repos without an install, so the server token is only a safety net: nothing
+reads it at startup, and a deployment without it works until that fallback is
+actually taken (then the request fails with `GITHUB_TOKEN is not configured`).
+The built-in examples never touch either token.
 
 ### Local setup
 
@@ -85,8 +101,8 @@ say. If it can, the server fallback simply never triggers.
 2. Put the app's URL slug (`https://github.com/apps/<slug>`) in
    `GITHUB_APP_SLUG` in `packages/web/wrangler.jsonc`.
 3. `cp packages/web/.dev.vars.example packages/web/.dev.vars` and fill in the
-   client id and secret, a no-scope server token, and a token encryption key
-   from `openssl rand -base64 32`.
+   client id and secret and a token encryption key from
+   `openssl rand -base64 32`; the no-scope server token is optional.
 4. Apply the migrations and start the worker:
 
 ```sh
@@ -141,5 +157,5 @@ Layout:
 - `packages/ui`: the dashboard as a framework-free module, `mount(el, payload)`.
 - `packages/store-file`: JSON-file sync store used by the CLI.
 - `packages/store-d1`: Drizzle schema, migrations, and D1 sync store for the web app.
-- `packages/web`: the Astro + Cloudflare Workers app (login, sync workflow, dashboards).
+- `packages/web`: the Astro + Cloudflare Workers app (login, sync workflow, dashboards). `scripts/build-examples.mjs` regenerates the built-in examples.
 - `packages/cli`: the `bilan` command, published as `github-bilan`.

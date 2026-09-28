@@ -12,7 +12,50 @@
 }
 body {
   font: 15px/1.5 var(--font-sans);
+}
+/*
+ * Tabular figures only where numbers line up. On <body> they also make Inter's
+ * hyphens monospaced ("Pull - request").
+ */
+.chip,
+.tile,
+time,
+.rows,
+.progress-text {
   font-variant-numeric: tabular-nums;
+}
+code {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 0.88em;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--ghost);
+  color: var(--ink);
+}
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.eyebrow,
+.state-card .eyebrow {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 .muted {
   color: var(--muted);
@@ -64,6 +107,7 @@ svg.icon {
   min-width: 0;
 }
 .wordmark {
+  flex: none;
   font-size: 16px;
   font-weight: 600;
   letter-spacing: -0.02em;
@@ -77,9 +121,21 @@ svg.icon {
   font-size: 14px;
   color: var(--ink-2);
   min-width: 0;
+  flex: 0 1 auto;
   white-space: nowrap;
   overflow: hidden;
+}
+.crumb .owner,
+.crumb b {
+  min-width: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
+}
+.crumb .owner {
+  flex: 0 10 auto;
+}
+.crumb b {
+  flex: 0 1 auto;
 }
 .crumb .sep {
   color: var(--axis);
@@ -93,16 +149,35 @@ svg.icon {
 .row .name .icon {
   color: var(--muted);
 }
+.hdr-status {
+  display: contents;
+}
+.hdr-status:empty {
+  display: none;
+}
 .hdr-right {
   margin-left: auto;
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: none;
+}
+.theme-seg button {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 26px;
+  padding: 0;
+}
+.theme-seg .icon {
+  width: 15px;
+  height: 15px;
 }
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
+  flex: none;
   height: 24px;
   padding: 0 9px;
   border: 1px solid var(--border);
@@ -125,6 +200,18 @@ svg.icon {
 }
 .chip[data-stale] .dot {
   background: var(--warning);
+}
+.chip[data-busy] .dot {
+  background: var(--accent);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+.chip-state:empty {
+  display: none;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.3;
+  }
 }
 
 /* ---- buttons, inputs, menu ---- */
@@ -210,6 +297,7 @@ svg.icon {
 }
 .menu > summary {
   list-style: none;
+  flex: none;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -240,6 +328,18 @@ svg.icon {
   transform-origin: top right;
   animation: pop-in 150ms var(--ease-out);
 }
+.pop-who {
+  margin: 0;
+  padding: 8px 10px 6px;
+  font-size: 12px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.pop-who b {
+  color: var(--ink);
+  font-weight: 500;
+}
 .pop-item {
   display: flex;
   align-items: center;
@@ -264,30 +364,48 @@ svg.icon {
 }
 
 /* ---- notices & state cards ---- */
-.notice {
-  max-width: var(--content-max);
+.notice,
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  width: calc(100% - 2 * var(--pad));
+  max-width: calc(var(--content-max) - 2 * var(--pad));
   margin: 16px auto 0;
-  padding: 10px 12px;
+  padding: 8px 8px 8px 14px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--ink-2);
   font-size: 13px;
 }
+.notice > span,
+.banner > p {
+  flex: 1 1 240px;
+  margin: 0;
+}
+.banner b {
+  color: var(--ink);
+  font-weight: 600;
+}
+.notice .btn[hidden] {
+  display: none;
+}
 .notice[hidden],
 .progress[hidden] {
   display: none;
 }
-.notice[data-state='error'],
-.panel-head .err {
+.notice[data-state='error'] {
   border-color: var(--critical);
   color: var(--critical);
 }
 .state {
   min-height: calc(100vh - var(--hdr-h));
   display: grid;
-  place-items: center;
-  padding: 40px var(--pad);
+  justify-items: center;
+  align-content: start;
+  padding: clamp(40px, 16vh, 160px) var(--pad) 40px;
 }
 .state-card {
   width: 100%;
@@ -327,6 +445,19 @@ svg.icon {
   background: var(--accent);
   animation: slide 1.2s linear infinite;
 }
+.progress-text {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  min-height: 1.5em;
+}
+.state-card .actions {
+  margin-top: 16px;
+}
+.state-card [hidden] {
+  display: none;
+}
 @keyframes slide {
   from {
     transform: translateX(-100%);
@@ -354,26 +485,63 @@ svg.icon {
   max-width: 560px;
   margin: 0 0 24px;
 }
-.preview-meta {
-  display: flex;
-  gap: 10px;
+.examples-meta {
   font-size: 12px;
   color: var(--muted);
   margin: 8px 0 10px;
 }
-.preview-meta a,
+.example-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+.example-card {
+  display: flex;
+  flex-direction: column;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.example-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.example-name,
 .row .name {
   color: var(--ink);
   font-weight: 500;
   text-decoration: none;
 }
-.skel {
-  display: inline-block;
-  height: 1em;
-  width: 4ch;
-  border-radius: 4px;
-  background: var(--ghost);
-  vertical-align: middle;
+.example-name {
+  font-size: 15px;
+}
+.example-when {
+  font-size: 12px;
+  color: var(--muted);
+}
+.example-blurb {
+  font-size: 13px;
+  color: var(--ink-2);
+  margin: 6px 0 14px;
+}
+.example-window {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+.example-card .tiles {
+  grid-template-columns: repeat(2, 1fr);
+}
+.example-card .tile .v {
+  font-size: 22px;
+}
+.example-card .btn {
+  align-self: flex-start;
+  margin-top: auto;
 }
 .features {
   display: grid;
@@ -424,8 +592,40 @@ svg.icon {
   border-bottom: 1px solid var(--border);
 }
 .panel-head .input {
-  flex: 1;
-  max-width: 320px;
+  flex: 1 1 160px;
+  max-width: 420px;
+}
+.panel-head .input[aria-invalid='true'] {
+  border-color: var(--critical);
+}
+.field-msg {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 12px;
+}
+.field-msg.err {
+  color: var(--critical);
+}
+.empty-state p {
+  max-width: 560px;
+  margin: 0 auto 8px;
+}
+.empty-state b {
+  color: var(--ink);
+}
+.cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.cell-k {
+  display: none;
+}
+.stale-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warning);
 }
 .rows {
   list-style: none;
@@ -461,35 +661,102 @@ svg.icon {
   font-size: 14px;
 }
 .row .name:hover,
-.preview-meta a:hover {
+.example-name:hover {
   text-decoration: underline;
 }
 .empty-state {
-  padding: 40px 16px;
+  padding: 36px 16px;
   text-align: center;
-  color: var(--muted);
+  color: var(--ink-2);
   font-size: 14px;
 }
 
 @media (max-width: 760px) {
+  .lp-hero {
+    padding: 44px 0 28px;
+  }
   .lp-hero h1 {
     font-size: 30px;
   }
   .features,
-  .row {
+  .example-grid {
     grid-template-columns: 1fr;
   }
+  /* One line of labelled meta under the name, instead of four bare values. */
   .row {
-    gap: 2px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 12px;
+    font-size: 12px;
+  }
+  .row .name {
+    flex-basis: 100%;
+  }
+  .cell-k {
+    display: inline;
+    color: var(--muted);
+  }
+  .no-history {
+    display: none;
   }
   .rows-head {
     display: none;
   }
 }
+@media (max-width: 640px) {
+  :root {
+    --pad: 16px;
+  }
+  .hdr-in {
+    gap: 8px;
+  }
+  /* The status chip takes a second header row rather than squeezing the repo name out. */
+  .hdr {
+    height: auto;
+    min-height: var(--hdr-h);
+  }
+  .hdr-in {
+    flex-wrap: wrap;
+    row-gap: 8px;
+    padding-block: 11px;
+  }
+  .hdr-status:not(:empty) {
+    order: 5;
+    flex-basis: 100%;
+    display: flex;
+  }
+  .long,
+  .menu-login,
+  .crumb .owner,
+  .crumb .owner + .sep {
+    display: none;
+  }
+  .menu > summary {
+    padding: 0 4px;
+  }
+  .hdr-right {
+    gap: 6px;
+  }
+}
+@media (pointer: coarse) {
+  .btn,
+  .menu > summary {
+    min-height: 36px;
+  }
+  .theme-seg button {
+    height: 32px;
+    width: 34px;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .pop,
-  .progress::after {
+  .chip[data-busy] .dot {
     animation: none;
+  }
+  /* No sliding; a full, gently fading bar still says "working" without a fake 40%. */
+  .progress::after {
+    width: 100%;
+    animation: pulse 1.6s ease-in-out infinite;
   }
   .btn:active,
   .seg button:active {
@@ -504,4 +771,10 @@ svg.icon {
 }
 .panel {
   margin-bottom: 16px;
+}
+.state-card p.muted {
+  color: var(--muted);
+}
+.state-card p.small {
+  font-size: 13px;
 }

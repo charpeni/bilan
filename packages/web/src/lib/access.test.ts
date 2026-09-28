@@ -47,7 +47,6 @@ function setup(options: {
   meta?: MetaResult;
   /** What the server token sees; defaults to the public repo `R_pub`. */
   server?: MetaResult;
-  exampleRepo?: string;
 }): Fake {
   const kv = new FakeKv();
   const fake: Fake = {
@@ -56,7 +55,6 @@ function setup(options: {
     probes: [],
     marked: [],
     cache: kv,
-    exampleRepo: options.exampleRepo ?? 'withastro/astro',
     userRepoMeta: async (userId, ref) => {
       fake.calls.push({ ...ref, userId });
       const meta = options.meta ?? { viewerPermission: 'READ' };
@@ -95,12 +93,6 @@ const unavailable: AccessDecision = { kind: 'unavailable' };
 
 const unknownRef = { owner: 'acme', name: 'new' };
 const publicRepo: AccessRepo = { id: 'R_pub', owner: 'acme', name: 'lib', isPrivate: false };
-const exampleRepo: AccessRepo = {
-  id: 'R_pub',
-  owner: 'withastro',
-  name: 'astro',
-  isPrivate: false,
-};
 const privateRepo: AccessRepo = { id: 'R_priv', owner: 'acme', name: 'secret', isPrivate: true };
 const user: SessionUser = { id: 7, login: 'alice', avatarUrl: null };
 const notFound = new RepoNotFoundError({ owner: 'acme', name: 'secret' });
@@ -109,7 +101,7 @@ const outage = new GithubError('boom', 502, true);
 const transport = new GithubError('fetch failed', null, true);
 
 describe('signed out', () => {
-  it('asks anyone to sign in for a non-example repo, cached or not, public or private', async () => {
+  it('asks anyone to sign in for any repo, cached or not, public or private', async () => {
     const deps = setup({});
     expect(await checkRepoAccess(deps, null, unknownRef)).toEqual(loginRequired);
     expect(await checkRepoAccess(deps, null, publicRepo)).toEqual(loginRequired);
@@ -117,37 +109,6 @@ describe('signed out', () => {
     expect(deps.calls).toEqual([]);
     expect(deps.probes).toEqual([]);
     expect(deps.kv.puts).toEqual([]);
-  });
-
-  it('serves the example repo while it is public', async () => {
-    const deps = setup({});
-    expect(await checkRepoAccess(deps, null, exampleRepo)).toEqual(ok);
-    expect(
-      await checkRepoAccess(deps, null, { ...exampleRepo, owner: 'WithAstro', name: 'Astro' }),
-    ).toEqual(ok);
-    expect(deps.calls).toEqual([]);
-  });
-
-  it('resolves an unknown example repo on the server token so its first sync can start', async () => {
-    const deps = setup({});
-    const decision = await checkRepoAccess(deps, null, { owner: 'withastro', name: 'astro' });
-    expect(decision).toEqual({
-      kind: 'unknown',
-      source: { source: 'server', meta: expect.objectContaining({ id: 'R_pub' }) },
-    });
-    expect(deps.calls).toEqual([]);
-    expect(deps.probes).toEqual([{ owner: 'withastro', name: 'astro' }]);
-  });
-
-  it('hides the example repo once it is private', async () => {
-    const deps = setup({ server: { isPrivate: true } });
-    expect(await checkRepoAccess(deps, null, { ...exampleRepo, isPrivate: true })).toEqual(
-      notFoundDecision,
-    );
-    const flipped = setup({ server: { isPrivate: true } });
-    expect(await checkRepoAccess(flipped, null, exampleRepo)).toEqual(notFoundDecision);
-    expect(flipped.marked).toEqual(['R_pub']);
-    expect(flipped.calls).toEqual([]);
   });
 });
 
@@ -283,7 +244,6 @@ describe('public repos', () => {
     for (const failure of [outage, transport]) {
       const deps = setup({ server: failure });
       expect(await checkRepoAccess(deps, user, publicRepo)).toEqual(unavailable);
-      expect(await checkRepoAccess(deps, null, exampleRepo)).toEqual(unavailable);
       expect(deps.kv.puts).toEqual([]);
       expect(deps.marked).toEqual([]);
       expect(deps.calls).toEqual([]);
@@ -297,32 +257,6 @@ describe('public repos', () => {
 });
 
 describe('private repos', () => {
-  const privateExample: AccessRepo = { ...exampleRepo, isPrivate: true };
-
-  it('are hidden from signed-out viewers of the example repo while the server token cannot see them', async () => {
-    const deps = setup({ server: { id: 'R_pub', isPrivate: true } });
-    expect(await checkRepoAccess(deps, null, privateExample)).toEqual(notFoundDecision);
-    const gone = setup({ server: notFound });
-    expect(await checkRepoAccess(gone, null, privateExample)).toEqual(notFoundDecision);
-    // Only the server token is asked, and nothing is cached for a signed-out viewer.
-    expect(deps.calls).toEqual([]);
-    expect(deps.probes).toEqual([{ owner: 'withastro', name: 'astro' }]);
-    expect(deps.kv.puts).toEqual([]);
-    expect(gone.kv.puts).toEqual([]);
-  });
-
-  it('serve the example repo to signed-out viewers once the server token sees the same repo public again', async () => {
-    const deps = setup({ server: { id: 'R_pub' } });
-    expect(await checkRepoAccess(deps, null, privateExample)).toEqual(ok);
-    expect(deps.kv.puts).toEqual([]);
-  });
-
-  it('are unavailable to signed-out viewers of the example repo while GitHub is down', async () => {
-    const deps = setup({ server: outage });
-    expect(await checkRepoAccess(deps, null, privateExample)).toEqual(unavailable);
-    expect(deps.kv.puts).toEqual([]);
-  });
-
   it('ask GitHub on the user token and cache an allow for a readable repo', async () => {
     for (const permission of ['READ', 'TRIAGE', 'WRITE', 'MAINTAIN', 'ADMIN'] as const) {
       const deps = setup({ meta: { viewerPermission: permission } });
@@ -459,43 +393,9 @@ describe('a different repo at a cached name', () => {
     expect(deps.kv.puts).toEqual([]);
   });
 
-  it('is never decided for signed-out viewers of a non-example name', async () => {
+  it('is never decided for signed-out viewers', async () => {
     const deps = setup({ meta: { id: 'R_replacement' }, server: { id: 'R_replacement' } });
     expect(await checkRepoAccess(deps, null, privateRepo)).toEqual(loginRequired);
     expect(deps.probes).toEqual([]);
-  });
-
-  describe('the example name, signed out', () => {
-    const privateExample: AccessRepo = { ...exampleRepo, isPrivate: true };
-
-    it('is reported as replaced on the server token when the newcomer is public', async () => {
-      // The row bilan holds is private (or was flipped so by the visibility check).
-      const deps = setup({ server: { id: 'R_replacement' } });
-      expect(await checkRepoAccess(deps, null, privateExample)).toEqual({
-        kind: 'replaced',
-        source: { source: 'server', meta: expect.objectContaining({ id: 'R_replacement' }) },
-      });
-      expect(deps.calls).toEqual([]);
-      expect(deps.probes).toEqual([{ owner: 'withastro', name: 'astro' }]);
-      expect(deps.kv.puts).toEqual([]);
-
-      // A public row whose name another public repo took over: the visibility
-      // check marks the row private, then the probe reports the newcomer.
-      const flipped = setup({ server: { id: 'R_replacement' } });
-      expect(await checkRepoAccess(flipped, null, exampleRepo)).toEqual({
-        kind: 'replaced',
-        source: { source: 'server', meta: expect.objectContaining({ id: 'R_replacement' }) },
-      });
-      expect(flipped.marked).toEqual(['R_pub']);
-    });
-
-    it('stays not-found when the newcomer is private or the name is gone', async () => {
-      const hidden = setup({ server: { id: 'R_replacement', isPrivate: true } });
-      expect(await checkRepoAccess(hidden, null, privateExample)).toEqual(notFoundDecision);
-      const gone = setup({ server: notFound });
-      expect(await checkRepoAccess(gone, null, privateExample)).toEqual(notFoundDecision);
-      expect(hidden.kv.puts).toEqual([]);
-      expect(gone.kv.puts).toEqual([]);
-    });
   });
 });

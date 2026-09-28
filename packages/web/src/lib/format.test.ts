@@ -1,7 +1,18 @@
 import { DAY, HOUR } from '@bilan/core';
 import { describe, expect, it } from 'vitest';
 
-import { dur, fmtCoverage, fmtDay, fmtSyncedAt, pct } from './format.ts';
+import {
+  capitalize,
+  dur,
+  fmtAgo,
+  fmtCoverage,
+  fmtDay,
+  fmtHistory,
+  fmtInstant,
+  fmtSyncedAt,
+  pct,
+  plural,
+} from './format.ts';
 
 describe('fmtSyncedAt', () => {
   it('prints the UTC day and time', () => {
@@ -34,5 +45,48 @@ describe('dur and pct', () => {
     expect(dur(45 * DAY)).toBe('1.5mo');
     expect(pct(null)).toBe('—');
     expect(pct(0.5)).toBe('50%');
+  });
+});
+
+describe('fmtAgo', () => {
+  const now = Date.parse('2026-09-28T12:00:00Z');
+  const ago = (ms: number): string => fmtAgo(new Date(now - ms).toISOString(), now);
+  it('reads recent instants relative to now', () => {
+    expect(ago(20e3)).toBe('just now');
+    expect(ago(-60e3)).toBe('just now');
+    expect(ago(12 * 60e3)).toBe('12 min ago');
+    expect(ago(5 * HOUR + 59 * 60e3)).toBe('5 h ago');
+    expect(ago(30 * HOUR)).toBe('yesterday');
+    expect(ago(3 * DAY)).toBe('3 days ago');
+  });
+  it('prints the day past a week, and passes through what is not a date', () => {
+    expect(ago(9 * DAY)).toBe('Sep 19, 2026');
+    expect(fmtAgo('never', now)).toBe('never');
+  });
+});
+
+describe('fmtHistory', () => {
+  it('counts the days a bounded payload reaches back from its sync', () => {
+    expect(fmtHistory(null, '2026-09-28T12:00:00Z')).toBe('full history');
+    expect(fmtHistory('2026-08-29T12:00:00Z', '2026-09-28T12:05:00Z')).toBe('last 30 days');
+    expect(fmtHistory('2026-06-30T12:00:00Z', '2026-09-28T12:00:00Z')).toBe('last 90 days');
+    expect(fmtHistory('2026-09-28T00:00:00Z', '2026-09-28T12:00:00Z')).toBe('last day');
+  });
+  it('falls back to the bound without a sync instant', () => {
+    expect(fmtHistory('2026-06-30T00:00:00Z', null)).toBe('since Jun 30, 2026');
+    expect(fmtHistory('nope', '2026-09-28T12:00:00Z')).toBe('since nope');
+  });
+});
+
+describe('fmtInstant, capitalize, plural', () => {
+  it('prints the absolute instant', () => {
+    expect(fmtInstant('2026-09-28T19:35:35Z')).toBe('Sep 28, 2026, 19:35 UTC');
+    expect(fmtInstant('never')).toBe('never');
+  });
+  it('capitalises and pluralises', () => {
+    expect(capitalize('last 30 days')).toBe('Last 30 days');
+    expect(capitalize('')).toBe('');
+    expect(plural(1, 'author')).toBe('1 author');
+    expect(plural(1200, 'author')).toBe('1,200 authors');
   });
 });

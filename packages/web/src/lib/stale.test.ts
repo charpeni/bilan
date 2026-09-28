@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isExampleRepo, isStale, needsRefresh, STALE_AFTER_MS } from './stale.ts';
+import { isStale, needsRefresh, STALE_AFTER_MS } from './stale.ts';
 
 const now = Date.parse('2026-05-01T12:00:00Z');
 
@@ -12,12 +12,6 @@ it('treats never-synced as stale', () => {
 it('flips to stale after one hour', () => {
   expect(isStale(new Date(now - STALE_AFTER_MS + 1).toISOString(), now)).toBe(false);
   expect(isStale(new Date(now - STALE_AFTER_MS - 1).toISOString(), now)).toBe(true);
-});
-
-it('matches the example repo case-insensitively', () => {
-  const env = { EXAMPLE_REPO: 'withastro/astro' };
-  expect(isExampleRepo(env, 'WithAstro', 'Astro')).toBe(true);
-  expect(isExampleRepo(env, 'withastro', 'starlight')).toBe(false);
 });
 
 describe('needsRefresh', () => {

@@ -10,10 +10,13 @@ declare global {
     PAYLOADS: R2Bucket;
     CACHE: KVNamespace;
     SYNC_REPO: Workflow<SyncRepoParams>;
-    EXAMPLE_REPO: string;
     /** URL slug of the GitHub App (`https://github.com/apps/<slug>`), for install links. */
     GITHUB_APP_SLUG: string;
-    /** Secret: no-scope server token for EXAMPLE_REPO and public repos the app is not installed on. */
+    /**
+     * Secret, optional: a no-scope server token, the fallback for public repos
+     * a viewer's GitHub App token cannot reach (see `lib/token-source.ts`).
+     * Only read when that fallback is taken; nothing needs it at startup.
+     */
     GITHUB_TOKEN?: string;
     /** Secret: base64 of 32 random bytes; AES-GCM key for per-user tokens at rest. */
     TOKEN_ENCRYPTION_KEY?: string;

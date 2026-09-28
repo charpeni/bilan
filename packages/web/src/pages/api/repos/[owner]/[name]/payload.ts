@@ -3,15 +3,20 @@ import { env } from 'cloudflare:workers';
 
 import { accessDeps, checkRepoAccess } from '../../../../../lib/access.ts';
 import { getDb } from '../../../../../lib/db.ts';
+import { exampleAssetPath, exampleResponse, findExample } from '../../../../../lib/examples.ts';
 import {
   githubUnavailable,
   json,
   loginRequired,
   unknownRepository,
 } from '../../../../../lib/http.ts';
-import { findActiveJob } from '../../../../../lib/jobs.ts';
+import { countStoredPrs, findActiveJob } from '../../../../../lib/jobs.ts';
 import { payloadKey } from '../../../../../lib/payload-key.ts';
-import { SYNC_ACTIVE_HEADER, SYNCED_AT_HEADER } from '../../../../../lib/poll.ts';
+import {
+  PRS_STORED_HEADER,
+  SYNC_ACTIVE_HEADER,
+  SYNCED_AT_HEADER,
+} from '../../../../../lib/poll.ts';
 import { isStale } from '../../../../../lib/stale.ts';
 
 import type { SessionUser } from '../../../../../lib/session.ts';
@@ -24,13 +29,24 @@ import type { APIRoute } from 'astro';
  * Both are answered only once the viewer passed the same access check as the
  * payload itself. `HEAD` answers the same status and headers without the body,
  * so polling never re-downloads the payload.
+ *
+ * A built-in example is answered first, for anyone, from the static asset
+ * shipped with the app (`public/examples/`): no database, no GitHub, no login.
  */
 async function respond(
   method: 'GET' | 'HEAD',
+  request: Request,
   owner: string,
   name: string,
   user: SessionUser | null,
 ): Promise<Response> {
+  const example = findExample(owner, name);
+  if (example) {
+    const path = exampleAssetPath(owner, name) as string;
+    const asset = await env.ASSETS.fetch(new Request(new URL(path, request.url)));
+    return exampleResponse(example, asset, method);
+  }
+
   const db = getDb(env);
   const repo = await getRepoByName(db, owner, name);
   // An unknown name takes the same GitHub round trip as a private row the
@@ -42,7 +58,14 @@ async function respond(
   if (access.kind !== 'ok' || !repo) return unknownRepository();
 
   const job = await findActiveJob(db, repo.id);
-  const syncActive = { [SYNC_ACTIVE_HEADER]: job ? '1' : '0', 'cache-control': 'no-store' };
+  // While a job runs, how many PRs it has stored so far: progress for a page
+  // watching someone else's sync (it may not read their job row).
+  const progress = job ? { [PRS_STORED_HEADER]: String(await countStoredPrs(db, repo.id)) } : {};
+  const syncActive = {
+    [SYNC_ACTIVE_HEADER]: job ? '1' : '0',
+    'cache-control': 'no-store',
+    ...progress,
+  };
 
   if (repo.lastSyncedAt === null) {
     if (job) return json({ message: 'first sync in progress' }, 202, syncActive);
@@ -72,16 +95,17 @@ async function respond(
       [SYNCED_AT_HEADER]: repo.lastSyncedAt,
       'x-bilan-stale': isStale(repo.lastSyncedAt) ? '1' : '0',
       [SYNC_ACTIVE_HEADER]: syncActive[SYNC_ACTIVE_HEADER],
+      ...progress,
     },
   });
 }
 
-export const GET: APIRoute = ({ params, locals }) => {
+export const GET: APIRoute = ({ params, request, locals }) => {
   const { owner, name } = params as { owner: string; name: string };
-  return respond('GET', owner, name, locals.user);
+  return respond('GET', request, owner, name, locals.user);
 };
 
-export const HEAD: APIRoute = ({ params, locals }) => {
+export const HEAD: APIRoute = ({ params, request, locals }) => {
   const { owner, name } = params as { owner: string; name: string };
-  return respond('HEAD', owner, name, locals.user);
+  return respond('HEAD', request, owner, name, locals.user);
 };

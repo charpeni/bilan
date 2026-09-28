@@ -1,10 +1,7 @@
-import type { Repo, SyncJob } from '@bilan/store-d1';
+import type { SyncJob } from '@bilan/store-d1';
 
 /** The columns the decision reads, so callers and tests can pass partial rows. */
-export type VisibleJob = Pick<SyncJob, 'repoId' | 'requestedBy'>;
-
-/** The example repo's row, as far as the decision reads it. */
-export type ExampleRepo = Pick<Repo, 'id' | 'isPrivate'>;
+export type VisibleJob = Pick<SyncJob, 'requestedBy'>;
 
 export type JobVisibility = 'ok' | 'login-required' | 'unknown';
 
@@ -18,28 +15,19 @@ export type JobVisibility = 'ok' | 'login-required' | 'unknown';
  * | unknown id     | login-required | unknown                            |
  * | the viewer's   | —              | ok                                 |
  * | another user's | login-required | unknown (same answer as unknown id) |
- * | example repo's | ok             | ok                                 |
+ * | the cron's     | login-required | unknown                            |
  *
- * `exampleRepo` is the example repo's row, or `null` when bilan has no row
- * for it yet (then no job is an example-repo job). The exception only holds
- * while the row says the repo is public: a private example repo's jobs fall
- * under the owner-only rule like any other private repo's.
+ * The built-in examples never have jobs (they are static snapshots), so
+ * there is no exception for them.
  */
 export function jobVisibility(input: {
   job: VisibleJob | undefined;
   user: { id: number } | null;
-  exampleRepo: ExampleRepo | null;
 }): JobVisibility {
-  const { job, user, exampleRepo } = input;
-  const isExample =
-    job !== undefined &&
-    exampleRepo !== null &&
-    exampleRepo.isPrivate === false &&
-    job.repoId === exampleRepo.id;
-  if (user === null) return isExample ? 'ok' : 'login-required';
+  const { job, user } = input;
+  if (user === null) return 'login-required';
   if (job === undefined) return 'unknown';
-  if (isExample || job.requestedBy === user.id) return 'ok';
-  return 'unknown';
+  return job.requestedBy === user.id ? 'ok' : 'unknown';
 }
 
 /** Statuses of a run that has finished writing: the payload is there to read. */

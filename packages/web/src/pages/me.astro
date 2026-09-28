@@ -1,28 +1,33 @@
 ---
-import { parseRepo } from '@bilan/core';
 import { listRepoViews } from '@bilan/store-d1';
 import { env } from 'cloudflare:workers';
 
 import Base from '../layouts/Base.astro';
 import { accessDeps, checkRepoAccess } from '../lib/access.ts';
 import { getDb } from '../lib/db.ts';
-import { fmtCoverage, fmtDay, fmtSyncedAt } from '../lib/format.ts';
+import { EXAMPLES } from '../lib/examples.ts';
+import { capitalize, fmtAgo, fmtHistory, fmtInstant } from '../lib/format.ts';
 import { installUrl, loginHref } from '../lib/oauth.ts';
+import { parseRepoInput, REPO_INPUT_HINT } from '../lib/repo-input.ts';
+import { isStale } from '../lib/stale.ts';
 import { filterVisibleViews } from '../lib/views.ts';
 
 const user = Astro.locals.user;
 if (!user) return Astro.redirect(loginHref('/me'), 302);
 
-// The "open a repository" form posts back here with `?repo=owner/name`.
+// The "open a repository" form posts back here with `?repo=owner/name` (or a
+// pasted GitHub URL, which is read the same way).
 const requested = Astro.url.searchParams.get('repo');
 let openError: string | null = null;
-if (requested) {
-  try {
-    const ref = parseRepo(requested);
+if (requested !== null) {
+  const ref = parseRepoInput(requested);
+  if (ref) {
     return Astro.redirect(`/${encodeURIComponent(ref.owner)}/${encodeURIComponent(ref.name)}`, 302);
-  } catch (error) {
-    openError = error instanceof Error ? error.message : String(error);
   }
+  openError =
+    requested.trim() === ''
+      ? REPO_INPUT_HINT
+      : `“${requested.trim()}” is not a repository. ${REPO_INPUT_HINT}`;
 }
 
 // A repo stays listed only while the viewer may still see it, public rows
@@ -39,40 +44,69 @@ const views = await filterVisibleViews(await listRepoViews(getDb(env), user.id),
   }),
 );
 const install = installUrl(env);
+const now = Date.now();
 ---
 
 <Base title="Your repositories · bilan" user={user}>
   <main class="container">
     <h1 class="page-title">Your repositories</h1>
     <div class="panel">
-      <form method="get" action="/me" class="panel-head">
+      <form method="get" action="/me" class="panel-head" novalidate>
+        <label class="sr-only" for="repo-input">Repository</label>
         <input
           class="input"
+          id="repo-input"
           name="repo"
           type="text"
-          placeholder="owner/name"
+          inputmode="url"
+          placeholder="owner/name or a GitHub URL"
           value={requested ?? ''}
-          required
-          pattern="[\w.\-]+/[\w.\-]+"
-          aria-label="Repository owner/name"
           autocomplete="off"
+          autocapitalize="off"
           spellcheck="false"
+          aria-invalid={openError ? 'true' : undefined}
+          aria-describedby={openError ? 'repo-error' : 'repo-help'}
         />
-        <button class="btn btn-primary" type="submit">Open a repository</button>
-        {openError && <span class="err">{openError}</span>}
+        <button class="btn btn-primary" type="submit">Open</button>
+        {
+          openError ? (
+            <p class="field-msg err" id="repo-error" role="alert">
+              {openError}
+            </p>
+          ) : (
+            <p class="field-msg muted" id="repo-help">
+              Any repository your GitHub account can read. The first visit syncs its last 30 days.
+            </p>
+          )
+        }
       </form>
       {
         views.length === 0 ? (
-          <p class="empty-state">
-            Nothing yet. Open any <code>owner/name</code> above, or try{' '}
-            <a href={`/${env.EXAMPLE_REPO}`}>{env.EXAMPLE_REPO}</a>.
-          </p>
+          <div class="empty-state">
+            <p>
+              <b>No repositories yet.</b> Open one above: bilan syncs its last 30 days of pull
+              requests on your GitHub token, usually in under a minute, and the dashboard link is
+              yours to share with anyone who can see the repository.
+            </p>
+            {EXAMPLES.length > 0 && (
+              <p class="muted small">
+                Or look around a built-in example first:{' '}
+                {EXAMPLES.map((example, i) => (
+                  <>
+                    {i > 0 && ', '}
+                    <a href={`/${example.owner}/${example.name}`}>{example.repo}</a>
+                  </>
+                ))}
+                .
+              </p>
+            )}
+          </div>
         ) : (
           <ul class="rows">
             <li class="rows-head" aria-hidden="true">
               <span>Repository</span>
               <span>Last viewed</span>
-              <span>Coverage</span>
+              <span>History</span>
               <span>Synced</span>
             </li>
             {views.map((view) => (
@@ -89,13 +123,36 @@ const install = installUrl(env);
                     </svg>
                   )}
                 </a>
-                <time datetime={view.lastViewedAt}>{fmtDay(view.lastViewedAt)}</time>
-                <span>{view.lastSyncedAt === null ? '—' : fmtCoverage(view.coverageSince)}</span>
-                {view.lastSyncedAt === null ? (
-                  <span class="muted">not yet</span>
-                ) : (
-                  <time datetime={view.lastSyncedAt}>{fmtSyncedAt(view.lastSyncedAt)}</time>
-                )}
+                <span class="cell">
+                  <span class="cell-k">Viewed</span>
+                  <time datetime={view.lastViewedAt} title={fmtInstant(view.lastViewedAt)}>
+                    {fmtAgo(view.lastViewedAt, now)}
+                  </time>
+                </span>
+                <span class="cell">
+                  {view.lastSyncedAt === null ? (
+                    <span class="muted no-history">—</span>
+                  ) : (
+                    capitalize(fmtHistory(view.coverageSince, view.lastSyncedAt))
+                  )}
+                </span>
+                <span class="cell">
+                  {view.lastSyncedAt === null ? (
+                    <span class="muted">Not synced yet</span>
+                  ) : (
+                    <>
+                      <span class="cell-k">Synced</span>
+                      <time datetime={view.lastSyncedAt} title={fmtInstant(view.lastSyncedAt)}>
+                        {fmtAgo(view.lastSyncedAt, now)}
+                      </time>
+                      {isStale(view.lastSyncedAt, now) && (
+                        <span class="stale-dot" title="Older than an hour; refreshed on your next visit">
+                          <span class="sr-only">(out of date)</span>
+                        </span>
+                      )}
+                    </>
+                  )}
+                </span>
               </li>
             ))}
           </ul>

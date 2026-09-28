@@ -5,6 +5,7 @@ import { env } from 'cloudflare:workers';
 import { accessDeps, checkRepoAccess } from '../../../../../lib/access.ts';
 import { getDb } from '../../../../../lib/db.ts';
 import { DEFAULT_DEPTH, isSyncDepth, SYNC_DEPTHS } from '../../../../../lib/depth.ts';
+import { exampleSyncRefused, isExample } from '../../../../../lib/examples.ts';
 import {
   githubUnavailable,
   json,
@@ -16,7 +17,6 @@ import {
   SyncAlreadyRunningError,
   SyncRateLimitedError,
 } from '../../../../../lib/jobs.ts';
-import { isExampleRepo } from '../../../../../lib/stale.ts';
 import { GithubUnavailableError, ReauthRequiredError } from '../../../../../lib/tokens.ts';
 
 import type { SyncDepth } from '../../../../../lib/depth.ts';
@@ -48,13 +48,15 @@ async function readDepth(request: Request): Promise<SyncDepth | Response> {
 }
 
 /**
- * Signed-in viewers sync on their own token (rate limited per repo); signed-out
- * viewers may only refresh the example repo, on the server token.
+ * Signed-in viewers sync on their own token (rate limited per repo). The
+ * built-in examples are static snapshots and are refused for everyone, before
+ * the login check, so the answer is the same signed in or out.
  */
 export const POST: APIRoute = async ({ params, request, locals }) => {
   const { owner, name } = params as { owner: string; name: string };
+  if (isExample(owner, name)) return exampleSyncRefused();
   const user = locals.user;
-  if (!user && !isExampleRepo(env, owner, name)) return loginRequired();
+  if (!user) return loginRequired();
 
   const depth = await readDepth(request);
   if (depth instanceof Response) return depth;
@@ -76,7 +78,7 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
       {
         mode: 'incremental',
         depth,
-        requestedBy: user?.id ?? null,
+        requestedBy: user.id,
         ...(access.kind === 'ok' ? {} : { source: access.source }),
       },
     );

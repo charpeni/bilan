@@ -1,0 +1,27 @@
+---
+import Base from '../layouts/Base.astro';
+import { EXAMPLES } from '../lib/examples.ts';
+
+// Unmatched paths only. A repository URL always renders its own page (see
+// `[owner]/[name].astro` and `RepoNotFound.astro`), never this one.
+const user = Astro.locals.user;
+const example = EXAMPLES[0];
+Astro.response.status = 404;
+---
+
+<Base title="Page not found · bilan" user={user}>
+  <main class="state">
+    <div class="state-card">
+      <p class="eyebrow">404</p>
+      <h1>This page does not exist</h1>
+      <p>
+        Dashboards live at <code>/owner/name</code>{example && (<>, for example <a href={`/${example.owner}/${example.name}`}>/{example.repo}</a></>)}.
+      </p>
+      <div class="actions">
+        <a class="btn btn-primary" href={user ? '/me' : '/'}>
+          {user ? 'Your repositories' : 'Go to the home page'}
+        </a>
+      </div>
+    </div>
+  </main>
+</Base>

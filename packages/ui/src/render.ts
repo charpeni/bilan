@@ -23,7 +23,7 @@ import {
 
 import { barChart, columnChart, heatmap, legend, timeChart } from './charts.ts';
 import { table } from './table.ts';
-import { compact, css, dur, el, fmtDate, num, pctFmt } from './utils.ts';
+import { HOUR, compact, css, dur, el, fmtDate, num, pctFmt, plural } from './utils.ts';
 
 import type { Bin } from './charts.ts';
 import type { DashboardContext } from './state.ts';
@@ -40,11 +40,25 @@ export function card(cls: string, title: string, desc?: string): HTMLDivElement 
   return c;
 }
 
+/** The node a chart draws into; the card's title becomes the chart's accessible name. */
 export function chartHost(c: HTMLElement): HTMLDivElement {
   const h = el('div');
+  const title = c.querySelector(':scope > h2')?.textContent;
+  if (title) h.dataset.label = title;
   c.append(h);
   return h;
 }
+
+/**
+ * Hours as the dashboard's durations (`18h`, `2.4d`, `1.2mo`), years past
+ * twelve months (`9.7y`) so an outlier week still fits the axis gutter; a
+ * bare `0` on the baseline.
+ */
+export const hoursFmt = (v: number): string => {
+  if (v === 0) return '0';
+  const years = v / (365 * 24);
+  return years >= 1 ? `${years.toFixed(1)}y` : dur(v * HOUR);
+};
 
 interface Insight {
   text: string;
@@ -74,20 +88,22 @@ export function render(ctx: DashboardContext): void {
   /* ---- headline tiles ---- */
   const H = headline(w);
   const tiles = el('div', { class: 'tiles' });
+  // The frame clips the tiles' outer separators, so a short last row is plain surface.
+  const frame = el('div', { class: 'tiles-frame' }, [tiles]);
   const tile = (k: string, v: string, d: string, hero?: boolean): void => {
     const t = el('div', { class: 'tile' }, [el('div', { class: 'k', text: k })]);
     t.append(el('div', { class: hero ? 'hero' : 'v', text: v }));
     if (d) t.append(el('div', { class: 'd', text: d }));
     tiles.append(t);
   };
-  tile('PRs opened', H.opened.toLocaleString(), `${H.authors} authors`, true);
+  tile('PRs opened', H.opened.toLocaleString(), plural(H.authors, 'author'), true);
   tile('Merged', H.merged.toLocaleString(), `${pctFmt(H.mergedShare)} of resolved`);
   tile('Closed unmerged', H.rejected.toLocaleString(), `${H.stillOpen} still open`);
   tile('Median time to merge', dur(H.medMerge), `p90 ${dur(H.p90Merge)} · from ready`);
   tile('Median time to first review', dur(H.medFirst), `${pctFmt(H.reviewedShare)} ever reviewed`);
   tile('Median time in draft', dur(H.medReady), `${pctFmt(H.draftShare)} opened as draft`);
-  tile('Reviews given', H.reviews.toLocaleString(), `${H.reviewers} reviewers`);
-  app.append(tiles);
+  tile('Reviews given', H.reviews.toLocaleString(), plural(H.reviewers, 'reviewer'));
+  app.append(frame);
 
   const grid = el('div', { class: 'grid' });
   app.append(grid);
@@ -145,9 +161,9 @@ export function render(ctx: DashboardContext): void {
   {
     const trend = cycleTimeTrend(w, wb);
     const c = card(
-      'twothirds',
+      '',
       'Cycle time trend',
-      'Weekly median hours from ready-for-review to first review, and to merge. Weeks with no data are skipped; the last point is the current, partial week.',
+      'Weekly median time from ready-for-review to first review, and to merge. Weeks with no data are skipped; the last point is the current, partial week.',
     );
     legend(c, [
       { name: 'Ready → first review', color: S2() },
@@ -159,7 +175,7 @@ export function render(ctx: DashboardContext): void {
       timeChart(h, {
         xs: weeks,
         mode: 'line',
-        yFmt: (v) => `${Math.round(v)}h`,
+        yFmt: hoursFmt,
         series: [
           { name: 'Ready → first review', color: S2(), values: trend.toFirst },
           { name: 'Ready → merged', color: S3(), values: trend.toMerge },
@@ -242,7 +258,7 @@ export function render(ctx: DashboardContext): void {
     const c = card(
       '',
       'Contributors',
-      'Authoring and reviewing side by side. Click any column to sort. Durations start at ready-for-review, so draft time is not charged to review latency.',
+      'Authoring and reviewing side by side. Sort by any column. Durations start at ready-for-review, so draft time is not charged to review latency.',
     );
     const h = chartHost(c);
     grid.append(c);

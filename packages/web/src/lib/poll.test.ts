@@ -4,6 +4,9 @@ import {
   jobPollOutcome,
   nextWatch,
   payloadPollOutcome,
+  jobProgress,
+  payloadProgress,
+  PRS_STORED_HEADER,
   readPayloadProbe,
   SYNC_ACTIVE_HEADER,
   SYNCED_AT_HEADER,
@@ -33,64 +36,122 @@ describe('watchAfterSyncResponse', () => {
   });
 });
 
+/** The `x-bilan-prs-stored` header as the poller reads it. */
+const storedCount = (value: string): number | null =>
+  readPayloadProbe(202, new Headers({ [PRS_STORED_HEADER]: value })).prsStored;
+
 describe('readPayloadProbe', () => {
   it('reads the two headers', () => {
     const headers = new Headers({ [SYNCED_AT_HEADER]: T1, [SYNC_ACTIVE_HEADER]: '1' });
-    expect(readPayloadProbe(200, headers)).toEqual({ status: 200, syncedAt: T1, syncActive: true });
+    expect(readPayloadProbe(200, headers)).toEqual({
+      status: 200,
+      syncedAt: T1,
+      syncActive: true,
+      prsStored: null,
+    });
     expect(readPayloadProbe(404, new Headers({ [SYNC_ACTIVE_HEADER]: '0' }))).toEqual({
       status: 404,
       syncedAt: null,
       syncActive: false,
+      prsStored: null,
     });
     expect(readPayloadProbe(202, new Headers())).toEqual({
       status: 202,
       syncedAt: null,
       syncActive: false,
+      prsStored: null,
     });
+  });
+
+  it('reads the stored-PR count as progress, ignoring anything but a count', () => {
+    expect(storedCount('412')).toBe(412);
+    expect(storedCount('0')).toBe(0);
+    expect(storedCount('-1')).toBeNull();
+    expect(storedCount('1.5')).toBeNull();
+    expect(storedCount('lots')).toBeNull();
+  });
+});
+
+describe('jobProgress and payloadProgress', () => {
+  it('reads the phase, the count, and the start from an own job', () => {
+    expect(jobProgress({ status: 'queued', settled: false, createdAt: T1, prsStored: 0 })).toEqual({
+      phase: 'queued',
+      prsStored: 0,
+      startedAt: T1,
+    });
+    expect(jobProgress({ status: 'running', settled: false, prsStored: 75 })).toEqual({
+      phase: 'running',
+      prsStored: 75,
+      startedAt: null,
+    });
+  });
+
+  it('knows only the count when watching the payload', () => {
+    expect(
+      payloadProgress({ status: 202, syncedAt: null, syncActive: true, prsStored: 30 }),
+    ).toEqual({ phase: 'active', prsStored: 30, startedAt: null });
   });
 });
 
 describe('payloadPollOutcome', () => {
   it('is ready once a payload other than the baseline is on offer', () => {
-    expect(payloadPollOutcome({ status: 200, syncedAt: T2, syncActive: false }, T1)).toEqual({
+    expect(
+      payloadPollOutcome({ status: 200, syncedAt: T2, syncActive: false, prsStored: null }, T1),
+    ).toEqual({
       kind: 'ready',
     });
     // Still marked active: the job row lags the payload; the payload is what counts.
-    expect(payloadPollOutcome({ status: 200, syncedAt: T2, syncActive: true }, T1)).toEqual({
+    expect(
+      payloadPollOutcome({ status: 200, syncedAt: T2, syncActive: true, prsStored: null }, T1),
+    ).toEqual({
       kind: 'ready',
     });
   });
 
   it('is ready on the first 200 after a 202', () => {
-    expect(payloadPollOutcome({ status: 200, syncedAt: T1, syncActive: false }, null)).toEqual({
+    expect(
+      payloadPollOutcome({ status: 200, syncedAt: T1, syncActive: false, prsStored: null }, null),
+    ).toEqual({
       kind: 'ready',
     });
   });
 
   it('waits while the same payload is on offer and a job is active', () => {
-    expect(payloadPollOutcome({ status: 200, syncedAt: T1, syncActive: true }, T1)).toEqual({
+    expect(
+      payloadPollOutcome({ status: 200, syncedAt: T1, syncActive: true, prsStored: null }, T1),
+    ).toEqual({
       kind: 'wait',
     });
-    expect(payloadPollOutcome({ status: 202, syncedAt: null, syncActive: true }, null)).toEqual({
+    expect(
+      payloadPollOutcome({ status: 202, syncedAt: null, syncActive: true, prsStored: null }, null),
+    ).toEqual({
       kind: 'wait',
     });
-    expect(payloadPollOutcome({ status: 404, syncedAt: null, syncActive: true }, null)).toEqual({
+    expect(
+      payloadPollOutcome({ status: 404, syncedAt: null, syncActive: true, prsStored: null }, null),
+    ).toEqual({
       kind: 'wait',
     });
   });
 
   it('stops when nothing is running and nothing new was published', () => {
-    expect(payloadPollOutcome({ status: 200, syncedAt: T1, syncActive: false }, T1)).toEqual({
+    expect(
+      payloadPollOutcome({ status: 200, syncedAt: T1, syncActive: false, prsStored: null }, T1),
+    ).toEqual({
       kind: 'stopped',
     });
-    expect(payloadPollOutcome({ status: 404, syncedAt: null, syncActive: false }, null)).toEqual({
+    expect(
+      payloadPollOutcome({ status: 404, syncedAt: null, syncActive: false, prsStored: null }, null),
+    ).toEqual({
       kind: 'stopped',
     });
   });
 
   it('fails on any other status', () => {
     for (const status of [401, 403, 500, 503]) {
-      expect(payloadPollOutcome({ status, syncedAt: null, syncActive: false }, T1)).toEqual({
+      expect(
+        payloadPollOutcome({ status, syncedAt: null, syncActive: false, prsStored: null }, T1),
+      ).toEqual({
         kind: 'failed',
         message: `Could not read sync status (${status}).`,
       });

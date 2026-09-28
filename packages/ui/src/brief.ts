@@ -3,6 +3,7 @@ import { brief, change } from '@bilan/core';
 import { coversDays } from './range.ts';
 import { DAY, dur, el, fmtDate, num, svgEl } from './utils.ts';
 
+import type { Range } from './range.ts';
 import type { DashboardContext } from './state.ts';
 
 interface BriefLink {
@@ -43,6 +44,9 @@ export const canCompare = (coverageSince: string | null, last: number): boolean 
   coversDays(coverageSince, last, BRIEF_COMPARE_DAYS);
 
 export const COMPARE_NOTE = `Comparisons appear once ${BRIEF_COMPARE_DAYS} days are synced.`;
+
+/** The range a host syncs to make the comparisons possible: the smallest one past 60 days. */
+export const COMPARE_RANGE = '90' satisfies Range;
 
 /**
  * A fixed "last 30 days vs the 30 before" read-out at the top of the page.
@@ -262,7 +266,25 @@ export function renderBrief(ctx: DashboardContext): void {
       text: `${fmtDate(LAST - 30 * DAY)} – ${fmtDate(LAST)}${vs(', compared with the 30 days before')}. Bots excluded except under Automation. The filters below do not change this section.`,
     }),
   ]);
-  if (!compare) head.append(el('p', { class: 'desc brief-compare-note', text: COMPARE_NOTE }));
+  if (!compare) {
+    const row = el('div', { class: 'brief-compare' }, [
+      el('p', { class: 'desc brief-compare-note', text: COMPARE_NOTE }),
+    ]);
+    // The smallest range button that reaches back 60 days; its busy state and
+    // progress are shared with that button (see `mount`).
+    const { requestMore } = ctx;
+    if (requestMore) {
+      const btn = el('button', {
+        type: 'button',
+        class: 'brief-load',
+        'data-load-range': COMPARE_RANGE,
+        text: `Sync ${COMPARE_RANGE} days`,
+      });
+      btn.addEventListener('click', () => requestMore(COMPARE_RANGE));
+      row.append(btn);
+    }
+    head.append(row);
+  }
   const grid = el('div', { class: 'brief-grid' });
   // Items flagged for attention lead; the rest keep their fixed order.
   for (const it of [...items.filter((i) => i.watch), ...items.filter((i) => !i.watch)]) {

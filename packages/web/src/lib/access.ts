@@ -3,7 +3,6 @@ import { schema } from '@bilan/store-d1';
 import { eq } from 'drizzle-orm';
 
 import { getDb } from './db.ts';
-import { isExampleRepo } from './stale.ts';
 import { resolveTokenSource, tokenSourceDeps } from './token-source.ts';
 
 import type { SessionUser } from './session.ts';
@@ -64,7 +63,6 @@ export function accessDeps(
     Env,
     | 'CACHE'
     | 'DB'
-    | 'EXAMPLE_REPO'
     | 'TOKEN_ENCRYPTION_KEY'
     | 'GITHUB_CLIENT_ID'
     | 'GITHUB_CLIENT_SECRET'
@@ -97,13 +95,11 @@ export function visibilityCacheKey(repoId: string): string {
  *
  * | target           | viewer                              | result                     |
  * | ---------------- | ----------------------------------- | -------------------------- |
- * | anything         | signed out, not the example repo    | login-required             |
+ * | anything         | signed out                          | login-required             |
  * | unknown          | GitHub sees it (user, else server)  | unknown (with the source)  |
  * | unknown          | neither token sees it               | not-found                  |
- * | public (still)   | signed in, or example repo          | ok                         |
+ * | public (still)   | signed in                           | ok                         |
  * | public → private | anyone                              | as private, row updated    |
- * | private          | signed out (example), server: same  | ok                         |
- * | private          | signed out (example), private / 404 | not-found                  |
  * | private          | signed in, cached allowed           | ok                         |
  * | private          | signed in, GitHub sees it (read+)   | ok (cached allowed)        |
  * | private          | signed in, GitHub 404 or no read    | not-found (never cached)   |
@@ -121,11 +117,10 @@ export function visibilityCacheKey(repoId: string): string {
  * without asking GitHub, while an unknown name always asks, so the two would
  * come apart the moment GitHub cannot answer (503 for one, 404 for the other).
  * Signed-out viewers get the same answer whether or not the row exists, so the
- * cache never leaks either; for the example repo they take the server-token
- * probe like anyone else, so a name another repo took over is reported as
- * `replaced` rather than hidden. A viewer whose token is gone gets a
- * `ReauthRequiredError` from `userRepoMeta`, which the middleware turns into a
- * login redirect (pages) or a 401 (APIs).
+ * cache never leaks either; the built-in examples are served from static
+ * files before this check is reached (see `examples.ts`). A viewer whose
+ * token is gone gets a `ReauthRequiredError` from `userRepoMeta`, which the
+ * middleware turns into a login redirect (pages) or a 401 (APIs).
  */
 export async function checkRepoAccess(
   deps: AccessDeps,
@@ -133,9 +128,7 @@ export async function checkRepoAccess(
   target: AccessRepo | RepoRef,
 ): Promise<AccessDecision> {
   const ref: RepoRef = { owner: target.owner, name: target.name };
-  if (!user && !isExampleRepo({ EXAMPLE_REPO: deps.exampleRepo }, ref.owner, ref.name)) {
-    return LOGIN_REQUIRED;
-  }
+  if (!user) return LOGIN_REQUIRED;
   if (!isKnown(target)) {
     const source = await probe(deps, user, ref);
     if (source === 'unavailable') return UNAVAILABLE;
@@ -152,14 +145,9 @@ export async function checkRepoAccess(
     isPrivate = true;
   }
 
-  // Signed-out viewers reach here only for the example repo: no per-user
-  // cache for them, but the same server-token probe, so a takeover of the
-  // example name is caught as `replaced` and not hidden as `not-found`.
-  const key = user === null ? null : accessCacheKey(user.id, repo.id);
-  if (key !== null) {
-    const cached = (await deps.cache.get(key)) as CachedAccess | null;
-    if (cached === 'allowed') return OK;
-  }
+  const key = accessCacheKey(user.id, repo.id);
+  const cached = (await deps.cache.get(key)) as CachedAccess | null;
+  if (cached === 'allowed') return OK;
 
   // Every non-allowed answer is asked of GitHub again, exactly as for an
   // unknown name: a denial is never cached (see the table above).
@@ -176,7 +164,7 @@ export async function checkRepoAccess(
   const allowed =
     source.source === 'server' || (permission !== null && READ_PERMISSIONS.has(permission));
   if (!allowed) return NOT_FOUND;
-  if (key !== null) await deps.cache.put(key, 'allowed', { expirationTtl: ACCESS_CACHE_TTL_S });
+  await deps.cache.put(key, 'allowed', { expirationTtl: ACCESS_CACHE_TTL_S });
   return OK;
 }
 
@@ -198,8 +186,8 @@ async function probe(
     if (error instanceof GithubError) return 'unavailable';
     throw error;
   }
-  // Signed-out viewers of a non-example name were sent to login above, so
-  // this never happens; the narrowing is for the type only.
+  // Signed-out viewers were sent to login above, so this never happens; the
+  // narrowing is for the type only.
   if (source.source === 'login-required') return { source: 'not-found' };
   return source;
 }

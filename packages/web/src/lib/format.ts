@@ -35,3 +35,49 @@ export function dur(ms: number | null): string {
 
 export const pct = (v: number | null): string =>
   v === null || Number.isNaN(v) ? '—' : `${Math.round(v * 100)}%`;
+
+/**
+ * `just now`, `12 min ago`, `5 h ago`, `yesterday`, `3 days ago`, then the
+ * day (`Sep 2, 2026`) past a week; the input when it is not a date. A time a
+ * little in the future (clock skew) reads as `just now`.
+ */
+export function fmtAgo(iso: string, now: number = Date.now()): string {
+  const at = Date.parse(iso);
+  if (Number.isNaN(at)) return iso;
+  const ms = now - at;
+  if (ms < 60e3) return 'just now';
+  if (ms < HOUR) return `${Math.floor(ms / 60e3)} min ago`;
+  if (ms < DAY) return `${Math.floor(ms / HOUR)} h ago`;
+  if (ms < 2 * DAY) return 'yesterday';
+  if (ms < 7 * DAY) return `${Math.floor(ms / DAY)} days ago`;
+  return fmtDay(iso);
+}
+
+/**
+ * How much history a payload holds, as the header chip and the repo list say
+ * it: `full history`, or `last 30 days` counted from the sync that produced it.
+ * Without a sync instant (or with bounds that do not parse), the bound's day.
+ */
+export function fmtHistory(coverageSince: string | null, syncedAt: string | null): string {
+  if (coverageSince === null) return 'full history';
+  const since = Date.parse(coverageSince);
+  const at = syncedAt === null ? Number.NaN : Date.parse(syncedAt);
+  if (Number.isNaN(since) || Number.isNaN(at) || at < since) return fmtCoverage(coverageSince);
+  const days = Math.max(1, Math.round((at - since) / DAY));
+  return days === 1 ? 'last day' : `last ${days} days`;
+}
+
+/** `Sep 28, 2026, 19:35 UTC`: the absolute instant behind a relative one, for tooltips. */
+export function fmtInstant(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return `${fmtDay(iso)}, ${fmtSyncedAt(iso).split(', ')[1] ?? ''}`;
+}
+
+/** Capitalise the first letter, for a phrase that starts a cell (`Last 30 days`). */
+export const capitalize = (text: string): string =>
+  text.length === 0 ? text : `${text[0]?.toUpperCase() ?? ''}${text.slice(1)}`;
+
+/** `1 author`, `3 authors`. */
+export const plural = (n: number, noun: string): string =>
+  `${n.toLocaleString()} ${noun}${n === 1 ? '' : 's'}`;

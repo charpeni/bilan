@@ -2,15 +2,16 @@
 import { env } from 'cloudflare:workers';
 
 import Base from '../layouts/Base.astro';
-import { fmtSyncedAt } from '../lib/format.ts';
+import { EXAMPLES } from '../lib/examples.ts';
+import { fmtDay } from '../lib/format.ts';
 import { installUrl, isOauthConfigured, loginHref } from '../lib/oauth.ts';
-import { examplePreview, PREVIEW_LABELS } from '../lib/preview.ts';
+import { previewTiles } from '../lib/preview.ts';
 
-const exampleRepo = env.EXAMPLE_REPO;
 const user = Astro.locals.user;
 const install = installUrl(env);
-const preview = await examplePreview(env);
-const primaryHref = user ? '/me' : isOauthConfigured(env) ? loginHref('/me') : `/${exampleRepo}`;
+const firstExample = EXAMPLES[0];
+const exampleHref = firstExample ? `/${firstExample.owner}/${firstExample.name}` : '#examples';
+const primaryHref = user ? '/me' : isOauthConfigured(env) ? loginHref('/me') : exampleHref;
 const primaryLabel = user ? 'Your repositories' : 'Sign in with GitHub';
 ---
 
@@ -24,38 +25,42 @@ const primaryLabel = user ? 'Your repositories' : 'Sign in with GitHub';
       </p>
       <div class="actions">
         <a class="btn btn-primary" href={primaryHref}>{primaryLabel}</a>
-        <a class="btn" href={`/${exampleRepo}`}>See the example</a>
+        <a class="btn" href="#examples">See the examples</a>
       </div>
     </section>
 
-    <section class="preview" aria-label="Example dashboard">
-      <p class="preview-meta">
-        <a href={`/${exampleRepo}`}>{exampleRepo}</a>
-        <span>
-          {preview ? `last 30 days · synced ${fmtSyncedAt(preview.syncedAt)}` : 'not synced yet'}
-        </span>
+    <section class="examples" id="examples" aria-label="Example dashboards">
+      <p class="examples-meta">
+        Two built-in examples, full history, no sign-in needed. Snapshots, not live data.
       </p>
-      <div class="tiles">
+      <div class="example-grid">
         {
-          preview
-            ? preview.tiles.map((t) => (
-                <div class="tile">
-                  <div class="k">{t.k}</div>
-                  <div class="v">{t.v}</div>
-                  <div class="d">{t.d}</div>
-                </div>
-              ))
-            : PREVIEW_LABELS.map((k) => (
-                <div class="tile" aria-busy="true">
-                  <div class="k">{k}</div>
-                  <div class="v">
-                    <span class="skel" />
+          EXAMPLES.map((example) => (
+            <article class="example-card">
+              <div class="example-head">
+                <a class="example-name" href={`/${example.owner}/${example.name}`}>
+                  {example.repo}
+                </a>
+                <span class="example-when">
+                  snapshot of {fmtDay(example.snapshotAt)} · {example.prs.toLocaleString()} PRs
+                </span>
+              </div>
+              <p class="example-blurb">{example.blurb}</p>
+              <p class="example-window">Last 30 days of the snapshot</p>
+              <div class="tiles">
+                {previewTiles(example.preview).map((t) => (
+                  <div class="tile">
+                    <div class="k">{t.k}</div>
+                    <div class="v">{t.v}</div>
+                    <div class="d">{t.d}</div>
                   </div>
-                  <div class="d">
-                    <span class="skel" />
-                  </div>
-                </div>
-              ))
+                ))}
+              </div>
+              <a class="btn" href={`/${example.owner}/${example.name}`}>
+                Open dashboard
+              </a>
+            </article>
+          ))
         }
       </div>
     </section>
@@ -119,7 +124,7 @@ const primaryLabel = user ? 'Your repositories' : 'Sign in with GitHub';
           <>
             {' '}(<a href={install}>install it on GitHub</a>)
           </>
-        )}.
+        )}. The examples are snapshots shipped with the app; sign in to sync any repository live.
       </span>
       <a href="https://github.com/charpeni/bilan">bilan on GitHub</a>
     </footer>

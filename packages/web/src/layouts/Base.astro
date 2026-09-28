@@ -12,13 +12,11 @@ interface Props {
   user: SessionUser | null;
   /** Shown as `owner / name` after the wordmark on repository pages. */
   crumb?: { owner: string; name: string; isPrivate?: boolean };
-  /** The dashboard carries its own theme control; the header's is hidden then. */
-  hideTheme?: boolean;
   /** Where to land after signing in; defaults to the current page. */
   next?: string;
 }
 
-const { title, user, crumb, hideTheme = false, next } = Astro.props;
+const { title, user, crumb, next } = Astro.props;
 ---
 
 <!doctype html>
@@ -41,10 +39,10 @@ const { title, user, crumb, hideTheme = false, next } = Astro.props;
         <a class="wordmark" href="/">bilan</a>
         {
           crumb && (
-            <span class="crumb">
-              <span class="sep">/</span>
+            <span class="crumb" title={`${crumb.owner}/${crumb.name}`}>
+              <span class="sep" aria-hidden="true">/</span>
               <span class="owner">{crumb.owner}</span>
-              <span class="sep">/</span>
+              <span class="sep" aria-hidden="true">/</span>
               <b>{crumb.name}</b>
               {crumb.isPrivate && (
                 <svg class="icon" viewBox="0 0 16 16" aria-label="Private" role="img">
@@ -58,33 +56,77 @@ const { title, user, crumb, hideTheme = false, next } = Astro.props;
             </span>
           )
         }
-        <slot name="status" />
+        {
+          Astro.slots.has('status') && (
+            <div class="hdr-status">
+              <slot name="status" />
+            </div>
+          )
+        }
         <div class="hdr-right">
           <slot name="actions" />
-          {
-            !hideTheme && (
-              <div class="seg" role="group" aria-label="Theme" id="theme-seg">
-                <button type="button" data-theme-pick="auto" aria-pressed="true">
-                  Auto
-                </button>
-                <button type="button" data-theme-pick="light" aria-pressed="false">
-                  Light
-                </button>
-                <button type="button" data-theme-pick="dark" aria-pressed="false">
-                  Dark
-                </button>
-              </div>
-            )
-          }
+          <div class="seg theme-seg" role="group" aria-label="Theme" id="theme-seg">
+            <button
+              type="button"
+              data-theme-pick="auto"
+              aria-pressed="true"
+              aria-label="System theme"
+              title="System theme"
+            >
+              <svg class="icon" viewBox="0 0 16 16" aria-hidden="true">
+                <path
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linejoin="round"
+                  d="M2.5 3.5h11v7.5h-11zM6 13.5h4M8 11v2.5"
+                />
+              </svg>
+            </button>
+            <button
+              type="button"
+              data-theme-pick="light"
+              aria-pressed="false"
+              aria-label="Light theme"
+              title="Light theme"
+            >
+              <svg class="icon" viewBox="0 0 16 16" aria-hidden="true">
+                <circle cx="8" cy="8" r="2.75" fill="none" stroke="currentColor" stroke-width="1.5" />
+                <path
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  d="M8 1.5v1.25M8 13.25v1.25M1.5 8h1.25M13.25 8h1.25M3.4 3.4l.9.9M11.7 11.7l.9.9M3.4 12.6l.9-.9M11.7 4.3l.9-.9"
+                />
+              </svg>
+            </button>
+            <button
+              type="button"
+              data-theme-pick="dark"
+              aria-pressed="false"
+              aria-label="Dark theme"
+              title="Dark theme"
+            >
+              <svg class="icon" viewBox="0 0 16 16" aria-hidden="true">
+                <path
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linejoin="round"
+                  d="M13.5 9.6A5.75 5.75 0 0 1 6.4 2.5a5.75 5.75 0 1 0 7.1 7.1Z"
+                />
+              </svg>
+            </button>
+          </div>
           <UserMenu user={user} {...(next === undefined ? {} : { next })} />
         </div>
       </div>
     </header>
     <slot />
     <script>
-      // One theme for the whole site: `data-theme` on <html>, remembered in
-      // localStorage. The dashboard's own control writes the same attribute,
-      // so observing it keeps the two in step.
+      // One theme for the whole site, chosen here: `data-theme` on <html>,
+      // remembered in localStorage. The dashboard redraws its charts when the
+      // attribute changes (see `mount` in @bilan/ui).
       const html = document.documentElement;
       const buttons = document.querySelectorAll<HTMLButtonElement>('[data-theme-pick]');
       const press = (): void => {

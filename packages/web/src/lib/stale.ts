@@ -19,12 +19,3 @@ export function needsRefresh(
 ): boolean {
   return isStale(repo.lastSyncedAt, now) || repo.syncStartedAt !== null;
 }
-
-/** `owner/name` only when both parts look like GitHub identifiers. */
-export function isExampleRepo(
-  env: Pick<Env, 'EXAMPLE_REPO'>,
-  owner: string,
-  name: string,
-): boolean {
-  return `${owner}/${name}`.toLowerCase() === env.EXAMPLE_REPO.toLowerCase();
-}

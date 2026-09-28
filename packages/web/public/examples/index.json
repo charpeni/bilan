@@ -1,0 +1,54 @@
+[
+  {
+    "owner": "withastro",
+    "name": "astro",
+    "repo": "withastro/astro",
+    "snapshotAt": "2026-09-28T22:37:59.453Z",
+    "prs": 11071,
+    "coverageSince": null,
+    "openPrsSyncedAt": "2026-09-28T22:37:59.453Z",
+    "preview": {
+      "opened": 139,
+      "authors": 60,
+      "merged": 98,
+      "mergedShare": 0.6282051282051282,
+      "rejected": 58,
+      "stillOpen": 67,
+      "medMerge": 76634000,
+      "p90Merge": 1152823000,
+      "medFirst": 5736000,
+      "reviewedShare": 0.7538461538461538,
+      "medReady": 5809000,
+      "draftShare": 0.34532374100719426,
+      "reviews": 169,
+      "reviewers": 12
+    },
+    "sizeBytes": 725385
+  },
+  {
+    "owner": "cloudflare",
+    "name": "workers-sdk",
+    "repo": "cloudflare/workers-sdk",
+    "snapshotAt": "2026-09-28T23:02:43.340Z",
+    "prs": 9812,
+    "coverageSince": null,
+    "openPrsSyncedAt": "2026-09-28T23:02:43.340Z",
+    "preview": {
+      "opened": 303,
+      "authors": 93,
+      "merged": 237,
+      "mergedShare": 0.7847682119205298,
+      "rejected": 65,
+      "stillOpen": 195,
+      "medMerge": 114560000,
+      "p90Merge": 1427782000,
+      "medFirst": 96500,
+      "reviewedShare": 1,
+      "medReady": 3494000,
+      "draftShare": 0.3795379537953795,
+      "reviews": 707,
+      "reviewers": 37
+    },
+    "sizeBytes": 768922
+  }
+]

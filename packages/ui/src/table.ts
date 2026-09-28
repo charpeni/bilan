@@ -29,8 +29,12 @@ export function table<T>(host: HTMLElement, cols: Col<T>[], rows: T[], initial: 
   const thead = el('thead');
   const tr = el('tr');
   for (const c of cols) {
-    const th = el('th', { text: c.label, title: c.help ?? c.label });
-    th.addEventListener('click', () => {
+    // A real button per header, so sorting works from the keyboard; the state
+    // is announced through `aria-sort` on the <th>.
+    const th = el('th', { scope: 'col' });
+    const btn = el('button', { type: 'button', class: 'sort', text: c.label });
+    if (c.help) btn.title = c.help;
+    btn.addEventListener('click', () => {
       if (sortKey === c.key) asc = !asc;
       else {
         sortKey = c.key;
@@ -38,6 +42,7 @@ export function table<T>(host: HTMLElement, cols: Col<T>[], rows: T[], initial: 
       }
       draw();
     });
+    th.append(btn);
     tr.append(th);
   }
   thead.append(tr);

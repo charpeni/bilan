@@ -1,5 +1,6 @@
 // Secrets (set with `wrangler secret put`, or in .dev.vars locally):
-//   GITHUB_TOKEN          server token used only to sync EXAMPLE_REPO
+//   GITHUB_TOKEN          optional no-scope server token: the fallback for public
+//                         repos a viewer's token cannot reach (src/lib/token-source.ts)
 //   TOKEN_ENCRYPTION_KEY  key for encrypting per-user GitHub tokens at rest
 //   GITHUB_CLIENT_ID      the bilan GitHub App (user-to-server OAuth login)
 //   GITHUB_CLIENT_SECRET
@@ -45,7 +46,6 @@
     "crons": ["0 6 * * *"],
   },
   "vars": {
-    "EXAMPLE_REPO": "withastro/astro",
     // URL slug of the GitHub App (https://github.com/apps/<slug>); the 404 page links to its install screen.
     "GITHUB_APP_SLUG": "bilan-app",
   },

@@ -23,11 +23,7 @@ function meta(
   };
 }
 
-function setup(options: {
-  user?: GithubRepoMeta | Error;
-  server?: GithubRepoMeta | Error;
-  exampleRepo?: string;
-}) {
+function setup(options: { user?: GithubRepoMeta | Error; server?: GithubRepoMeta | Error }) {
   const calls: string[] = [];
   const answer = (
     which: 'user' | 'server',
@@ -39,7 +35,6 @@ function setup(options: {
     return Promise.resolve(value);
   };
   const deps: TokenSourceDeps = {
-    exampleRepo: options.exampleRepo ?? 'withastro/astro',
     userRepoMeta: () => answer('user', options.user),
     serverRepoMeta: () => answer('server', options.server),
   };
@@ -99,19 +94,11 @@ describe('signed in', () => {
 });
 
 describe('signed out', () => {
-  it('reads only the example repo, on the server token', async () => {
-    const { deps, calls } = setup({ server: meta(false, null) });
-    const example = { owner: 'WithAstro', name: 'Astro' };
-    expect(await resolveTokenSource(deps, null, example)).toEqual({
-      source: 'server',
-      meta: meta(false, null),
-    });
-    expect(calls).toEqual(['server']);
-  });
-
-  it('asks anyone else to sign in without touching GitHub', async () => {
+  it('asks to sign in without touching GitHub, the built-in examples included', async () => {
     const { deps, calls } = setup({});
     expect(await resolveTokenSource(deps, null, ref)).toEqual({ source: 'login-required' });
+    const example = { owner: 'withastro', name: 'astro' };
+    expect(await resolveTokenSource(deps, null, example)).toEqual({ source: 'login-required' });
     expect(calls).toEqual([]);
   });
 });

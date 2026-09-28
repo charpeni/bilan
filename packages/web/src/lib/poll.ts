@@ -15,6 +15,8 @@ export const POLL_INTERVAL_MS = 4000;
 
 export const SYNC_ACTIVE_HEADER = 'x-bilan-sync-active';
 export const SYNCED_AT_HEADER = 'x-bilan-synced-at';
+/** Pull requests already stored for the repo while a job runs: progress, never a decision. */
+export const PRS_STORED_HEADER = 'x-bilan-prs-stored';
 
 /** What the page is watching for a sync to finish. */
 export type SyncWatch =
@@ -56,6 +58,8 @@ export interface PayloadProbe {
   syncedAt: string | null;
   /** `x-bilan-sync-active`: a job is queued or running. */
   syncActive: boolean;
+  /** `x-bilan-prs-stored`: pull requests stored so far while a job runs; null when not sent. */
+  prsStored: number | null;
 }
 
 export function readPayloadProbe(status: number, headers: Headers): PayloadProbe {
@@ -63,6 +67,7 @@ export function readPayloadProbe(status: number, headers: Headers): PayloadProbe
     status,
     syncedAt: headers.get(SYNCED_AT_HEADER),
     syncActive: headers.get(SYNC_ACTIVE_HEADER) === '1',
+    prsStored: readCount(headers.get(PRS_STORED_HEADER)),
   };
 }
 
@@ -82,11 +87,43 @@ export function payloadPollOutcome(probe: PayloadProbe, baseline: string | null)
   return { kind: 'failed', message: `Could not read sync status (${probe.status}).` };
 }
 
+/** A non-negative integer header or field, else null. */
+function readCount(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 0 ? n : null;
+}
+
 /** The job row as `GET /api/sync/:id` answers it, as far as the poller reads it. */
 export interface JobProbe {
   status: string;
   settled: boolean;
   error?: string | null;
+  /** When the job was queued (ISO). */
+  createdAt?: string | null;
+  /** Pull requests stored for the repo so far (see `countStoredPrs`). */
+  prsStored?: number | null;
+}
+
+/** What the page can say about a running sync, from whichever endpoint it watches. */
+export interface SyncProgress {
+  /** `queued` or `running` from the job row; `active` when only the payload endpoint is readable. */
+  phase: 'queued' | 'running' | 'active';
+  prsStored: number | null;
+  /** When the job was queued, when known (own jobs only). */
+  startedAt: string | null;
+}
+
+export function jobProgress(job: JobProbe): SyncProgress {
+  return {
+    phase: job.status === 'queued' ? 'queued' : 'running',
+    prsStored: readCount(job.prsStored),
+    startedAt: typeof job.createdAt === 'string' ? job.createdAt : null,
+  };
+}
+
+export function payloadProgress(probe: PayloadProbe): SyncProgress {
+  return { phase: 'active', prsStored: probe.prsStored, startedAt: null };
 }
 
 /**
