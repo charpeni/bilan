@@ -4,11 +4,13 @@ import { and, count, desc, eq, inArray } from 'drizzle-orm';
 
 import { getDb } from './db.ts';
 import { DEFAULT_DEPTH, depthToSince } from './depth.ts';
+import { reconcileJobStatus } from './job-reconcile.ts';
 import { readSyncLimit, recordSyncLimit, syncLimitDecision } from './sync-policy.ts';
 import { resolveTokenSource, tokenSourceDeps } from './token-source.ts';
 
 import type { SyncRepoParams } from '../workflows/sync-repo.ts';
 import type { SyncDepth } from './depth.ts';
+import type { InstanceStatus } from './job-reconcile.ts';
 import type { ResolvedTokenSource } from './token-source.ts';
 import type { RepoRef } from '@bilan/core';
 import type { Db, SyncJob } from '@bilan/store-d1';
@@ -32,6 +34,63 @@ export class SyncRateLimitedError extends Error {
     this.name = 'SyncRateLimitedError';
     this.retryAfter = retryAfter;
   }
+}
+
+/**
+ * The active job for a repo after checking the Workflow engine still has a
+ * live instance for it; a lost job is marked errored and `undefined` is
+ * returned so a new sync can start. See `reconcileJobStatus`.
+ */
+export async function findLiveJob(
+  env: Pick<Env, 'SYNC_REPO'>,
+  db: Db,
+  repoId: string,
+): Promise<SyncJob | undefined> {
+  const job = await findActiveJob(db, repoId);
+  if (!job) return undefined;
+  return reconcileJob(env, db, job);
+}
+
+export async function instanceStatus(
+  env: Pick<Env, 'SYNC_REPO'>,
+  jobId: string,
+): Promise<InstanceStatus> {
+  try {
+    const status = (await (await env.SYNC_REPO.get(jobId)).status()).status;
+    return (INSTANCE_STATUSES as readonly string[]).includes(status)
+      ? (status as InstanceStatus)
+      : 'unknown';
+  } catch {
+    return 'missing';
+  }
+}
+
+const INSTANCE_STATUSES = [
+  'queued',
+  'running',
+  'paused',
+  'waiting',
+  'waitingForPause',
+  'errored',
+  'terminated',
+  'complete',
+  'unknown',
+] as const;
+
+/** Apply `reconcileJobStatus` to a row; returns the row still considered active, or undefined. */
+export async function reconcileJob(
+  env: Pick<Env, 'SYNC_REPO'>,
+  db: Db,
+  job: SyncJob,
+): Promise<SyncJob | undefined> {
+  if (job.status !== 'queued' && job.status !== 'running') return undefined;
+  const verdict = reconcileJobStatus({ job, instance: await instanceStatus(env, job.id) });
+  if (verdict.action === 'keep') return job;
+  await db
+    .update(schema.syncJobs)
+    .set({ status: 'errored', error: verdict.error, finishedAt: new Date().toISOString() })
+    .where(and(eq(schema.syncJobs.id, job.id), inArray(schema.syncJobs.status, ACTIVE_STATUSES)));
+  return undefined;
 }
 
 export function findActiveJob(db: Db, repoId: string): Promise<SyncJob | undefined> {
@@ -124,7 +183,7 @@ export async function startSync(
     totalPrs: meta.pullRequests.totalCount,
   });
 
-  const active = await findActiveJob(db, repo.id);
+  const active = await findLiveJob(env, db, repo.id);
   if (active) throw new SyncAlreadyRunningError(active.id);
 
   const mode = options.mode ?? 'incremental';
