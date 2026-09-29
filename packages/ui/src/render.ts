@@ -522,7 +522,7 @@ export function render(ctx: DashboardContext): void {
     const list = el('ul', { class: 'insights' });
     for (const it of items) {
       const dot = el('span', { class: 'ico' });
-      dot.style.cssText = `width:8px;height:8px;border-radius:50%;margin-top:6px;background:${it.bad ? css('--warning') : css('--s1')}`;
+      dot.style.cssText = `width:7px;height:7px;margin-top:6px;background:${it.bad ? css('--warning') : css('--s1')}`;
       const body = el('div', {}, [el('b', { text: it.text })]);
       if (it.detail) body.append(el('div', { class: 'mono' }, it.detail));
       list.append(el('li', {}, [dot, body]));

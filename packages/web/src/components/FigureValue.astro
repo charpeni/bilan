@@ -1,0 +1,16 @@
+---
+/**
+ * A measured value, set as a datasheet sets it: the number in the monospace
+ * and its unit ("h", "d", "%") smaller beside it. The text is unchanged
+ * ("1.6h" reads as "1.6h"); only a trailing unit is wrapped for styling.
+ */
+import { splitUnit } from '../lib/figure.ts';
+
+interface Props {
+  value: string;
+}
+
+const [number, unit] = splitUnit(Astro.props.value);
+---
+
+<span class="figure-v">{number}{unit && <span class="unit">{unit}</span>}</span>

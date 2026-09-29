@@ -37,6 +37,8 @@ export function legend(c: HTMLElement, items: LegendItem[]): HTMLElement {
 
 /** Resting opacity of bars and columns; the hovered one goes to full ink. */
 const REST = 0.9;
+/** Side of the square point markers on line charts, in px. */
+const MARK = 7;
 
 const setNum = (node: Element, name: string, v: number): void => {
   node.setAttribute(name, String(v));
@@ -149,7 +151,7 @@ export function timeChart(
       const fill = svgEl('path', {
         d: `${d}L${last[0]},${Y(0)}L${first[0]},${Y(0)}Z`,
         fill: s.color,
-        opacity: 0.12,
+        opacity: 0.08,
       });
       svg.append(fill);
     }
@@ -158,19 +160,21 @@ export function timeChart(
         d,
         fill: 'none',
         stroke: s.color,
-        'stroke-width': 2,
-        'stroke-linejoin': 'round',
-        'stroke-linecap': 'round',
+        'stroke-width': 1.5,
+        'stroke-linejoin': 'miter',
+        'stroke-linecap': 'butt',
       }),
     );
+    // The latest point gets a square marker, as on a plotted datasheet curve.
     svg.append(
-      svgEl('circle', {
-        cx: last[0],
-        cy: last[1],
-        r: 4,
+      svgEl('rect', {
+        x: last[0] - MARK / 2,
+        y: last[1] - MARK / 2,
+        width: MARK,
+        height: MARK,
         fill: s.color,
-        stroke: css('--surface'),
-        'stroke-width': 2,
+        stroke: css('--page'),
+        'stroke-width': 1.5,
       }),
     );
   }
@@ -178,13 +182,14 @@ export function timeChart(
   const hair = svgEl('line', { class: 'crosshair', y1: pad.t, y2: H - pad.b, opacity: 0 });
   svg.append(hair);
   const dots = series.map((s) => {
-    const c = svgEl('circle', {
-      cx: pad.l,
-      cy: pad.t,
-      r: 4,
+    const c = svgEl('rect', {
+      x: pad.l - MARK / 2,
+      y: pad.t - MARK / 2,
+      width: MARK,
+      height: MARK,
       fill: s.color,
-      stroke: css('--surface'),
-      'stroke-width': 2,
+      stroke: css('--page'),
+      'stroke-width': 1.5,
       opacity: 0,
     });
     svg.append(c);
@@ -210,8 +215,8 @@ export function timeChart(
         setNum(c, 'opacity', 0);
         return;
       }
-      setNum(c, 'cx', X(i));
-      setNum(c, 'cy', Y(v));
+      setNum(c, 'x', X(i) - MARK / 2);
+      setNum(c, 'y', Y(v) - MARK / 2);
       setNum(c, 'opacity', 1);
     });
     const xLabel = series[0]?.xLabel;
@@ -281,11 +286,13 @@ export function barChart<R extends BarRow>(
   });
   host.append(svg);
   rows.forEach((r, i) => {
-    const y = i * rowH + 4;
-    const bh = Math.min(18, rowH - 8);
+    // A thin, square-ended bar centred in its row.
+    const bh = 12;
+    const y = i * rowH + (rowH - bh) / 2;
     const w = Math.max(r.value > 0 ? 3 : 0, (r.value / top) * (W - pad.l - pad.r));
+    // Names, not figures: the bar labels are set in the grotesk, the axes in the monospace.
     const label = svgEl('text', {
-      class: 'tick',
+      class: 'tick blabel',
       x: pad.l - 10,
       y: y + bh / 2 + 4,
       'text-anchor': 'end',
@@ -296,7 +303,7 @@ export function barChart<R extends BarRow>(
     svg.append(label);
     const path = svgEl('path', {
       class: 'mark',
-      d: `M${pad.l},${y} h${Math.max(0, w - 4)} a4,4 0 0 1 4,4 v${bh - 8} a4,4 0 0 1 -4,4 h${-Math.max(0, w - 4)} z`,
+      d: `M${pad.l},${y} h${w} v${bh} h${-w} z`,
       fill: color,
       opacity: REST,
     });
@@ -384,17 +391,16 @@ export function columnChart(
     );
   }
   const band = (W - pad.l - pad.r) / bins.length;
-  const bw = Math.min(24, band - 2);
+  const bw = Math.min(18, band - 2);
   bins.forEach((b, i) => {
     const x = pad.l + i * band + (band - bw) / 2;
     const y = Y(b.value);
     const h = Math.max(b.value > 0 ? 2 : 0, H - pad.b - y);
     let column: SVGPathElement | null = null;
     if (h > 0) {
-      const r = Math.min(4, h);
       column = svgEl('path', {
         class: 'mark',
-        d: `M${x},${y + r} a${r},${r} 0 0 1 ${r},${-r} h${bw - 2 * r} a${r},${r} 0 0 1 ${r},${r} v${h - r} h${-bw} z`,
+        d: `M${x},${H - pad.b - h} h${bw} v${h} h${-bw} z`,
         fill: color,
         opacity: REST,
       });
@@ -511,7 +517,6 @@ export function heatmap(
         y: pad.t + r * ch + 1,
         width: Math.max(1, cw - 2),
         height: ch - 2,
-        rx: Math.min(3, Math.floor((ch - 2) / 2)),
         fill,
       });
       svg.append(rect);

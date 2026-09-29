@@ -1,22 +1,18 @@
-import plexLatinExt from '@fontsource-variable/ibm-plex-sans/files/ibm-plex-sans-latin-ext-wght-normal.woff2?url';
-import plexLatin from '@fontsource-variable/ibm-plex-sans/files/ibm-plex-sans-latin-wght-normal.woff2?url';
-import serifLatinExt from '@fontsource-variable/newsreader/files/newsreader-latin-ext-opsz-normal.woff2?url';
-import serifItalicLatinExt from '@fontsource-variable/newsreader/files/newsreader-latin-ext-wght-italic.woff2?url';
-import serifLatin from '@fontsource-variable/newsreader/files/newsreader-latin-opsz-normal.woff2?url';
-import serifItalicLatin from '@fontsource-variable/newsreader/files/newsreader-latin-wght-italic.woff2?url';
-import monoLatin from '@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2?url';
+import sansLatinExt from '@fontsource-variable/archivo/files/archivo-latin-ext-standard-normal.woff2?url';
+import sansLatin from '@fontsource-variable/archivo/files/archivo-latin-standard-normal.woff2?url';
+import monoLatinExt from '@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-ext-wght-normal.woff2?url';
 /**
- * The three families of the "Relevé" type system, self-hosted: Newsreader
- * (display and figures), IBM Plex Sans (text and UI), IBM Plex Mono (code).
- * Only the Latin and Latin Extended subsets are declared; a browser downloads
- * a face only once text on the page uses it, so Plex Mono and the Newsreader
- * italic cost nothing on pages without code or notes.
+ * The two families of the "Spec sheet" type system, self-hosted: Archivo (one
+ * grotesk for text, headings, and controls; weight and width axes) and
+ * JetBrains Mono (every figure, label, and piece of code). Only the Latin and
+ * Latin Extended subsets are declared; a browser downloads a face only once
+ * text on the page uses it.
  *
- * Each family also gets a metric-matched local fallback (`size-adjust` and
- * vertical overrides computed from the woff2 files against Georgia, Arial,
- * and Courier New), so swapping in the web font does not move the layout.
+ * Each family also gets a local fallback with the web font's vertical metrics
+ * (from its hhea table) and an approximate advance-width match against Arial
+ * and Courier New, so swapping in the web font barely moves the layout.
  */
-import monoLatinExt from '@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-ext-400-normal.woff2?url';
+import monoLatin from '@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2?url';
 
 const LATIN =
   'U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD';
@@ -28,44 +24,39 @@ interface Face {
   url: string;
   range: string;
   weight: string;
-  style?: 'italic';
+  stretch?: string;
 }
 
 const FACES: Face[] = [
-  { family: 'Newsreader Variable', url: serifLatin, range: LATIN, weight: '200 800' },
-  { family: 'Newsreader Variable', url: serifLatinExt, range: LATIN_EXT, weight: '200 800' },
   {
-    family: 'Newsreader Variable',
-    url: serifItalicLatin,
+    family: 'Archivo Variable',
+    url: sansLatin,
     range: LATIN,
-    weight: '200 800',
-    style: 'italic',
+    weight: '100 900',
+    stretch: '62% 125%',
   },
   {
-    family: 'Newsreader Variable',
-    url: serifItalicLatinExt,
+    family: 'Archivo Variable',
+    url: sansLatinExt,
     range: LATIN_EXT,
-    weight: '200 800',
-    style: 'italic',
+    weight: '100 900',
+    stretch: '62% 125%',
   },
-  { family: 'IBM Plex Sans Variable', url: plexLatin, range: LATIN, weight: '100 700' },
-  { family: 'IBM Plex Sans Variable', url: plexLatinExt, range: LATIN_EXT, weight: '100 700' },
-  { family: 'IBM Plex Mono', url: monoLatin, range: LATIN, weight: '400' },
-  { family: 'IBM Plex Mono', url: monoLatinExt, range: LATIN_EXT, weight: '400' },
+  { family: 'JetBrains Mono Variable', url: monoLatin, range: LATIN, weight: '100 800' },
+  { family: 'JetBrains Mono Variable', url: monoLatinExt, range: LATIN_EXT, weight: '100 800' },
 ];
 
-/** Local stand-ins with the web fonts' advance widths and vertical metrics. */
+/** Local stand-ins with the web fonts' vertical metrics and roughly their advance widths. */
 const FALLBACKS = `
-@font-face{font-family:'Newsreader Fallback';src:local('Georgia');size-adjust:89.72%;ascent-override:81.92%;descent-override:29.53%;line-gap-override:0%}
-@font-face{font-family:'Plex Sans Fallback';src:local('Arial'),local('Helvetica Neue'),local('Liberation Sans');size-adjust:100.9%;ascent-override:101.58%;descent-override:27.25%;line-gap-override:0%}
-@font-face{font-family:'Plex Mono Fallback';src:local('Courier New'),local('Liberation Mono');size-adjust:99.98%;ascent-override:102.52%;descent-override:27.5%;line-gap-override:0%}`;
+@font-face{font-family:'Archivo Fallback';src:local('Arial'),local('Helvetica Neue'),local('Liberation Sans');size-adjust:106%;ascent-override:82.83%;descent-override:19.81%;line-gap-override:0%}
+@font-face{font-family:'JetBrains Mono Fallback';src:local('Courier New'),local('Liberation Mono');size-adjust:100%;ascent-override:102%;descent-override:30%;line-gap-override:0%}`;
 
 /** `@font-face` rules for the page head. */
 export const FONT_FACES =
   FACES.map(
     (f) =>
-      `@font-face{font-family:'${f.family}';font-style:${f.style ?? 'normal'};font-display:swap;font-weight:${f.weight};src:url(${f.url}) format('woff2');unicode-range:${f.range}}`,
+      `@font-face{font-family:'${f.family}';font-style:normal;font-display:swap;font-weight:${f.weight};${f.stretch ? `font-stretch:${f.stretch};` : ''}src:url(${f.url}) format('woff2');unicode-range:${f.range}}`,
   ).join('\n') + FALLBACKS;
 
-/** Every page sets text in these two; preloading them avoids a late swap. */
-export const PRELOAD_FONTS: readonly string[] = [serifLatin, plexLatin];
+/** Every page sets text in both; preloading them avoids a late swap. */
+export const PRELOAD_FONTS: readonly string[] = [sansLatin, monoLatin];
