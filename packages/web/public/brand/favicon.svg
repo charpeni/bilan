@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
+  <style>.a{fill:#2b4fcf}.i{stroke:#111214}@media (prefers-color-scheme:dark){.a{fill:#8aa4ff}.i{stroke:#ececee}}</style>
+  <path class="a" d="M2 2H6V4H4V12H6V14H2Z"/>
+  <path class="i" fill="none" stroke-width="2.1" d="M9.8 2.48C13.6 4.98 13.6 11.02 9.8 13.52"/>
+</svg>
