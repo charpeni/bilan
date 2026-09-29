@@ -550,7 +550,7 @@ describe('mount', () => {
         true,
       ]);
       expect(grid().dataset.clipped).toBe('');
-      expect(grid().style.maxHeight).toBe('240px');
+      expect(grid().style.maxHeight).toBe('280px');
       expect(root.querySelector<HTMLElement>('#brief')?.dataset.expanded).toBe('0');
       // The summary sentence is gone: the cards themselves are the summary.
       expect(root.querySelector('.brief-summary')).toBeNull();
@@ -586,7 +586,7 @@ describe('mount', () => {
       expect(root.querySelector('.brief-toggle')?.getAttribute('aria-expanded')).toBe('false');
       expect(shown()).toBe(3);
       expect(grid().dataset.clipped).toBe('');
-      expect(grid().style.maxHeight).toBe('240px');
+      expect(grid().style.maxHeight).toBe('280px');
       expect(localStorage.getItem('bilan.brief.expanded')).toBe('0');
     });
 
@@ -601,7 +601,7 @@ describe('mount', () => {
       vi.advanceTimersByTime(200);
       expect(shown()).toBe(2);
       expect(root.querySelector('.brief-toggle')?.textContent).toBe('Show 6 more');
-      expect(grid().style.maxHeight).toBe('240px');
+      expect(grid().style.maxHeight).toBe('280px');
     });
 
     it('clips nothing when every card fits on one row', () => {
