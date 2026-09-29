@@ -42,8 +42,11 @@
       "class_name": "SyncRepoWorkflow",
     },
   ],
-  // Serve on bilan.charpeni.workers.dev; no per-version preview URLs (the GitHub App callback is bound to one host).
-  "workers_dev": true,
+  // Served on bilan.dev only (the zone must be on this Cloudflare account). The
+  // workers.dev host and per-version preview URLs are off: the GitHub App
+  // callback is bound to one host.
+  "routes": [{ "pattern": "bilan.dev", "custom_domain": true }],
+  "workers_dev": false,
   "preview_urls": false,
   "triggers": {
     "crons": ["0 6 * * *"],
