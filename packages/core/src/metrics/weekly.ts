@@ -58,12 +58,29 @@ export function throughput(s: Scope, wb: WeekBuckets): Throughput {
   return { opened, merged, closed };
 }
 
-/** PRs still open at the end of each week. */
-export function openBacklog(s: Scope, wb: WeekBuckets): number[] {
-  return wb.weeks.map((w) => {
+export interface OpenBacklog {
+  /** PRs still open at the end of each week. */
+  open: number[];
+  /** Of those, the ones still drafts at that instant: never marked ready, or marked ready later. */
+  drafts: number[];
+}
+
+/**
+ * PRs still open at the end of each week, and how many of them were drafts
+ * then. Draft is read from the ready-for-review event alone (`r`, null when
+ * never ready): a PR is a draft at the week's end when it was open and not
+ * yet ready. Re-drafts are ignored, as in the rest of the metrics.
+ */
+export function openBacklog(s: Scope, wb: WeekBuckets): OpenBacklog {
+  const open: number[] = [];
+  const drafts: number[] = [];
+  for (const w of wb.weeks) {
     const edge = w + 7 * DAY - 1;
-    return s.authored.filter((p) => p.c <= edge && (p.x === null || p.x > edge)).length;
-  });
+    const atEdge = s.authored.filter((p) => p.c <= edge && (p.x === null || p.x > edge));
+    open.push(atEdge.length);
+    drafts.push(atEdge.filter((p) => p.r === null || p.r > edge).length);
+  }
+  return { open, drafts };
 }
 
 /** Weekly median in hours; null for empty buckets so a line can skip them. */

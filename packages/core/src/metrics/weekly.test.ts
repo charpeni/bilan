@@ -95,7 +95,41 @@ describe('throughput', () => {
 
 describe('openBacklog', () => {
   it('counts PRs open at the end of each week', () => {
-    expect(openBacklog(sc(), weekBuckets(sc(), LAST))).toEqual([1, 1, 1, 1]);
+    expect(openBacklog(sc(), weekBuckets(sc(), LAST)).open).toEqual([1, 1, 1, 1]);
+  });
+
+  it('counts the open PRs that were still drafts at each week end', () => {
+    const drafted = derive([
+      // Opened as a draft in week 0, marked ready mid week 1, merged in week 2.
+      payloadPr({
+        n: 1,
+        c: W0 + 2 * DAY_MS,
+        d: 1,
+        r: W0 + 9 * DAY_MS,
+        m: W0 + 15 * DAY_MS,
+        x: W0 + 15 * DAY_MS,
+        rv: [],
+      }),
+      // Opened as a draft in week 1 and never marked ready: still open, still a draft.
+      payloadPr({
+        n: 2,
+        c: W0 + 8 * DAY_MS,
+        d: 1,
+        r: null,
+        m: null,
+        x: null,
+        s: 'OPEN',
+        dr: 1,
+        mb: null,
+        rv: [],
+      }),
+      // Opened ready in week 0, still open: never a draft.
+      payloadPr({ n: 3, c: W0 + DAY_MS, r: W0 + DAY_MS, m: null, x: null, s: 'OPEN', rv: [] }),
+    ]);
+    const s = scope(drafted, new Set(), createFilterState(), LAST);
+    const backlog = openBacklog(s, weekBuckets(s, LAST));
+    expect(backlog.open).toEqual([2, 3, 2, 2]);
+    expect(backlog.drafts).toEqual([1, 1, 1, 1]);
   });
 });
 

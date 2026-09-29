@@ -1,63 +1,266 @@
 ---
 import { env } from 'cloudflare:workers';
 
+import BrandMark from '../components/BrandMark.astro';
 import Base from '../layouts/Base.astro';
 import { EXAMPLES } from '../lib/examples.ts';
-import { fmtDay } from '../lib/format.ts';
+import { dur, fmtDay, pct, plural } from '../lib/format.ts';
 import { installUrl, isOauthConfigured, loginHref } from '../lib/oauth.ts';
 import { previewTiles } from '../lib/preview.ts';
+import { timelineFigure } from '../lib/timeline.ts';
 
 const user = Astro.locals.user;
 const install = installUrl(env);
 const firstExample = EXAMPLES[0];
 const exampleHref = firstExample ? `/${firstExample.owner}/${firstExample.name}` : '#examples';
-const primaryHref = user ? '/me' : isOauthConfigured(env) ? loginHref('/me') : exampleHref;
+const signInReady = isOauthConfigured(env);
+const primaryHref = user ? '/repositories' : signInReady ? loginHref('/repositories') : exampleHref;
 const primaryLabel = user ? 'Your repositories' : 'Sign in with GitHub';
+/** The timeline is drawn from the first example's last-30-days medians. */
+const figure = firstExample ? timelineFigure(firstExample.preview) : null;
+/** "What you see", each line backed by a real figure from the first example's last 30 days. */
+const pulse = firstExample
+  ? (() => {
+      const h = firstExample.preview;
+      return [
+        {
+          label: 'Contributors and areas',
+          title: 'Who is contributing, and where',
+          text: 'Who opens pull requests and who reviews them, which top-level areas of the codebase are moving, and which areas rest on a single person.',
+          v: h.opened.toLocaleString('en-US'),
+          d: `pull requests opened by ${plural(h.authors, 'author')}`,
+        },
+        {
+          label: 'Review flow',
+          title: 'How long work waits',
+          text: 'Time to a first review and time to merge, as medians and p90s, week by week, so a slow week shows up as a slow week.',
+          v: dur(h.medFirst),
+          d: `median wait for a first review · ${pct(h.reviewedShare)} of pull requests reviewed`,
+        },
+        {
+          label: 'Review load',
+          title: 'Who carries the reviews',
+          text: 'How reviews spread across people, each reviewer’s turnaround, and the reviewer–author pairs that hold most of the knowledge.',
+          v: h.reviews.toLocaleString('en-US'),
+          d: `reviews given by ${plural(h.reviewers, 'reviewer')}`,
+        },
+        {
+          label: 'Bottlenecks',
+          title: 'Where work gets stuck',
+          text: 'Ready pull requests with no review for days, approved work that never merged, old drafts, and anything else that stands out, flagged as worth a look.',
+          v: h.stillOpen.toLocaleString('en-US'),
+          d: `pull requests still open · p90 time to merge ${dur(h.p90Merge)}`,
+        },
+      ];
+    })()
+  : [];
+/**
+ * The AI angle: bilan uses no AI; it measures what AI-assisted coding does to
+ * a repository's numbers over time. Each line names what the dashboard
+ * already shows for it; two carry a real figure from the first example.
+ */
+const aiSignals = (() => {
+  const h = firstExample?.preview;
+  return [
+    {
+      label: 'Volume and size',
+      text: 'Pull requests opened per week and the size distribution: whether more, larger changes are arriving, and whether the long tail grows.',
+      figure: h ? { v: h.opened.toLocaleString('en-US'), d: `opened in 30 days by ${plural(h.authors, 'author')}` } : null,
+    },
+    {
+      label: 'Review pressure',
+      text: 'Reviews per reviewer, the share the top three carry, and the wait for a first review: whether the humans reviewing keep up.',
+      figure: h ? { v: pct(h.reviewedShare), d: `of pull requests ever reviewed · first review in ${dur(h.medFirst)}` } : null,
+    },
+    {
+      label: 'Merged unseen',
+      text: 'Merges without a review from anyone else, and revert pull requests, week by week: what gets through without a second pair of eyes.',
+      figure: null,
+    },
+    {
+      label: 'Automation share',
+      text: 'Bot-authored pull requests as a share of the whole, with their own merge rate and lead time, kept apart from the people.',
+      figure: null,
+    },
+  ];
+})();
+const DESCRIPTION =
+  'The pulse of a GitHub repository: who is contributing, which areas are moving, how reviews flow, where work gets stuck, and how AI-assisted coding is changing all of it over time.';
+const REPO_URL = 'https://github.com/charpeni/bilan';
+const COMMAND = 'pnpm dlx github-bilan owner/name --open';
+
+const FLAGS: [string, string][] = [
+  ['--open', 'Open the report in the browser when it is written.'],
+  ['--out FILE', 'Where to write the report. Default: <name>.report.html.'],
+  ['--since DATE', 'Reach back to DATE. Coverage only ever widens.'],
+  ['--full', 'Walk the entire history.'],
+  ['--max-prs N', 'Stop after N pull requests in this run.'],
+  ['--offline', 'Render from the local cache without calling GitHub.'],
+  ['--no-cache', 'Ignore the cache and fetch everything again.'],
+  ['--token T', 'Use this token instead of the environment.'],
+  ['--areas FILE', 'Override how file paths map to areas.'],
+];
+
+const ANCHORS: { metric: string; anchor: string; ready?: boolean; measures: string }[] = [
+  { metric: 'PRs opened', anchor: 'created', measures: 'Counted when the PR is opened.' },
+  { metric: 'Merged, closed unmerged', anchor: 'merged / closed', measures: 'Counted when it lands or is closed.' },
+  { metric: 'Time in draft', anchor: 'created', measures: 'Opened → marked ready, for PRs opened as drafts.' },
+  {
+    metric: 'Time to first review',
+    anchor: 'ready',
+    ready: true,
+    measures: 'Ready → first review by someone other than the author.',
+  },
+  { metric: 'Time to merge', anchor: 'merged', measures: 'Ready → merged.' },
+  {
+    metric: 'Reviewer turnaround',
+    anchor: 'review',
+    measures: 'Review request (or ready, if never requested) → that reviewer’s first review.',
+  },
+  { metric: 'Reviews given', anchor: 'review', measures: 'Counted when submitted; self-reviews excluded.' },
+];
 ---
 
-<Base title="bilan" user={user} next="/me">
-  <main class="container">
-    <section class="lp-hero">
-      <h1>Pull-request analytics that start the clock at ready for review.</h1>
-      <p class="lp-sub">
-        Throughput, cycle time, and review load for any GitHub repository you can read. Time spent
-        in draft is never charged to the reviewers.
-      </p>
-      <div class="actions">
-        <a class="btn btn-primary" href={primaryHref}>{primaryLabel}</a>
-        <a class="btn" href="#examples">See the examples</a>
+<Base title="bilan · the pulse of a GitHub repository" user={user} next="/repositories" description={DESCRIPTION}>
+  <main>
+    <section class="lp-hero container" aria-labelledby="hero-title">
+      <div class="lp-hero-in">
+        <p class="gloss">
+          <span class="gloss-word"><BrandMark size={14} />bilan</span>
+          <span class="gloss-pos">noun, French</span>
+          <span>a balance sheet; an honest account of where things stand.</span>
+        </p>
+        <h1 id="hero-title">The pulse of a GitHub repository.</h1>
+        <p class="lp-lede">
+          See what is actually moving in a repository: who is contributing, which areas are
+          changing, how reviews flow, and where work gets stuck. And as AI-assisted coding changes
+          how much gets opened, how big it is, and how much of it is really reviewed, this is where
+          you watch that shift over time.
+        </p>
+        <div class="actions">
+          <a class="btn btn-primary" href={primaryHref}>
+            {
+              !user && signInReady && (
+                <svg class="icon" viewBox="0 0 16 16" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"
+                  />
+                </svg>
+              )
+            }
+            {primaryLabel}
+          </a>
+          <a class="btn" href={exampleHref}>See an example</a>
+        </div>
+        <p class="lp-fine">Read-only on your own GitHub token. Open source. No sign-in needed for the examples.</p>
+        <nav class="contents" aria-label="On this page">
+          <p class="label">Contents</p>
+          <ol>
+            <li><a href="#see"><span class="n">01</span>What you see</a></li>
+            <li><a href="#examples"><span class="n">02</span>Two repositories, measured</a></li>
+            <li><a href="#measure"><span class="n">03</span>How we measure</a></li>
+            <li><a href="#how"><span class="n">04</span>How it works</a></li>
+            <li><a href="#cli"><span class="n">05</span>Or run it on your machine</a></li>
+          </ol>
+        </nav>
       </div>
     </section>
 
-    <section class="examples" id="examples" aria-label="Example dashboards">
-      <p class="examples-meta">
-        Two built-in examples, full history, no sign-in needed. Snapshots, not live data.
-      </p>
-      <div class="example-grid">
+    <section class="lp-section container" id="see" aria-labelledby="see-title">
+      <header class="lp-head">
+        <p class="lp-num" aria-hidden="true">01</p>
+        <h2 id="see-title">What you see</h2>
+        <p class="lp-intro">
+          More, and more useful, numbers than GitHub shows about a repository’s activity, for any
+          window of time.
+          {firstExample && <> The figures below are {firstExample.repo}’s last 30 days.</>}
+        </p>
+      </header>
+      <div class="lp-body">
+        <ul class="pulse">
+          {
+            pulse.map((item) => (
+              <li>
+                <div>
+                  <span class="n">{item.label}</span>
+                  <h3>{item.title}</h3>
+                  <p>{item.text}</p>
+                </div>
+                <p class="pulse-figure">
+                  <span class="figure-v">{item.v}</span>
+                  <span class="figure-d">{item.d}</span>
+                </p>
+              </li>
+            ))
+          }
+        </ul>
+        <div class="lp-ai" id="ai" aria-labelledby="ai-title">
+          <h3 id="ai-title">Understand what AI is doing to your codebase and team</h3>
+          <p class="lp-ai-lede">
+            bilan uses no AI. It measures what AI-assisted coding does to a repository: how much
+            gets opened, how big it is, how fast it merges, how much of it carries a real review,
+            and where the review load lands on the people. Compare any window with the one before
+            it and the shift is there in the numbers.
+          </p>
+          <ul class="ai-list">
+            {
+              aiSignals.map((item) => (
+                <li>
+                  <span class="n">{item.label}</span>
+                  <p>{item.text}</p>
+                  {item.figure && (
+                    <p class="ai-figure">
+                      <span class="figure-v">{item.figure.v}</span>
+                      <span class="figure-d">{item.figure.d}</span>
+                    </p>
+                  )}
+                </li>
+              ))
+            }
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="lp-section container" id="examples" aria-labelledby="examples-title">
+      <header class="lp-head">
+        <p class="lp-num" aria-hidden="true">02</p>
+        <h2 id="examples-title">Two repositories, measured</h2>
+        <p class="lp-intro">
+          Full-history snapshots shipped with bilan, open to anyone. They are not live: sign in to
+          sync a repository of your own.
+        </p>
+      </header>
+      <div class="lp-body ex-grid">
         {
           EXAMPLES.map((example) => (
-            <article class="example-card">
-              <div class="example-head">
-                <a class="example-name" href={`/${example.owner}/${example.name}`}>
-                  {example.repo}
-                </a>
-                <span class="example-when">
-                  snapshot of {fmtDay(example.snapshotAt)} · {example.prs.toLocaleString()} PRs
-                </span>
-              </div>
-              <p class="example-blurb">{example.blurb}</p>
-              <p class="example-window">Last 30 days of the snapshot</p>
-              <div class="tiles">
+            <article class="ex-card">
+              <h3>
+                <a href={`/${example.owner}/${example.name}`}>{example.repo}</a>
+              </h3>
+              <p class="ex-meta">
+                Snapshot of <time datetime={example.snapshotAt}>{fmtDay(example.snapshotAt)}</time> ·{' '}
+                {example.prs.toLocaleString('en-US')} pull requests · full history
+              </p>
+              <p class="ex-blurb">{example.blurb}</p>
+              <p class="label ex-window">Last 30 days of the snapshot</p>
+              <dl class="ex-figures">
                 {previewTiles(example.preview).map((t) => (
-                  <div class="tile">
-                    <div class="k">{t.k}</div>
-                    <div class="v">{t.v}</div>
-                    <div class="d">{t.d}</div>
+                  <div>
+                    <dt>{t.k}</dt>
+                    <dd>
+                      <span class="figure-v">{t.v}</span>
+                      <span class="figure-d">{t.d}</span>
+                    </dd>
                   </div>
                 ))}
-              </div>
+              </dl>
               <a class="btn" href={`/${example.owner}/${example.name}`}>
-                Open dashboard
+                Open the dashboard
+                <span class="arrow" aria-hidden="true">
+                  →
+                </span>
               </a>
             </article>
           ))
@@ -65,68 +268,357 @@ const primaryLabel = user ? 'Your repositories' : 'Sign in with GitHub';
       </div>
     </section>
 
-    <section class="features">
-      <div class="feature">
-        <svg class="icon" viewBox="0 0 16 16" aria-hidden="true">
-          <path
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-linecap="round"
-            d="M8 4v4l2.5 2.5M14 8A6 6 0 1 1 2 8a6 6 0 0 1 12 0Z"
-          />
-        </svg>
-        <h3>Anchored at ready for review</h3>
-        <p>
-          Every latency runs from the moment a PR left draft, so a week of quiet work never reads as
-          a week of slow review.
+    <section class="lp-section container" id="measure" aria-labelledby="measure-title">
+      <header class="lp-head">
+        <p class="lp-num" aria-hidden="true">03</p>
+        <h2 id="measure-title">How we measure</h2>
+        <p class="lp-intro">
+          A number is only useful if the people it describes agree with how it was counted. bilan
+          makes three choices, and shows its working for each.
         </p>
-      </div>
-      <div class="feature">
-        <svg class="icon" viewBox="0 0 16 16" aria-hidden="true">
-          <path
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            d="M9.5 2.5 6.5 13.5M3.5 5.5 1 8l2.5 2.5M12.5 5.5 15 8l-2.5 2.5"
-          />
-        </svg>
-        <h3>Your token, one shared cache</h3>
-        <p>
-          Sync runs on your own GitHub token. The result is cached once and refreshed in the
-          background, so coworkers open it instantly.
-        </p>
-      </div>
-      <div class="feature">
-        <svg class="icon" viewBox="0 0 16 16" aria-hidden="true">
-          <path
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            d="M6.5 9.5a3 3 0 0 0 4.24 0l2-2a3 3 0 0 0-4.24-4.24l-1 1M9.5 6.5a3 3 0 0 0-4.24 0l-2 2a3 3 0 0 0 4.24 4.24l1-1"
-          />
-        </svg>
-        <h3>Links you can share</h3>
-        <p>
-          Every dashboard has a plain URL. Anyone who can see the repository on GitHub can open it;
-          nobody else can.
-        </p>
+      </header>
+      <div class="lp-body">
+        <ol class="principles">
+          <li>
+            <span class="n">i.</span>
+            <h3>Review time starts at ready for review</h3>
+            <p>
+              A draft is work in progress, not a request for review. Time to first review and time
+              to merge are measured from the moment a pull request is marked ready; time in draft
+              is reported on its own line.
+            </p>
+          </li>
+          <li>
+            <span class="n">ii.</span>
+            <h3>Every window is honest</h3>
+            <p>
+              “Last 30 days” means what happened in those 30 days: merges when they merged, reviews
+              when they were given. A comparison with the previous period appears only once that
+              period is synced.
+            </p>
+          </li>
+          <li>
+            <span class="n">iii.</span>
+            <h3>Process, not people</h3>
+            <p>
+              Per-person numbers are there to show where review load pools, which pairs hold the
+              knowledge, and which areas rest on one person, so a team can change how work flows.
+              It is not a leaderboard, and there is no score.
+            </p>
+          </li>
+        </ol>
+
+        {
+          figure && firstExample && (
+            <figure class="figure" aria-labelledby="tl-title">
+              <p class="figure-title" id="tl-title">
+                Where review time starts
+              </p>
+              <p class="figure-sub">
+                The median pull request in {firstExample.repo} over the last 30 days of its snapshot.
+              </p>
+              <div class="tl" id="timeline">
+                <div class="tl-lane">
+                  <span class="tl-bar draft" style={`--x:0%;--w:${figure.ready}%`} />
+                  <span class="tl-label" style="--x:0%;--dx:0px">
+                    In draft<span class="figure-v">{dur(figure.draftMs)}</span>, not counted as review time
+                  </span>
+                </div>
+                <div class="tl-lane">
+                  <span class="tl-bar first" style={`--x:${figure.ready}%;--w:${figure.first}%`} />
+                  <span class="tl-label" style={`--x:${figure.ready}%;--dx:10px`}>
+                    <b>Time to first review</b>
+                    <span class="figure-v">{dur(figure.firstMs)}</span>
+                  </span>
+                </div>
+                <div class="tl-lane">
+                  <span class="tl-bar merge" style={`--x:${figure.ready}%;--w:${figure.merge}%`} />
+                  <span class="tl-label" style={`--x:${figure.ready}%;--dx:10px`}>
+                    <b>Time to merge</b>
+                    <span class="figure-v">{dur(figure.mergeMs)}</span>
+                  </span>
+                </div>
+                <div class="tl-anchor" style={`--x:${figure.ready}%`}>
+                  <span>
+                    <b>Ready for review.</b> <i>Measurement starts here.</i>
+                  </span>
+                </div>
+                <div class="tl-axis" aria-hidden="true">
+                  <span class="tl-tick start" style="--x:0%">opened</span>
+                  {figure.ticks.map((t) => (
+                    <span class="tl-tick" style={`--x:${t.at}%`}>
+                      {t.label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <figcaption>
+                Medians from the {firstExample.repo} example (snapshot of{' '}
+                {fmtDay(firstExample.snapshotAt)}). Each is taken over its own set of pull
+                requests, so this is a composite, not one pull request. The axis counts hours from
+                ready for review.
+              </figcaption>
+            </figure>
+          )
+        }
+
+        <figure class="figure" aria-labelledby="anchors-title">
+          <p class="figure-title" id="anchors-title">Each metric is counted by its own event</p>
+          <p class="figure-sub">
+            A date range scopes every line by its anchor, so a pull request opened in August and
+            merged in September counts as opened in August and merged in September.
+          </p>
+          <table class="ledger">
+            <thead>
+              <tr>
+                <th scope="col">Metric</th>
+                <th scope="col">Anchored at</th>
+                <th scope="col">How it is measured</th>
+              </tr>
+            </thead>
+            <tbody>
+              {
+                ANCHORS.map((a) => (
+                  <tr>
+                    <th scope="row">{a.metric}</th>
+                    <td>
+                      <span class:list={['anchor-tag', { ready: a.ready }]}>{a.anchor}</span>
+                    </td>
+                    <td>{a.measures}</td>
+                  </tr>
+                ))
+              }
+            </tbody>
+          </table>
+        </figure>
       </div>
     </section>
 
-    <footer class="footer">
-      <span>
-        Private repositories need bilan installed on your organization{install && (
-          <>
-            {' '}(<a href={install}>install it on GitHub</a>)
-          </>
-        )}. The examples are snapshots shipped with the app; sign in to sync any repository live.
-      </span>
-      <a href="https://github.com/charpeni/bilan">bilan on GitHub</a>
-    </footer>
+    <section class="lp-section container" id="how" aria-labelledby="how-title">
+      <header class="lp-head">
+        <p class="lp-num" aria-hidden="true">04</p>
+        <h2 id="how-title">How it works</h2>
+      </header>
+      <div class="lp-body">
+        <ol class="steps">
+          <li>
+            <span class="n">Step 1</span>
+            <h3>Sign in with GitHub</h3>
+            <p>
+              bilan is a GitHub App with two read-only permissions, pull requests and metadata.
+              There is no scope to grant and nothing it could write with.
+            </p>
+          </li>
+          <li>
+            <span class="n">Step 2</span>
+            <h3>Open a repository</h3>
+            <p>
+              The first visit syncs the last 30 days and every open pull request on your own token,
+              usually in under a minute. Longer ranges sync when you ask for them.
+            </p>
+          </li>
+          <li>
+            <span class="n">Step 3</span>
+            <h3>Share the link</h3>
+            <p>
+              The result is cached once. Anyone who can already see the repository on GitHub opens
+              the same dashboard; anyone else gets a page that reveals nothing.
+            </p>
+          </li>
+          <li>
+            <span class="n">Step 4</span>
+            <h3>Add private repositories</h3>
+            <p>
+              An organization owner installs the app once{' '}
+              {install ? <a href={install}>from GitHub</a> : 'from GitHub'}; anyone else can request
+              it. Access is checked against each viewer’s own token.
+            </p>
+          </li>
+        </ol>
+        <div class="rw">
+          <div class="yes">
+            <h3>What bilan reads</h3>
+            <ul>
+              <li>
+                <svg class="icon" viewBox="0 0 16 16" aria-hidden="true">
+                  <path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="m3.5 8.5 3 3 6-7" />
+                </svg>
+                <span><b>Pull requests:</b> titles, states, labels, sizes, and timestamps.</span>
+              </li>
+              <li>
+                <svg class="icon" viewBox="0 0 16 16" aria-hidden="true">
+                  <path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="m3.5 8.5 3 3 6-7" />
+                </svg>
+                <span><b>Reviews:</b> who reviewed, the verdict, when, and who was asked.</span>
+              </li>
+              <li>
+                <svg class="icon" viewBox="0 0 16 16" aria-hidden="true">
+                  <path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="m3.5 8.5 3 3 6-7" />
+                </svg>
+                <span><b>File paths:</b> up to 30 per pull request, to tell which area it touched.</span>
+              </li>
+            </ul>
+          </div>
+          <div class="no">
+            <h3>What it never does</h3>
+            <ul>
+              <li>
+                <svg class="icon" viewBox="0 0 16 16" aria-hidden="true">
+                  <path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="m4.5 4.5 7 7m0-7-7 7" />
+                </svg>
+                <span><b>Write to GitHub.</b> No comments, statuses, labels, or commits.</span>
+              </li>
+              <li>
+                <svg class="icon" viewBox="0 0 16 16" aria-hidden="true">
+                  <path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="m4.5 4.5 7 7m0-7-7 7" />
+                </svg>
+                <span><b>Read your code.</b> No file contents, no diffs.</span>
+              </li>
+              <li>
+                <svg class="icon" viewBox="0 0 16 16" aria-hidden="true">
+                  <path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="m4.5 4.5 7 7m0-7-7 7" />
+                </svg>
+                <span>
+                  <b>Hold a token forever.</b> User tokens expire after 8 hours and are stored
+                  encrypted.
+                </span>
+              </li>
+              <li>
+                <svg class="icon" viewBox="0 0 16 16" aria-hidden="true">
+                  <path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="m4.5 4.5 7 7m0-7-7 7" />
+                </svg>
+                <span>
+                  <b>Keep what nobody uses.</b> Private repositories nobody opens for 90 days are
+                  deleted.
+                </span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="lp-section container" id="cli" aria-labelledby="cli-title">
+      <header class="lp-head">
+        <p class="lp-num" aria-hidden="true">05</p>
+        <h2 id="cli-title">Or run it on your machine</h2>
+      </header>
+      <div class="lp-body cli">
+        <div class="cmd">
+          <pre><span class="prompt" aria-hidden="true">$ </span><code id="cli-command">{COMMAND}</code></pre>
+          <button class="copy" type="button" id="copy-command" data-copy={COMMAND}>
+            <svg class="icon" viewBox="0 0 16 16" aria-hidden="true">
+              <path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" d="M5.5 5.5h7v7h-7zM10.5 5.5v-2h-7v7h2" />
+            </svg>
+            <span class="copy-label">Copy</span>
+          </button>
+          <span class="sr-only" id="copy-status" role="status" aria-live="polite"></span>
+        </div>
+        <div class="cli-lede">
+          <p>
+            The CLI syncs a repository into a local cache and writes <b>one self-contained HTML
+            report</b>: styles, script, and data in a single file you can open offline, attach to an
+            issue, or archive.
+          </p>
+          <p>
+            It talks to the GitHub API and nothing else. <b>Nothing leaves your machine</b>: the
+            cache lives in <code>~/.cache/bilan</code>, and re-runs only fetch what changed.
+          </p>
+          <p>
+            The token comes from <code>--token</code>, then <code>GITHUB_TOKEN</code>,{' '}
+            <code>GH_TOKEN</code>, or <code>gh auth token</code>. The default depth is the last 30
+            days plus every open pull request.
+          </p>
+        </div>
+        <table class="flags">
+          <thead>
+            <tr>
+              <th scope="col">Flag</th>
+              <th scope="col">What it does</th>
+            </tr>
+          </thead>
+          <tbody>
+            {
+              FLAGS.map(([flag, what]) => (
+                <tr>
+                  <th scope="row">{flag}</th>
+                  <td>{what}</td>
+                </tr>
+              ))
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
   </main>
+
+  <footer class="footer container">
+    <div class="footer-in">
+      <div>
+        <a class="wordmark" href="/" aria-label="bilan, home">
+          <BrandMark size={17} />
+          bilan
+        </a>
+        <p>The pulse of a GitHub repository. For teams to see their own process, not to rank people.</p>
+      </div>
+      <ul>
+        <li><a href={REPO_URL}>Source on GitHub</a></li>
+        {install && <li><a href={install}>Install the GitHub App</a></li>}
+        <li><a href="#examples">Examples</a></li>
+        <li><a href="#cli">CLI</a></li>
+      </ul>
+      <p class="footer-made">
+        Made by <a href="https://github.com/charpeni">Nicolas Charpentier</a>. MIT licensed.
+      </p>
+    </div>
+  </footer>
+
+  <script>
+    // Copy the CLI command; the button says so, and a live region tells screen readers.
+    const copy = document.getElementById('copy-command') as HTMLButtonElement | null;
+    const status = document.getElementById('copy-status');
+    const label = copy?.querySelector('.copy-label');
+    let reset: ReturnType<typeof setTimeout> | undefined;
+    copy?.addEventListener('click', () => {
+      const text = copy.dataset.copy ?? '';
+      navigator.clipboard.writeText(text).then(
+        () => {
+          if (label) label.textContent = 'Copied';
+          if (status) status.textContent = 'Command copied to the clipboard.';
+        },
+        () => {
+          if (label) label.textContent = 'Select and copy';
+          const code = document.getElementById('cli-command');
+          if (code) getSelection()?.selectAllChildren(code);
+        },
+      );
+      clearTimeout(reset);
+      reset = setTimeout(() => {
+        if (label) label.textContent = 'Copy';
+        if (status) status.textContent = '';
+      }, 2000);
+    });
+
+    // Draw the timeline once, the first time it scrolls into view. Without
+    // IntersectionObserver, or with reduced motion, it is simply there.
+    const timeline = document.getElementById('timeline');
+    const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (timeline && !still && 'IntersectionObserver' in window) {
+      const box = timeline.getBoundingClientRect();
+      if (box.top > innerHeight) {
+        timeline.dataset.armed = '';
+        const io = new IntersectionObserver(
+          (entries) => {
+            if (!entries.some((e) => e.isIntersecting)) return;
+            io.disconnect();
+            requestAnimationFrame(() => {
+              timeline.dataset.shown = '';
+            });
+          },
+          { rootMargin: '0px 0px -20% 0px' },
+        );
+        io.observe(timeline);
+      }
+    }
+  </script>
 </Base>

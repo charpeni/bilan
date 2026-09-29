@@ -3,6 +3,7 @@ import { GithubError, RepoNotFoundError } from '@bilan/core';
 import { getRepoByName, touchRepoView } from '@bilan/store-d1';
 import { env } from 'cloudflare:workers';
 
+import BrandMark from '../../components/BrandMark.astro';
 import RepoNotFound from '../../components/RepoNotFound.astro';
 import Base from '../../layouts/Base.astro';
 import { accessDeps, checkRepoAccess } from '../../lib/access.ts';
@@ -124,7 +125,8 @@ const canSync = user !== null && !example;
  * is over an hour old, or when the last run was `partial` (cut by the page
  * budget) so the rest gets reconciled without waiting for the payload to age.
  */
-const autoRefresh = canSync && view === 'ready' && repo !== undefined && needsRefresh(repo);
+const autoRefresh =
+  canSync && view === 'ready' && !syncActive && repo !== undefined && needsRefresh(repo);
 const oauthReady = isOauthConfigured(env);
 /** The chip's tooltip: the absolute instant and exactly what the payload holds. */
 const chipTitle =
@@ -204,19 +206,20 @@ const chipTitle =
   </Fragment>
   {
     view === 'ready' && (
-      <>
+      <main class="dash">
+        <div class="dash-top">
         {example && (
           <div class="banner">
             <p>
-              <b>Built-in example.</b> A snapshot of {example.repo} from {fmtDay(example.snapshotAt)},
+              <span class="label">Built-in example</span>A snapshot of {example.repo} from {fmtDay(example.snapshotAt)},
               shipped with bilan; it is not live data.
             </p>
             {user ? (
-              <a class="btn btn-sm" href="/me">
+              <a class="btn btn-sm" href="/repositories">
                 Open your own repository
               </a>
             ) : oauthReady ? (
-              <a class="btn btn-sm btn-primary" href={loginHrefFor('/me')}>
+              <a class="btn btn-sm btn-primary" href={loginHrefFor('/repositories')}>
                 Sign in to open your own
               </a>
             ) : null}
@@ -226,22 +229,33 @@ const chipTitle =
           <span id="status-text" />
           <button class="btn btn-sm" type="button" id="status-action" hidden />
         </div>
+        </div>
         <div
           id="bilan"
           data-auto-refresh={autoRefresh ? '1' : '0'}
+          data-sync-active={syncActive ? '1' : '0'}
+          data-own-job-id={ownJobId ?? ''}
           data-login-href={loginHref}
           data-stale={stale ? '1' : '0'}
         />
         <script>
           import { LoadMoreError, loadingText, mount } from '@bilan/ui';
 
+          import { fmtCount, liveCount, splitAtCount } from '../../lib/count-up.ts';
           import { fmtAgo, fmtHistory, fmtInstant } from '../../lib/format.ts';
           import { SYNCED_AT_HEADER, watchAfterSyncResponse } from '../../lib/poll.ts';
-          import { progressText } from '../../lib/progress.ts';
           import { isStale } from '../../lib/stale.ts';
+          import {
+            describeSync,
+            finalReadyText,
+            interimText,
+            observe,
+            syncLine,
+          } from '../../lib/sync-status.ts';
           import { watchSync } from '../../lib/sync-watch.ts';
 
           import type { SyncWatch } from '../../lib/poll.ts';
+          import type { Liveness, SyncView } from '../../lib/sync-status.ts';
           import type { Payload } from '@bilan/core';
           import type { Mounted, Range, Theme } from '@bilan/ui';
 
@@ -266,6 +280,10 @@ const chipTitle =
           };
 
           let mounted: Mounted | undefined;
+          /** The payload on screen, so a status line can say what it covers. */
+          let shown: Payload | null = null;
+          /** Set while this page follows a first sync that published an interim payload. */
+          let firstSync = false;
           /** One sync at a time from this page: a load, a refresh, or the background refresh. */
           let busy = false;
 
@@ -339,6 +357,7 @@ const chipTitle =
               ...(range === undefined ? {} : { initialRange: range }),
               onLoadMore: (next) => loadMore(next),
             });
+            shown = payload;
             updateChip(payload);
           }
 
@@ -359,18 +378,41 @@ const chipTitle =
             return new LoadMoreError(body.message ?? `The sync could not start (${code}).`);
           }
 
+          /**
+           * The load-more note beside the range buttons, its figure counting up
+           * between probes rather than jumping (the whole note is tabular-figured).
+           */
+          const noteParts = { prefix: '', before: '', after: '' };
+          const noteCount = liveCount((v) => {
+            mounted?.status(`${noteParts.prefix} ${noteParts.before}${fmtCount(v)}${noteParts.after}`);
+          });
+          const progressNote = (prefix: string, view: SyncView): void => {
+            const text = syncLine(view);
+            const split = view.count === null ? null : splitAtCount(text, fmtCount(view.count));
+            if (split === null || view.count === null) {
+              mounted?.status(`${prefix} ${text}`);
+              return;
+            }
+            Object.assign(noteParts, { prefix, ...split });
+            noteCount.set(view.count);
+          };
+
           /** Start a sync (or ride along with a running one) and wait until it publishes. */
-          async function syncAndWait(depth: '30d' | '90d' | '180d' | 'all', onProgress: (text: string) => void): Promise<Payload> {
+          async function syncAndWait(depth: '30d' | '90d' | '180d' | 'all', onProgress: (view: SyncView) => void): Promise<Payload> {
             const baseline = currentSyncedAt;
             const response = await postSync(depth);
             const body = (await response.json().catch(() => ({}))) as { jobId?: string; message?: string };
             // 409: a sync is already running; ride along with it through the payload.
             const watch: SyncWatch | null = watchAfterSyncResponse(response.status, body, baseline);
             if (watch === null) throw refusal(response.status, body);
+            let liveness: Liveness | null = null;
             await watchSync(watch, baseline, {
               apiBase: base,
               fetch: (input, init) => fetch(input, init),
-              onProgress: (progress) => onProgress(progressText(progress)),
+              onProgress: (progress) => {
+                liveness = observe(liveness, progress.prsStored, Date.now());
+                onProgress(describeSync(progress, liveness));
+              },
             });
             const payload = await fetchPayload();
             if (!payload) throw new LoadMoreError('The new data is not ready yet. Reload in a moment.');
@@ -379,12 +421,16 @@ const chipTitle =
 
           /** Ask for a deeper sync; the dashboard shows the busy state and any error beside the range buttons. */
           async function loadMore(range: Range): Promise<void> {
-            if (busy) throw new LoadMoreError('A refresh is still running. Try again in a moment.');
+            if (busy) {
+              throw new LoadMoreError(
+                firstSync
+                  ? 'The first sync is still running. Longer ranges can be synced once it finishes.'
+                  : 'A refresh is still running. Try again in a moment.',
+              );
+            }
             busy = true;
             try {
-              const payload = await syncAndWait(DEPTH[range], (text) =>
-                mounted?.status(`${loadingText(range)} ${text}`),
-              );
+              const payload = await syncAndWait(DEPTH[range], (view) => progressNote(loadingText(range), view));
               hideNotice();
               render(payload, range);
             } finally {
@@ -402,7 +448,7 @@ const chipTitle =
             setChipState('· refreshing…');
             show('Refreshing the last 30 days…');
             try {
-              const payload = await syncAndWait('30d', (text) => show(`Refreshing the last 30 days… ${text}`));
+              const payload = await syncAndWait('30d', (view) => show(`Refreshing the last 30 days… ${syncLine(view)}`));
               chip?.removeAttribute('data-busy');
               render(payload);
               show('Up to date.');
@@ -456,6 +502,63 @@ const chipTitle =
             }
           }
 
+          /** How much history the payload on screen holds: `last 7 days`, `full history`. */
+          const shownHistory = (): string =>
+            fmtHistory(shown?.coverageSince ?? null, shown?.syncedAt ?? null);
+
+          /**
+           * A staged first sync published an interim payload (the last 7 days)
+           * and keeps reading: say what is on screen and how the rest is
+           * going, then offer the final payload when it lands rather than
+           * swapping the numbers under the reader.
+           */
+          async function followFirstSync(): Promise<void> {
+            busy = true;
+            firstSync = true;
+            if (resync) resync.disabled = true;
+            chip?.setAttribute('data-busy', '');
+            setChipState('· still syncing');
+            const baseline = currentSyncedAt;
+            const ownJobId = root.dataset.ownJobId || null;
+            const watch: SyncWatch = ownJobId
+              ? { kind: 'job', jobId: ownJobId }
+              : { kind: 'payload', baseline };
+            let liveness: Liveness | null = null;
+            show(interimText(shownHistory(), null, null));
+            try {
+              await watchSync(watch, baseline, {
+                apiBase: base,
+                fetch: (input, init) => fetch(input, init),
+                onProgress: (progress) => {
+                  liveness = observe(liveness, progress.prsStored, Date.now());
+                  show(interimText(shownHistory(), describeSync(progress, liveness), progress.stageLabel));
+                },
+              });
+              const payload = await fetchPayload();
+              if (!payload) throw new Error('The new data is not ready yet. Reload in a moment.');
+              chip?.removeAttribute('data-busy');
+              setChipState('· newer data ready');
+              show(finalReadyText(fmtHistory(payload.coverageSince, payload.syncedAt)), undefined, {
+                label: 'Update the dashboard',
+                run: () => {
+                  render(payload);
+                  hideNotice();
+                },
+              });
+            } catch (error) {
+              chip?.removeAttribute('data-busy');
+              setChipState('');
+              show(error instanceof Error ? error.message : String(error), 'error', {
+                label: 'Reload',
+                run: () => location.reload(),
+              });
+            } finally {
+              busy = false;
+              firstSync = false;
+              if (resync) resync.disabled = false;
+            }
+          }
+
           async function load(): Promise<void> {
             try {
               const payload = await fetchPayload();
@@ -466,7 +569,8 @@ const chipTitle =
               }
               hideNotice();
               render(payload);
-              if (root.dataset.autoRefresh === '1') void backgroundRefresh();
+              if (root.dataset.syncActive === '1') void followFirstSync();
+              else if (root.dataset.autoRefresh === '1') void backgroundRefresh();
             } catch (error) {
               show(error instanceof Error ? error.message : String(error), 'error', {
                 label: 'Try again',
@@ -478,32 +582,54 @@ const chipTitle =
           resync?.addEventListener('click', () => void refresh());
           void load();
         </script>
-      </>
+      </main>
     )
   }
   {
     view === 'syncing' && (
       <main class="state">
         <div class="state-card">
-          <p class="eyebrow">First sync</p>
+          <p class="eyebrow">
+            <BrandMark size={14} />
+            First sync
+          </p>
           <h1>{label}</h1>
           <p id="message">
-            {syncError ?? 'bilan is reading the last 30 days of pull requests, plus every open one, on your GitHub token.'}
+            {syncError ?? 'bilan is reading the last 30 days of activity, plus every open pull request, on your GitHub token.'}
           </p>
           <div class="progress" id="progress" hidden={syncError !== null} aria-hidden="true" />
           <p class="progress-text" id="detail" role="status" aria-live="polite">
             {syncError === null ? 'Starting…' : ''}
           </p>
+          <p class="progress-sub" id="detail-2" />
+          <p class="progress-warn" id="stall" hidden>
+            <svg class="icon" viewBox="0 0 16 16" aria-hidden="true">
+              <path class="flag-tri" d="M8 1.5 15 14H1z" />
+              <path class="flag-mark" d="M8 6v4M8 11.6v.4" />
+            </svg>
+            <span id="stall-text" />
+          </p>
           <p class="muted small" id="expect" hidden={syncError !== null}>
             This usually takes under a minute; very busy repositories take a few. You can leave
             this page: the sync keeps running, and the dashboard will be here (and in{' '}
-            <a href="/me">your repositories</a>) when it is done.
+            <a href="/repositories">your repositories</a>) when it is done.
           </p>
           <div class="actions" id="retry" hidden={syncError === null}>
-            <a class="btn btn-primary" href={Astro.url.pathname}>
-              Try again
-            </a>
-            <a class="btn" href="/me">
+            {canSync ? (
+              <>
+                <button class="btn btn-primary" type="button" id="restart">
+                  Start again
+                </button>
+                <a class="btn btn-primary" id="sign-in-again" href={loginHref} hidden>
+                  Sign in again
+                </a>
+              </>
+            ) : (
+              <a class="btn btn-primary" href={Astro.url.pathname}>
+                Try again
+              </a>
+            )}
+            <a class="btn" href="/repositories">
               Your repositories
             </a>
           </div>
@@ -516,29 +642,91 @@ const chipTitle =
           />
         </div>
         <script>
+          import { fmtCount, liveCount, splitAtCount } from '../../lib/count-up.ts';
           import { watchAfterSyncResponse } from '../../lib/poll.ts';
-          import { progressText } from '../../lib/progress.ts';
+          import { describeSync, observe } from '../../lib/sync-status.ts';
           import { watchSync } from '../../lib/sync-watch.ts';
 
           import type { SyncWatch } from '../../lib/poll.ts';
+          import type { Liveness, SyncView } from '../../lib/sync-status.ts';
 
           const sync = document.getElementById('sync') as HTMLElement;
           const message = document.getElementById('message') as HTMLElement;
           const detail = document.getElementById('detail') as HTMLElement;
+          const detail2 = document.getElementById('detail-2') as HTMLElement;
+          const stall = document.getElementById('stall') as HTMLElement;
+          const stallText = document.getElementById('stall-text') as HTMLElement;
           const progress = document.getElementById('progress') as HTMLElement;
           const expect = document.getElementById('expect') as HTMLElement;
           const retry = document.getElementById('retry') as HTMLElement;
+          const restart = document.getElementById('restart') as HTMLButtonElement | null;
+          const signInAgain = document.getElementById('sign-in-again');
+          const intro = message.textContent ?? '';
           const apiBase = sync.dataset.apiBase as string;
           const ownJobId = sync.dataset.ownJobId || null;
           const syncActive = sync.dataset.syncActive === '1';
           const autoStart = sync.dataset.autoStart === '1';
 
-          const fail = (text: string): void => {
+          /** The figure in the headline, in its own tabular-figure span so it can count up in place. */
+          const figure = document.createElement('span');
+          figure.className = 'num';
+          const figureCount = liveCount((v) => {
+            figure.textContent = fmtCount(v);
+          });
+          const paintHeadline = (view: SyncView): void => {
+            const split = view.count === null ? null : splitAtCount(view.headline, fmtCount(view.count));
+            if (split === null || view.count === null) {
+              detail.textContent = view.headline;
+              return;
+            }
+            // The words around the figure update as text; the figure counts to its new value.
+            detail.replaceChildren(split.before, figure, split.after);
+            figureCount.set(view.count);
+          };
+
+          /** How much is done (primary), how long it has taken, and whether it is still moving. */
+          const paint = (view: SyncView): void => {
+            paintHeadline(view);
+            detail2.textContent = view.detail;
+            stall.hidden = view.warning === null;
+            stallText.textContent = view.warning ?? '';
+            progress.dataset.state = view.state;
+            if (view.fraction === null) {
+              delete progress.dataset.determinate;
+              progress.style.removeProperty('--fraction');
+            } else {
+              progress.dataset.determinate = '';
+              progress.style.setProperty('--fraction', String(view.fraction));
+            }
+          };
+
+          /** `expired`: the session's GitHub token is gone, so only signing in again helps. */
+          const fail = (text: string, expired = false): void => {
+            if (restart) restart.hidden = expired;
+            if (signInAgain) signInAgain.hidden = !expired;
+            message.setAttribute('role', 'alert');
             message.textContent = text;
+            message.dataset.state = 'error';
             detail.textContent = '';
+            detail.hidden = true;
+            detail2.hidden = true;
+            stall.hidden = true;
             progress.hidden = true;
             expect.hidden = true;
             retry.hidden = false;
+          };
+
+          /** Back to the working state, for a new attempt from this page. */
+          const reset = (): void => {
+            message.removeAttribute('role');
+            message.textContent = intro;
+            delete message.dataset.state;
+            detail.hidden = false;
+            detail2.hidden = false;
+            detail.textContent = 'Starting…';
+            progress.hidden = false;
+            expect.hidden = false;
+            retry.hidden = true;
           };
 
           /**
@@ -547,15 +735,19 @@ const chipTitle =
            * needs a job id (see `lib/poll.ts`).
            */
           async function follow(watch: SyncWatch): Promise<void> {
+            let liveness: Liveness | null = null;
             try {
               await watchSync(watch, null, {
                 apiBase,
                 fetch: (input, init) => fetch(input, init),
                 onProgress: (p) => {
-                  detail.textContent = progressText(p);
+                  liveness = observe(liveness, p.prsStored, Date.now());
+                  paint(describeSync(p, liveness));
                 },
+                // A staged run's interim payload is enough to open the dashboard.
+                untilFirstPayload: true,
               });
-              detail.textContent = 'Done. Opening the dashboard…';
+              detail.textContent = 'Opening the dashboard…';
               location.reload();
             } catch (error) {
               fail(error instanceof Error ? error.message : String(error));
@@ -570,11 +762,17 @@ const chipTitle =
             };
             const watch = watchAfterSyncResponse(response.status, body, null);
             if (watch === null) {
-              fail(body.message ?? `The sync could not start (${response.status}).`);
+              if (response.status === 401) fail('Your GitHub session has expired. Sign in again to sync.', true);
+              else fail(body.message ?? `The sync could not start (${response.status}).`);
               return;
             }
             await follow(watch);
           }
+
+          restart?.addEventListener('click', () => {
+            reset();
+            void start();
+          });
 
           if (ownJobId) void follow({ kind: 'job', jobId: ownJobId });
           else if (syncActive) void follow({ kind: 'payload', baseline: null });
@@ -588,6 +786,10 @@ const chipTitle =
     view === 'unavailable' && (
       <main class="state">
         <div class="state-card">
+          <p class="eyebrow">
+            <BrandMark size={14} />
+            Temporarily unavailable
+          </p>
           <h1>{label}</h1>
           <p>
             GitHub is not answering right now, so bilan cannot check whether you may see this
@@ -597,7 +799,7 @@ const chipTitle =
             <a class="btn btn-primary" href={Astro.url.pathname}>
               Try again
             </a>
-            <a class="btn" href="/me">
+            <a class="btn" href="/repositories">
               Your repositories
             </a>
           </div>
@@ -609,14 +811,17 @@ const chipTitle =
     view === 'sign-in' && (
       <main class="state">
         <div class="state-card">
-          <p class="eyebrow">Pull-request dashboard</p>
+          <p class="eyebrow">
+            <BrandMark size={14} />
+            Repository activity
+          </p>
           <h1>{label}</h1>
           <p>
-            Sign in with GitHub to open this dashboard. It opens for anyone who can see the
-            repository on GitHub.
+            Sign in with GitHub to see what is moving in this repository. The dashboard opens for
+            anyone who can see the repository on GitHub.
           </p>
           <p class="muted small">
-            bilan reads pull-request metadata with read-only permissions and never writes to your
+            bilan reads pull request metadata with read-only permissions and never writes to your
             repositories.
           </p>
           <div class="actions">

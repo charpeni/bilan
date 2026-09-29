@@ -37,7 +37,7 @@ export const GET: APIRoute = async ({ url, cookies, redirect }) => {
   }
   // Coming back from GitHub's install screen: land on the repo list, where the
   // newly reachable private repos can be opened.
-  const next = flow === 'install' ? '/me' : (stored?.next ?? '/me');
+  const next = flow === 'install' ? '/repositories' : (stored?.next ?? '/repositories');
 
   try {
     await tokenKey(env);

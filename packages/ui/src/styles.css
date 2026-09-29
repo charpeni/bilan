@@ -1,88 +1,150 @@
+/*
+ * bilan — "Relevé". The one token set for the dashboard, the CLI report, and
+ * the web app around them (packages/web/src/styles/site.css consumes these and
+ * defines none of its own). Neutral planes and ink, one ink-blue accent that
+ * marks where measurement starts, and chart inks validated for colour-vision
+ * deficiency in both themes. Every token is defined for light and dark.
+ */
 :root {
-  --page: #f9f9f7;
-  --surface: #fcfcfb;
-  --ink: #0b0b0b;
-  --ink-2: #52514e;
-  --muted: #898781;
-  --grid: #e1e0d9;
-  --axis: #c3c2b7;
-  --border: rgba(11, 11, 11, 0.1);
-  --s1: #2a78d6;
-  --s2: #eb6834;
-  --s3: #1baf7a;
-  --good: #0ca30c;
-  --warning: #fab219;
-  --critical: #d03b3b;
-  --seq-1: #cde2fb;
-  --seq-2: #9ec5f4;
-  --seq-3: #6da7ec;
-  --seq-4: #3987e5;
-  --seq-5: #256abf;
-  --seq-6: #184f95;
-  --seq-7: #0d366b;
-  --ghost: rgba(11, 11, 11, 0.05);
-  --accent: #2a78d6;
-  --accent-ink: #ffffff;
-  --warn-bg: #fff4d6;
-  --warn-fg: #7a5200;
-  --font-sans: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --radius: 12px;
-  --radius-sm: 8px;
+  /* planes: the page, raised surfaces, insets, and row hover */
+  --page: #ffffff;
+  --surface: #f6f7f8;
+  --surface-2: #eceef0;
+  --wash: #f2f3f5;
+  /* ink */
+  --ink: #111214;
+  --ink-2: #43464c;
+  --muted: #62666e;
+  --ink-hover: #2b2d31;
+  --on-ink: #ffffff;
+  /* rules: --rule opens sections and closes totals */
+  --rule: #111214;
+  --line: #e3e5e8;
+  --line-strong: #868b94;
+  --grid: #eceef0;
+  --axis: #868b94;
+  /* the accent: ink blue, the one colour spent on a single idea */
+  --accent: #2b4fcf;
+  --accent-wash: #e3e9ff;
+  /* chart inks (categorical, validated all-pairs on --page) */
+  --s1: #285e9f;
+  --s2: #9e5d06;
+  --s3: #02985f;
+  /* sequential blue, light to dark; --heat-0 is an empty cell */
+  --heat-0: #f0f1f3;
+  --seq-1: #deedff;
+  --seq-2: #b7d4f9;
+  --seq-3: #8db7ed;
+  --seq-4: #6098de;
+  --seq-5: #3d78c2;
+  --seq-6: #255b9c;
+  --seq-7: #144073;
+  /* status: always with an icon and a label */
+  --good: #1a7f37;
+  --warning: #b7791f;
+  --critical: #b42318;
+  --warn-bg: #fdf1d6;
+  --warn-fg: #6b4a00;
+  --crit-bg: #fde8e5;
+  --flag-mark: #111214;
+  --field: #ffffff;
+  --float: #ffffff;
+  --shadow: 0 1px 2px rgba(17, 18, 20, 0.06), 0 8px 24px rgba(17, 18, 20, 0.1);
+  /* type */
+  --font-serif:
+    'Newsreader Variable', 'Newsreader Fallback', 'Iowan Old Style', 'Charter', 'Georgia', serif;
+  --font-sans:
+    'IBM Plex Sans Variable', 'Plex Sans Fallback', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono:
+    'IBM Plex Mono', 'Plex Mono Fallback', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  /* shape and motion */
+  --radius: 6px;
+  --radius-sm: 4px;
+  --radius-xs: 2px;
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --focus: 0 0 0 2px var(--page), 0 0 0 4px var(--accent);
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme='light'])) {
-    --page: #0d0d0d;
-    --surface: #1a1a19;
-    --ink: #ffffff;
-    --ink-2: #c3c2b7;
-    --muted: #898781;
-    --grid: #2c2c2a;
-    --axis: #383835;
-    --border: rgba(255, 255, 255, 0.1);
-    --s1: #3987e5;
-    --s2: #d95926;
-    --s3: #199e70;
-    --seq-1: #0d366b;
-    --seq-2: #184f95;
-    --seq-3: #256abf;
-    --seq-4: #3987e5;
-    --seq-5: #6da7ec;
-    --seq-6: #9ec5f4;
-    --seq-7: #cde2fb;
-    --ghost: rgba(255, 255, 255, 0.06);
-    --accent: #3987e5;
-    --accent-ink: #ffffff;
-    --warn-bg: #3a2f10;
-    --warn-fg: #ffd77a;
+    --page: #0d0e10;
+    --surface: #141517;
+    --surface-2: #1d1f22;
+    --wash: #17181b;
+    --ink: #ececee;
+    --ink-2: #b8bbc1;
+    --muted: #8d9199;
+    --ink-hover: #d4d5d9;
+    --on-ink: #0d0e10;
+    --rule: #a3a6ad;
+    --line: #26282c;
+    --line-strong: #62666e;
+    --grid: #1c1e21;
+    --axis: #62666e;
+    --accent: #8aa4ff;
+    --accent-wash: #1c2452;
+    --s1: #4c88d3;
+    --s2: #bd7c31;
+    --s3: #36a980;
+    --heat-0: #17181b;
+    --seq-1: #1a3658;
+    --seq-2: #264b7a;
+    --seq-3: #3464a0;
+    --seq-4: #437fc9;
+    --seq-5: #639be1;
+    --seq-6: #90baf1;
+    --seq-7: #c2daf9;
+    --good: #5bb974;
+    --warning: #e0a53a;
+    --critical: #f07a6c;
+    --warn-bg: #33280f;
+    --warn-fg: #f3d08a;
+    --crit-bg: #35150f;
+    --flag-mark: #0d0e10;
+    --field: #141517;
+    --float: #1b1c1f;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 28px rgba(0, 0, 0, 0.5);
     color-scheme: dark;
   }
 }
 :root[data-theme='dark'] {
-  --page: #0d0d0d;
-  --surface: #1a1a19;
-  --ink: #ffffff;
-  --ink-2: #c3c2b7;
-  --muted: #898781;
-  --grid: #2c2c2a;
-  --axis: #383835;
-  --border: rgba(255, 255, 255, 0.1);
-  --s1: #3987e5;
-  --s2: #d95926;
-  --s3: #199e70;
-  --seq-1: #0d366b;
-  --seq-2: #184f95;
-  --seq-3: #256abf;
-  --seq-4: #3987e5;
-  --seq-5: #6da7ec;
-  --seq-6: #9ec5f4;
-  --seq-7: #cde2fb;
-  --ghost: rgba(255, 255, 255, 0.06);
-  --accent: #3987e5;
-  --accent-ink: #ffffff;
-  --warn-bg: #3a2f10;
-  --warn-fg: #ffd77a;
+  --page: #0d0e10;
+  --surface: #141517;
+  --surface-2: #1d1f22;
+  --wash: #17181b;
+  --ink: #ececee;
+  --ink-2: #b8bbc1;
+  --muted: #8d9199;
+  --ink-hover: #d4d5d9;
+  --on-ink: #0d0e10;
+  --rule: #a3a6ad;
+  --line: #26282c;
+  --line-strong: #62666e;
+  --grid: #1c1e21;
+  --axis: #62666e;
+  --accent: #8aa4ff;
+  --accent-wash: #1c2452;
+  --s1: #4c88d3;
+  --s2: #bd7c31;
+  --s3: #36a980;
+  --heat-0: #17181b;
+  --seq-1: #1a3658;
+  --seq-2: #264b7a;
+  --seq-3: #3464a0;
+  --seq-4: #437fc9;
+  --seq-5: #639be1;
+  --seq-6: #90baf1;
+  --seq-7: #c2daf9;
+  --good: #5bb974;
+  --warning: #e0a53a;
+  --critical: #f07a6c;
+  --warn-bg: #33280f;
+  --warn-fg: #f3d08a;
+  --crit-bg: #35150f;
+  --flag-mark: #0d0e10;
+  --field: #141517;
+  --float: #1b1c1f;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 28px rgba(0, 0, 0, 0.5);
   color-scheme: dark;
 }
 
@@ -94,6 +156,12 @@ body {
   background: var(--page);
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+::selection {
+  background: var(--accent-wash);
+  color: var(--ink);
 }
 /* The dashboard's own type scale, kept off <body> so a host page can set its own. */
 .wrap,
@@ -103,21 +171,52 @@ body {
 .wrap {
   max-width: 1400px;
   margin: 0 auto;
-  padding: 32px 24px 80px;
+  padding: 40px 24px 96px;
+}
+.wrap a {
+  color: var(--ink);
+  text-decoration-color: var(--accent);
+  text-underline-offset: 3px;
+}
+.wrap svg {
+  display: block;
+  width: 100%;
+}
+/* Quiet links: people and the repository. Ink, underlined only under the pointer. */
+.wrap a.quiet {
+  color: inherit;
+  text-decoration: none;
+}
+.wrap a.quiet:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-underline-offset: 3px;
+}
+.wrap svg a.quiet {
+  fill: inherit;
+  cursor: pointer;
+}
+.wrap svg a.quiet:hover {
+  text-decoration: underline;
+}
+.wrap svg a.quiet:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
+/* ---- page head ---- */
 header.page {
   display: flex;
   align-items: flex-end;
   gap: 16px;
   flex-wrap: wrap;
-  margin-bottom: 8px;
+  margin-bottom: 32px;
 }
 header.page h1 {
-  font-size: 20px;
-  font-weight: 600;
-  margin: 0;
-  letter-spacing: -0.01em;
+  font: 500 36px/1.1 var(--font-serif);
+  letter-spacing: -0.02em;
+  margin: 0 0 8px;
+  overflow-wrap: anywhere;
 }
 header.page .sub {
   color: var(--muted);
@@ -130,19 +229,20 @@ header.page .spacer {
 /* ---- filter row: one row, above everything it scopes ---- */
 .filters {
   display: flex;
-  gap: 8px;
+  gap: 8px 12px;
   flex-wrap: wrap;
   align-items: center;
-  margin: 20px 0 24px;
-  padding-bottom: 20px;
-  border-bottom: 1px solid var(--border);
+  margin: 48px 0 24px;
+  padding: 12px 0;
+  border-top: 1px solid var(--rule);
 }
 .seg {
   display: inline-flex;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  background: var(--field);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
   padding: 2px;
+  gap: 2px;
 }
 .seg button {
   font: inherit;
@@ -150,8 +250,9 @@ header.page .spacer {
   color: var(--ink-2);
   background: none;
   border: 0;
-  padding: 5px 11px;
-  border-radius: 6px;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: var(--radius-xs);
   cursor: pointer;
   white-space: nowrap;
   transition:
@@ -160,23 +261,72 @@ header.page .spacer {
     transform 120ms var(--ease-out);
 }
 .seg button:hover {
-  background: var(--ghost);
+  background: var(--wash);
+  color: var(--ink);
 }
 .seg button:active {
   transform: scale(0.97);
 }
 .seg button:focus-visible,
 select.dim:focus-visible,
-label.check:has(input:focus-visible) {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+label.check:has(input:focus-visible),
+.brief-load:focus-visible,
+thead th .sort:focus-visible,
+.wrap a:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
 }
 .seg button[aria-pressed='true'] {
   background: var(--ink);
-  color: var(--surface);
+  color: var(--on-ink);
+}
+/*
+ * The range control: the pressed range is written as the interval it
+ * measures, "[Last 30 days)", with the brand's ink-blue bracket where the
+ * window starts. Every button reserves its brackets, so pressing never
+ * shifts the row.
+ */
+.range-seg {
+  background: none;
+  border: 0;
+  padding: 0;
+  gap: 4px;
+}
+.range-seg button {
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: var(--radius-xs);
+}
+.range-seg button[aria-pressed='true'] {
+  background: none;
+  color: var(--ink);
+}
+.range-seg button::before,
+.range-seg button::after {
+  font-size: 1.15em;
+  font-weight: 600;
+  line-height: 1;
+  color: transparent;
+}
+.range-seg button::before {
+  content: '[' / '';
+  margin-right: 2px;
+}
+.range-seg button::after {
+  content: ')' / '';
+  margin-left: 2px;
+}
+.range-seg button[aria-pressed='true']::before {
+  color: var(--accent);
+}
+.range-seg button[aria-pressed='true']::after {
+  color: var(--ink);
 }
 .seg button.needs-load {
   color: var(--muted);
+}
+.seg button.needs-load:hover {
+  color: var(--ink);
 }
 /* "+": this range is not synced yet; selecting it syncs more history. */
 .load-mark {
@@ -184,11 +334,11 @@ label.check:has(input:focus-visible) {
   place-items: center;
   width: 14px;
   height: 14px;
-  margin-left: 5px;
+  margin-left: 6px;
+  border: 1px solid var(--line-strong);
   border-radius: 50%;
-  background: var(--ghost);
   color: var(--ink-2);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   line-height: 1;
   vertical-align: 0;
@@ -199,8 +349,7 @@ label.check:has(input:focus-visible) {
 }
 .seg button[aria-busy='true'] .load-mark {
   color: transparent;
-  background: none;
-  border: 1.5px solid var(--ink-2);
+  border: 1.5px solid var(--accent);
   border-top-color: transparent;
   animation: bilan-spin 700ms linear infinite;
 }
@@ -220,39 +369,60 @@ label.check:has(input:focus-visible) {
   white-space: nowrap;
   border: 0;
 }
+label.check,
+select.dim {
+  min-height: 32px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  background-color: var(--field);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
 label.check {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  font-size: 13px;
-  color: var(--ink-2);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 6px 11px;
-  cursor: pointer;
+  gap: 8px;
+  padding: 0 12px;
+}
+label.check input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--ink);
 }
 select.dim {
-  font: inherit;
-  font-size: 13px;
-  color: var(--ink-2);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 6px 10px;
-  cursor: pointer;
+  padding: 0 28px 0 10px;
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--ink-2) 50%),
+    linear-gradient(135deg, var(--ink-2) 50%, transparent 50%);
+  background-position:
+    right 14px center,
+    right 10px center;
+  background-size: 4px 4px;
+  background-repeat: no-repeat;
+  max-width: 240px;
+  text-overflow: ellipsis;
+}
+select.dim:hover,
+label.check:hover {
+  background-color: var(--wash);
 }
 .filters .note {
   color: var(--muted);
   font-size: 12px;
   margin-left: auto;
+  font-variant-numeric: tabular-nums;
 }
 .filters .load-note {
   margin-left: 0;
   color: var(--ink-2);
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 .filters .load-note[hidden] {
@@ -270,8 +440,16 @@ select.dim {
   color: var(--critical);
 }
 .filters .load-note a {
-  color: var(--accent);
+  color: var(--ink);
   font-weight: 500;
+}
+.filters .load-note code,
+.wrap code {
+  font: 12px var(--font-mono);
+  padding: 1px 4px;
+  border-radius: var(--radius-xs);
+  background: var(--surface-2);
+  color: var(--ink);
 }
 @keyframes bilan-pulse {
   50% {
@@ -279,18 +457,32 @@ select.dim {
   }
 }
 
-/* ---- cards & grid ---- */
+/* ---- sections: printed on the page, each opened by an ink rule ---- */
 .grid {
   display: grid;
-  gap: 16px;
-  grid-template-columns: repeat(12, 1fr);
+  gap: 48px 32px;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  counter-reset: section;
 }
 .card {
+  position: relative;
   grid-column: span 12;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 18px 20px 14px;
+  min-width: 0;
+  border-top: 1px solid var(--rule);
+  padding-top: 12px;
+  counter-increment: section;
+}
+/* Line numbers, as on a statement; generated, so never part of the text or the name. */
+.card::before {
+  content: counter(section, decimal-leading-zero) / '';
+  position: absolute;
+  top: 14px;
+  right: 0;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 .card.half {
   grid-column: span 6;
@@ -309,95 +501,105 @@ select.dim {
   }
 }
 .card > h2 {
-  font-size: 14px;
-  font-weight: 600;
-  margin: 0 0 2px;
-  letter-spacing: -0.005em;
+  font: 500 19px/1.25 var(--font-serif);
+  letter-spacing: -0.01em;
+  margin: 0 32px 4px 0;
 }
 .card > .desc {
-  font-size: 12px;
+  font-size: 12.5px;
+  line-height: 1.5;
   color: var(--muted);
-  margin: 0 0 14px;
+  margin: 0 0 16px;
+  max-width: 72ch;
 }
 
-/* ---- stat tiles ---- */
+/* ---- headline figures: a statement row closed by the bottom line ---- */
 .tiles {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 1px;
-  background: var(--border);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  overflow: hidden;
-  margin-bottom: 16px;
 }
 /*
- * In the dashboard the tiles sit in a frame and draw their own separators;
- * the grid overhangs the frame by 1px so the outer ones are clipped. A short
- * last row then reads as surface, not as a grey hole.
+ * Each tile spans three shared rows (label, figure, note), so every figure in
+ * a row sits on one baseline however its label wraps or however large it is.
+ */
+.tiles > .tile {
+  display: grid;
+  grid-row: span 3;
+  grid-template-rows: subgrid;
+  row-gap: 0;
+}
+/*
+ * The tiles draw their own separators and the grid overhangs the frame by 1px,
+ * so the outer ones are clipped and a short last row reads as page, not as a
+ * hole. The frame is ruled: an ink line above, the double rule below.
  */
 .tiles-frame {
-  border: 1px solid var(--border);
-  border-radius: 12px;
   overflow: hidden;
-  background: var(--surface);
-  margin-bottom: 16px;
+  border-top: 1px solid var(--rule);
+  border-bottom: 3px double var(--rule);
+  margin-bottom: 48px;
 }
 .tiles-frame > .tiles {
-  gap: 0;
-  border: 0;
-  border-radius: 0;
-  background: none;
   margin: 0 -1px -1px 0;
 }
 .tiles-frame .tile {
-  border-right: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
 }
 .tile {
-  background: var(--surface);
-  padding: 16px 18px;
+  padding: 16px 16px 20px;
+  min-width: 0;
 }
 .tile .k {
-  font-size: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--muted);
-  margin-bottom: 6px;
+  margin-bottom: 12px;
+}
+.tile .v,
+.hero {
+  align-self: last baseline;
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--ink);
 }
 .tile .v {
-  font-size: 26px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
+  font-size: 32px;
+}
+.hero {
+  font-size: 48px;
+  letter-spacing: -0.03em;
 }
 .tile .d {
   font-size: 12px;
   color: var(--ink-2);
-  margin-top: 4px;
-}
-.hero {
-  font-size: 48px;
-  font-weight: 600;
-  letter-spacing: -0.03em;
-  line-height: 1;
+  margin-top: 8px;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---- legend ---- */
 .legend {
   display: flex;
-  gap: 16px;
+  gap: 4px 16px;
   flex-wrap: wrap;
   font-size: 12px;
   color: var(--ink-2);
-  margin: 0 0 10px;
+  margin: 0 0 12px;
 }
 .legend span {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 .legend i {
   display: inline-block;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
 }
 .legend i.line {
   width: 14px;
@@ -409,10 +611,6 @@ select.dim {
 }
 
 /* ---- svg chart chrome ---- */
-svg {
-  display: block;
-  width: 100%;
-}
 .gridline {
   stroke: var(--grid);
   stroke-width: 1;
@@ -432,15 +630,20 @@ svg {
   fill: var(--ink-2);
   font-size: 11px;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 .crosshair {
-  stroke: var(--axis);
+  stroke: var(--line-strong);
   stroke-width: 1;
+  stroke-dasharray: 2 3;
   pointer-events: none;
 }
 .hit {
   fill: transparent;
   cursor: default;
+}
+.mark {
+  transition: opacity 120ms ease;
 }
 
 /* ---- tooltip ---- */
@@ -449,13 +652,13 @@ svg {
   z-index: 50;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.1s;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 9px 11px;
+  transition: opacity 100ms ease;
+  background: var(--float);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px 10px;
   font-size: 12px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.14);
+  box-shadow: var(--shadow);
   max-width: 280px;
 }
 .tt[data-open='1'] {
@@ -464,13 +667,16 @@ svg {
 .tt .h {
   font-weight: 600;
   color: var(--ink);
-  margin-bottom: 5px;
+  padding-bottom: 6px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
 }
 .tt .row {
   display: flex;
   align-items: center;
-  gap: 7px;
-  margin-top: 3px;
+  gap: 8px;
+  margin-top: 4px;
   color: var(--ink-2);
 }
 .tt .row i {
@@ -485,102 +691,110 @@ svg {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   margin-left: auto;
-  padding-left: 12px;
+  padding-left: 16px;
 }
 
-/* ---- tables ---- */
+/* ---- tables: a ledger ---- */
 .tablewrap {
   overflow-x: auto;
-  margin: 0 -20px -14px;
-  padding: 0 20px 14px;
   /* A shadow on the right edge while more columns sit off to the side. */
   background:
-    linear-gradient(to left, transparent, var(--surface) 70%) right / 32px 100% no-repeat local,
-    linear-gradient(to left, var(--border), transparent) right / 12px 100% no-repeat scroll;
+    linear-gradient(to left, transparent, var(--page) 70%) right / 32px 100% no-repeat local,
+    linear-gradient(to left, color-mix(in srgb, var(--ink) 14%, transparent), transparent) right /
+      12px 100% no-repeat scroll;
 }
-table {
+.wrap table {
   border-collapse: collapse;
   width: 100%;
   font-size: 13px;
 }
-th,
-td {
+.wrap th,
+.wrap td {
   text-align: right;
-  padding: 7px 10px;
+  padding: 8px 10px;
   white-space: nowrap;
 }
-th:first-child,
-td:first-child {
+.wrap th:first-child,
+.wrap td:first-child {
   text-align: left;
   position: sticky;
   left: 0;
-  background: var(--surface);
+  z-index: 1;
+  background: var(--page);
+  padding-left: 0;
 }
-thead th {
+.wrap thead th {
   font-weight: 500;
   font-size: 11px;
   color: var(--muted);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  border-bottom: 1px solid var(--border);
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--rule);
   user-select: none;
+  padding-top: 0;
+  padding-bottom: 0;
 }
-thead th .sort {
+.wrap thead th .sort {
   all: unset;
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
+  transition: color 120ms ease;
 }
-thead th:hover {
+.wrap thead th .sort:hover {
   color: var(--ink);
 }
-thead th .sort:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-thead th[aria-sort] {
+.wrap thead th[aria-sort] {
   color: var(--ink);
 }
-thead th[aria-sort]::after {
-  content: ' ↓';
+.wrap thead th[aria-sort]::after {
+  content: '↓' / '';
+  display: inline-block;
+  margin-left: 4px;
+  color: var(--accent);
 }
-thead th[aria-sort='ascending']::after {
-  content: ' ↑';
+.wrap thead th[aria-sort='ascending']::after {
+  content: '↑' / '';
 }
-tbody td {
-  border-bottom: 1px solid var(--border);
+.wrap tbody td {
+  border-bottom: 1px solid var(--line);
   font-variant-numeric: tabular-nums;
   color: var(--ink-2);
 }
-tbody tr:hover td {
-  background: var(--ghost);
+.wrap tbody tr:hover td {
+  background: var(--wash);
 }
-tbody td:first-child {
+.wrap tbody td:first-child {
   color: var(--ink);
   font-weight: 500;
-  /* Logins and titles: Inter's tabular forms would space out their hyphens. */
+  /* Logins and titles keep proportional forms. */
   font-variant-numeric: normal;
 }
-tbody tr:hover td:first-child {
-  background: var(--ghost);
-}
-td.n {
+.wrap td.n {
   color: var(--ink);
 }
-td.dim {
+.wrap td.dim {
   color: var(--muted);
 }
-.bar-cell {
+.wrap .bar-cell {
   position: relative;
 }
-.bar-cell .fill {
+/* Magnitude as a hairline bar under the figure, right-aligned with it. */
+.wrap .bar-cell .fill {
   position: absolute;
-  inset: 4px auto 4px 0;
+  right: 10px;
+  bottom: 3px;
+  width: calc((100% - 20px) * var(--share));
+  height: 3px;
   background: var(--s1);
-  opacity: 0.16;
-  border-radius: 3px;
+  opacity: 0.55;
+  border-radius: var(--radius-xs);
 }
-.bar-cell span {
+.wrap .bar-cell span {
   position: relative;
+  color: var(--ink);
 }
 
 /* ---- insight list ---- */
@@ -591,41 +805,29 @@ ul.insights {
 }
 ul.insights li {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   padding: 10px 0;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--line);
   font-size: 13px;
-  color: var(--ink-2);
+  color: var(--muted);
+}
+ul.insights li:first-child {
+  padding-top: 2px;
 }
 ul.insights li:last-child {
   border-bottom: 0;
 }
 ul.insights li b {
+  display: block;
   color: var(--ink);
-  font-weight: 600;
+  font-weight: 500;
+  margin-bottom: 2px;
 }
 ul.insights .ico {
   flex: none;
-  width: 16px;
-  height: 16px;
-  margin-top: 2px;
 }
 .mono {
   font-variant-numeric: tabular-nums;
-}
-a {
-  color: var(--accent);
-}
-details.table-view {
-  margin-top: 12px;
-}
-details.table-view > summary {
-  font-size: 12px;
-  color: var(--muted);
-  cursor: pointer;
-}
-details.table-view > summary:hover {
-  color: var(--ink);
 }
 .empty {
   color: var(--muted);
@@ -633,27 +835,77 @@ details.table-view > summary:hover {
   padding: 24px 0;
   text-align: center;
 }
-/* ---- briefing ---- */
+
+/* ---- briefing: the summary page ---- */
 .brief {
-  margin: 20px 0 4px;
+  margin: 0;
 }
 .brief-head h2 {
-  font-size: 16px;
-  font-weight: 600;
-  margin: 0 0 2px;
-  letter-spacing: -0.01em;
+  font: 500 24px/1.2 var(--font-serif);
+  letter-spacing: -0.015em;
+  margin: 0 0 4px;
 }
-.brief-head .desc {
-  font-size: 12px;
+.brief-body > .desc {
+  font-size: 12.5px;
   color: var(--muted);
-  margin: 0 0 14px;
+  margin: 0 0 20px;
+  max-width: 80ch;
+}
+/* Collapsed: one line, the item most worth reading, and the disclosure. */
+.brief-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+  margin: 4px 0 0;
+  font-size: 14px;
+}
+.brief-summary-text {
+  font: 500 17px/1.3 var(--font-serif);
+  letter-spacing: -0.005em;
+  color: var(--ink);
+  font-variant-numeric: lining-nums;
+}
+.brief-summary-more {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.brief-summary [hidden] {
+  display: none;
+}
+.brief-toggle {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-underline-offset: 3px;
+  border-radius: var(--radius-xs);
+}
+.brief-toggle:hover {
+  text-decoration-thickness: 2px;
+}
+.brief-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+.brief-body {
+  margin-top: 16px;
+}
+.brief-body[hidden] {
+  display: none;
 }
 .brief-compare {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   flex-wrap: wrap;
-  margin: -6px 0 14px;
+  margin: -12px 0 20px;
 }
 .brief-compare .desc {
   margin: 0;
@@ -662,25 +914,22 @@ details.table-view > summary:hover {
   font: inherit;
   font-size: 12px;
   font-weight: 500;
-  color: var(--accent);
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 3px 10px;
+  color: var(--ink);
+  background: var(--field);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  min-height: 32px;
+  padding: 0 12px;
   cursor: pointer;
   transition:
     background-color 120ms ease,
     transform 120ms var(--ease-out);
 }
 .brief-load:hover {
-  background: var(--ghost);
+  background: var(--wash);
 }
 .brief-load:active {
   transform: scale(0.97);
-}
-.brief-load:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
 }
 .brief-load[aria-busy='true'] {
   color: var(--muted);
@@ -688,32 +937,36 @@ details.table-view > summary:hover {
 }
 .brief-grid {
   display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 32px;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
 }
 .ins {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 14px 16px 12px;
+  border-top: 1px solid var(--line-strong);
+  padding-top: 12px;
   min-width: 0;
+}
+.ins:has(.ins-flag) {
+  border-top: 2px solid var(--warning);
+  padding-top: 11px;
 }
 .ins-top {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
+  min-height: 16px;
 }
 .ins-tag {
   font-size: 11px;
+  font-weight: 500;
   color: var(--muted);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
 }
 .ins-flag {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   margin-left: auto;
   font-size: 11px;
   font-weight: 600;
@@ -728,27 +981,27 @@ details.table-view > summary:hover {
   fill: var(--warning);
 }
 .flag-mark {
-  stroke: #0b0b0b;
+  stroke: var(--flag-mark);
   stroke-width: 1.6;
   stroke-linecap: round;
   fill: none;
 }
 .ins h3 {
-  font-size: 14px;
-  font-weight: 600;
-  margin: 0 0 6px;
-  line-height: 1.35;
+  font: 500 17px/1.3 var(--font-serif);
+  letter-spacing: -0.005em;
+  margin: 0 0 8px;
   color: var(--ink);
+  font-variant-numeric: lining-nums;
 }
 .ins p {
   font-size: 13px;
   color: var(--ink-2);
   margin: 0 0 4px;
-  line-height: 1.45;
+  line-height: 1.5;
 }
 .ins-links {
   list-style: none;
-  margin: 6px 0 0;
+  margin: 8px 0 0;
   padding: 0;
   font-size: 12px;
 }
@@ -756,8 +1009,8 @@ details.table-view > summary:hover {
   display: flex;
   gap: 8px;
   align-items: baseline;
-  padding: 3px 0;
-  border-top: 1px solid var(--border);
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
   min-width: 0;
 }
 .ins-links a {
@@ -775,16 +1028,21 @@ details.table-view > summary:hover {
   margin-left: auto;
   color: var(--muted);
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---- small screens and touch ---- */
 @media (max-width: 600px) {
   .wrap {
-    padding: 20px 16px 64px;
+    padding: 24px 16px 64px;
+  }
+  header.page h1 {
+    font-size: 28px;
   }
   .filters {
     display: grid;
     grid-template-columns: 1fr 1fr;
+    margin-top: 40px;
   }
   .filters .range-seg,
   .filters .note {
@@ -803,10 +1061,21 @@ details.table-view > summary:hover {
   .filters select.dim,
   .filters label.check {
     width: 100%;
+    max-width: none;
     min-width: 0;
   }
   .brief-grid {
     grid-template-columns: 1fr;
+    gap: 24px;
+  }
+  .grid {
+    row-gap: 40px;
+  }
+  .tile {
+    padding: 12px 12px 16px;
+  }
+  .tile .v {
+    font-size: 28px;
   }
   .hero {
     font-size: 40px;
@@ -815,7 +1084,8 @@ details.table-view > summary:hover {
 @media (pointer: coarse) {
   .seg button,
   select.dim,
-  label.check {
+  label.check,
+  .brief-load {
     min-height: 40px;
   }
 }
@@ -827,5 +1097,11 @@ details.table-view > summary:hover {
   .seg button:active,
   .brief-load:active {
     transform: none;
+  }
+}
+@media (forced-colors: active) {
+  .range-seg button[aria-pressed='true']::before,
+  .range-seg button[aria-pressed='true']::after {
+    color: Highlight;
   }
 }

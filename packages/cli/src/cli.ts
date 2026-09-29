@@ -18,7 +18,7 @@ import { resolveToken } from './token.ts';
 
 import type { AreaRules, RepoRef, SyncResult } from '@bilan/core';
 
-const USAGE = `bilan — pull-request analytics for a GitHub repository
+const USAGE = `bilan — the pulse of a GitHub repository
 
 Usage:
   bilan <owner/name> [options]

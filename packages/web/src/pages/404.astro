@@ -1,4 +1,5 @@
 ---
+import BrandMark from '../components/BrandMark.astro';
 import Base from '../layouts/Base.astro';
 import { EXAMPLES } from '../lib/examples.ts';
 
@@ -12,13 +13,16 @@ Astro.response.status = 404;
 <Base title="Page not found · bilan" user={user}>
   <main class="state">
     <div class="state-card">
-      <p class="eyebrow">404</p>
+      <p class="eyebrow">
+        <BrandMark size={14} />
+        404
+      </p>
       <h1>This page does not exist</h1>
       <p>
         Dashboards live at <code>/owner/name</code>{example && (<>, for example <a href={`/${example.owner}/${example.name}`}>/{example.repo}</a></>)}.
       </p>
       <div class="actions">
-        <a class="btn btn-primary" href={user ? '/me' : '/'}>
+        <a class="btn btn-primary" href={user ? '/repositories' : '/'}>
           {user ? 'Your repositories' : 'Go to the home page'}
         </a>
       </div>

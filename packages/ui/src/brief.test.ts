@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { BRIEF_COMPARE_DAYS, canCompare } from './brief.ts';
+import { BRIEF_COMPARE_DAYS, briefSummaryLine, canCompare, moreText } from './brief.ts';
 import { COVERAGE_SLACK, coversDays, isCovered } from './range.ts';
 import { DAY } from './utils.ts';
+
+import type { BriefItem } from './brief.ts';
 
 const LAST = Date.UTC(2026, 3, 13, 11);
 const daysAgo = (days: number, offset = 0): string =>
@@ -56,5 +58,40 @@ describe('canCompare', () => {
     expect(canCompare(daysAgo(60, 1), LAST)).toBe(false);
     expect(canCompare(daysAgo(30), LAST)).toBe(false);
     expect(canCompare('not a date', LAST)).toBe(false);
+  });
+});
+
+const item = (tag: string, title: string, watch: boolean): BriefItem => ({
+  tag,
+  title,
+  body: [],
+  watch,
+});
+
+describe('briefSummaryLine', () => {
+  it('leads with the first item worth a look and counts the rest', () => {
+    const items = [
+      item('Review speed', 'Median first review in 3.5h', true),
+      item('Backlog', '3 open PRs', true),
+      item('Throughput', '98 PRs merged, −24% on the previous 30 days', false),
+    ];
+    expect(briefSummaryLine(items)).toEqual({ headline: 'Median first review in 3.5h', more: 1 });
+    expect(moreText(1)).toBe('· 1 more worth a look');
+  });
+
+  it('falls back to the throughput headline when nothing is flagged', () => {
+    const items = [
+      item('PR size', 'The median PR is 50 lines', false),
+      item('Throughput', '98 PRs merged, −24% on the previous 30 days', false),
+    ];
+    expect(briefSummaryLine(items)).toEqual({
+      headline: '98 PRs merged, −24% on the previous 30 days',
+      more: 0,
+    });
+    expect(moreText(0)).toBe('');
+  });
+
+  it('says nothing for an empty brief', () => {
+    expect(briefSummaryLine([])).toEqual({ headline: '', more: 0 });
   });
 });

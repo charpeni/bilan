@@ -2,18 +2,20 @@
 import { listRepoViews } from '@bilan/store-d1';
 import { env } from 'cloudflare:workers';
 
+import PrivateLock from '../components/PrivateLock.astro';
 import Base from '../layouts/Base.astro';
 import { accessDeps, checkRepoAccess } from '../lib/access.ts';
 import { getDb } from '../lib/db.ts';
 import { EXAMPLES } from '../lib/examples.ts';
-import { capitalize, fmtAgo, fmtHistory, fmtInstant } from '../lib/format.ts';
+import { fmtAgo, fmtInstant } from '../lib/format.ts';
+import { countStoredPrs, findActiveJob, findLastJob } from '../lib/jobs.ts';
 import { installUrl, loginHref } from '../lib/oauth.ts';
+import { repoRowStatus } from '../lib/repo-row-status.ts';
 import { parseRepoInput, REPO_INPUT_HINT } from '../lib/repo-input.ts';
-import { isStale } from '../lib/stale.ts';
 import { filterVisibleViews } from '../lib/views.ts';
 
 const user = Astro.locals.user;
-if (!user) return Astro.redirect(loginHref('/me'), 302);
+if (!user) return Astro.redirect(loginHref('/repositories'), 302);
 
 // The "open a repository" form posts back here with `?repo=owner/name` (or a
 // pasted GitHub URL, which is read the same way).
@@ -35,7 +37,8 @@ if (requested !== null) {
 // the same check as the repo page, cached for 15 minutes per viewer and repo
 // (and per repo for the public visibility probe).
 const deps = accessDeps(env);
-const views = await filterVisibleViews(await listRepoViews(getDb(env), user.id), (view) =>
+const db = getDb(env);
+const views = await filterVisibleViews(await listRepoViews(db, user.id), (view) =>
   checkRepoAccess(deps, user, {
     id: view.repoId,
     owner: view.owner,
@@ -45,14 +48,35 @@ const views = await filterVisibleViews(await listRepoViews(getDb(env), user.id),
 );
 const install = installUrl(env);
 const now = Date.now();
+// Each row's sync status: the active job (and how far it got), else the last job's outcome.
+const rows = await Promise.all(
+  views.map(async (view) => {
+    const active = await findActiveJob(db, view.repoId);
+    const status = repoRowStatus(
+      {
+        lastSyncedAt: view.lastSyncedAt,
+        coverageSince: view.coverageSince,
+        syncStartedAt: view.syncStartedAt,
+        activeJob: active ? { status: active.status, createdAt: active.createdAt } : null,
+        storedPrs: active ? await countStoredPrs(db, view.repoId) : null,
+        lastJobStatus: active ? active.status : ((await findLastJob(db, view.repoId))?.status ?? null),
+      },
+      now,
+    );
+    return { view, status };
+  }),
+);
 ---
 
 <Base title="Your repositories · bilan" user={user}>
   <main class="container">
-    <h1 class="page-title">Your repositories</h1>
+    <header class="page-head">
+      <p class="eyebrow">Signed in as {user.login}</p>
+      <h1 class="page-title">Your repositories</h1>
+    </header>
     <div class="panel">
-      <form method="get" action="/me" class="panel-head" novalidate>
-        <label class="sr-only" for="repo-input">Repository</label>
+      <form method="get" action="/repositories" class="open-form" novalidate>
+        <label class="label" for="repo-input">Open a repository</label>
         <input
           class="input"
           id="repo-input"
@@ -83,10 +107,11 @@ const now = Date.now();
       {
         views.length === 0 ? (
           <div class="empty-state">
+            <h2>No repositories yet</h2>
             <p>
-              <b>No repositories yet.</b> Open one above: bilan syncs its last 30 days of pull
-              requests on your GitHub token, usually in under a minute, and the dashboard link is
-              yours to share with anyone who can see the repository.
+              Open one above: bilan syncs its last 30 days of activity on your GitHub token,
+              usually in under a minute, and the dashboard link is yours to share with anyone who
+              can see the repository.
             </p>
             {EXAMPLES.length > 0 && (
               <p class="muted small">
@@ -106,52 +131,37 @@ const now = Date.now();
             <li class="rows-head" aria-hidden="true">
               <span>Repository</span>
               <span>Last viewed</span>
-              <span>History</span>
-              <span>Synced</span>
+              <span>Sync</span>
             </li>
-            {views.map((view) => (
-              <li class="row">
-                <a class="name" href={`/${view.owner}/${view.name}`}>
-                  {view.owner}/{view.name}
-                  {view.isPrivate && (
-                    <svg class="icon" viewBox="0 0 16 16" role="img" aria-label="Private">
-                      <title>Private</title>
-                      <path
-                        fill="currentColor"
-                        d="M4 6V4.5a4 4 0 1 1 8 0V6h.5A1.5 1.5 0 0 1 14 7.5v6a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 13.5v-6A1.5 1.5 0 0 1 3.5 6H4Zm1.5 0h5V4.5a2.5 2.5 0 0 0-5 0V6Z"
-                      />
-                    </svg>
-                  )}
-                </a>
+            {rows.map(({ view, status }, i) => (
+              <li
+                class="repo-row"
+                data-status={status.kind}
+                data-api-base={`/api/repos/${encodeURIComponent(view.owner)}/${encodeURIComponent(view.name)}`}
+                data-baseline={view.lastSyncedAt ?? ''}
+                data-stage-current={status.kind === 'syncing' && status.stage ? status.stage.current : undefined}
+                data-stage-total={status.kind === 'syncing' && status.stage ? status.stage.total : undefined}
+              >
+                <span class="name-cell">
+                  <a class="name" href={`/${view.owner}/${view.name}`}>
+                    {view.owner}/{view.name}
+                  </a>
+                  {view.isPrivate && <PrivateLock id={`row-${i}`} />}
+                </span>
                 <span class="cell">
                   <span class="cell-k">Viewed</span>
                   <time datetime={view.lastViewedAt} title={fmtInstant(view.lastViewedAt)}>
                     {fmtAgo(view.lastViewedAt, now)}
                   </time>
                 </span>
-                <span class="cell">
-                  {view.lastSyncedAt === null ? (
-                    <span class="muted no-history">—</span>
-                  ) : (
-                    capitalize(fmtHistory(view.coverageSince, view.lastSyncedAt))
+                <span class="cell sync-cell" data-kind={status.kind}>
+                  {status.kind === 'syncing' && <span class="dot busy" aria-hidden="true" />}
+                  {status.kind === 'synced' && status.stale && (
+                    <span class="stale-dot" title="Older than an hour; refreshed on your next visit">
+                      <span class="sr-only">(out of date)</span>
+                    </span>
                   )}
-                </span>
-                <span class="cell">
-                  {view.lastSyncedAt === null ? (
-                    <span class="muted">Not synced yet</span>
-                  ) : (
-                    <>
-                      <span class="cell-k">Synced</span>
-                      <time datetime={view.lastSyncedAt} title={fmtInstant(view.lastSyncedAt)}>
-                        {fmtAgo(view.lastSyncedAt, now)}
-                      </time>
-                      {isStale(view.lastSyncedAt, now) && (
-                        <span class="stale-dot" title="Older than an hour; refreshed on your next visit">
-                          <span class="sr-only">(out of date)</span>
-                        </span>
-                      )}
-                    </>
-                  )}
+                  <span class="sync-text">{status.text}</span>
                 </span>
               </li>
             ))}
@@ -159,9 +169,66 @@ const now = Date.now();
         )
       }
     </div>
-    <p class="muted small">
+    <p class="muted small me-foot">
       Public repositories work right away. Private repositories need bilan installed on your
       organization{install && <> (<a href={install}>install it on GitHub</a>)</>}.
     </p>
   </main>
+  <script>
+    import { fmtCount, liveCount, splitAtCount } from '../lib/count-up.ts';
+    import { POLL_INTERVAL_MS, readPayloadProbe } from '../lib/poll.ts';
+    import { rowStatusFromProbe } from '../lib/repo-row-status.ts';
+    import { COVERAGE_SINCE_HEADER } from '../lib/sync-progress.ts';
+
+    import type { RowStage } from '../lib/repo-row-status.ts';
+
+    const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+    /**
+     * Rows with a running sync follow it on the payload endpoint (no job id
+     * needed, see `poll.ts`): the count counts up between probes, and the row
+     * settles on its final chip once nothing is active.
+     */
+    async function follow(row: HTMLElement): Promise<void> {
+      const text = row.querySelector<HTMLElement>('.sync-text');
+      const apiBase = row.dataset.apiBase;
+      if (!text || !apiBase) return;
+      const baseline = row.dataset.baseline || null;
+      const current = Number(row.dataset.stageCurrent);
+      const total = Number(row.dataset.stageTotal);
+      const stage: RowStage | null = current > 0 && total > 0 ? { current, total } : null;
+      const parts = { before: '', after: '' };
+      const count = liveCount((v) => {
+        text.textContent = `${parts.before}${fmtCount(v)}${parts.after}`;
+      });
+      for (;;) {
+        await sleep(POLL_INTERVAL_MS);
+        const response = await fetch(`${apiBase}/payload`, { method: 'HEAD', cache: 'no-store' });
+        const probe = readPayloadProbe(response.status, response.headers);
+        const status = rowStatusFromProbe(
+          { ...probe, coverageSince: response.headers.get(COVERAGE_SINCE_HEADER) || null },
+          stage,
+          baseline,
+        );
+        if (status === null) return;
+        row.dataset.status = status.kind;
+        if (status.kind === 'syncing') {
+          const split = splitAtCount(status.text, fmtCount(status.count));
+          if (split) {
+            Object.assign(parts, split);
+            count.set(status.count);
+          } else text.textContent = status.text;
+          continue;
+        }
+        count.stop();
+        text.textContent = status.text;
+        row.querySelector('.dot.busy')?.remove();
+        return;
+      }
+    }
+
+    for (const row of document.querySelectorAll<HTMLElement>('.repo-row[data-status="syncing"]')) {
+      void follow(row);
+    }
+  </script>
 </Base>

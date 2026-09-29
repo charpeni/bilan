@@ -1,24 +1,76 @@
 import { brief, change } from '@bilan/core';
 
+import { person, prUrl } from './person.ts';
 import { coversDays } from './range.ts';
 import { DAY, dur, el, fmtDate, num, svgEl } from './utils.ts';
 
 import type { Range } from './range.ts';
 import type { DashboardContext } from './state.ts';
 
+/** A piece of a brief line: text, or a login to show as a profile link. */
+export type Frag = string | { who: string };
+/** A line of the brief: plain text, or text with people in it. */
+export type Line = string | Frag[];
+
 interface BriefLink {
   n: number;
   t: string;
-  meta: string;
+  meta: Frag[];
 }
 
-interface BriefItem {
+export interface BriefItem {
   tag: string;
   title: string;
-  body: string[];
+  body: Line[];
   watch: boolean;
   links?: BriefLink[];
 }
+
+/** A PR's author as a fragment; a PR without one (deleted account) prints a dash. */
+const author = (login: string | null): Frag[] => (login === null ? ['—'] : [{ who: login }]);
+
+/** `a, b, c` over fragment runs. */
+const joinFrags = (runs: Frag[][], sep: string): Frag[] =>
+  runs.flatMap((run, i) => (i ? [sep, ...run] : run));
+
+/** Where the reader's choice to open the brief is kept. */
+export const BRIEF_EXPANDED_KEY = 'bilan.brief.expanded';
+
+export interface BriefSummary {
+  /** The one line shown while the brief is collapsed. */
+  headline: string;
+  /** How many further items are flagged "worth a look" beyond the one shown. */
+  more: number;
+}
+
+/**
+ * What the collapsed brief says: the first item flagged "worth a look" (the
+ * items are already ordered flagged-first), else the throughput headline;
+ * and how many more flagged items wait behind it.
+ */
+export function briefSummaryLine(items: readonly BriefItem[]): BriefSummary {
+  const flagged = items.filter((it) => it.watch);
+  const lead = flagged[0] ?? items.find((it) => it.tag === 'Throughput') ?? items[0];
+  return { headline: lead?.title ?? '', more: flagged.length ? flagged.length - 1 : 0 };
+}
+
+/** `· 3 more worth a look`, or nothing. */
+export const moreText = (more: number): string => (more > 0 ? `· ${more} more worth a look` : '');
+
+const readExpanded = (): boolean => {
+  try {
+    return localStorage.getItem(BRIEF_EXPANDED_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
+const writeExpanded = (expanded: boolean): void => {
+  try {
+    localStorage.setItem(BRIEF_EXPANDED_KEY, expanded ? '1' : '0');
+  } catch {
+    /* storage may be unavailable; the choice still applies to this page */
+  }
+};
 
 /** Mirrors the original's implicit `null -> 0` coercion in arithmetic comparisons. */
 const n0 = (v: number | null): number => v ?? 0;
@@ -62,7 +114,8 @@ export function renderBrief(ctx: DashboardContext): void {
   const host = root.querySelector<HTMLElement>('#brief');
   if (!host) return;
   host.textContent = '';
-  const prUrl = (n: number): string => `https://github.com/${data.repo}/pull/${n}`;
+  const frag = (f: Frag): Node | string => (typeof f === 'string' ? f : person(f.who, bots));
+  const line = (l: Line): (Node | string)[] => (typeof l === 'string' ? [l] : l.map(frag));
   const compare = canCompare(data.coverageSince, LAST);
   /** `text` only when the previous period is there to compare against. */
   const vs = (text: string): string => (compare ? text : '');
@@ -118,19 +171,30 @@ export function renderBrief(ctx: DashboardContext): void {
   /* review load */
   {
     const { top, top3Share, imbalance, drop } = reviewLoad;
-    const body = [
-      `${top
-        .slice(0, 3)
-        .map(([w, n]) => `${w} (${n})`)
-        .join(', ')}. ${top.length} people reviewed in total.`,
+    const body: Line[] = [
+      [
+        ...joinFrags(
+          top.slice(0, 3).map(([w, n]): Frag[] => [{ who: w }, ` (${n})`]),
+          ', ',
+        ),
+        `. ${top.length} people reviewed in total.`,
+      ],
     ];
     if (imbalance.length) {
-      body.push(
-        `Opened a lot, reviewed little: ${imbalance.map((i) => `${i.who} (${i.opened} PRs opened, ${i.reviews} reviews)`).join('; ')}.`,
-      );
+      body.push([
+        'Opened a lot, reviewed little: ',
+        ...joinFrags(
+          imbalance.map((i): Frag[] => [
+            { who: i.who },
+            ` (${i.opened} PRs opened, ${i.reviews} reviews)`,
+          ]),
+          '; ',
+        ),
+        '.',
+      ]);
     }
     if (compare && drop) {
-      body.push(`${drop.who} gave ${drop.now} reviews, down from ${drop.before}.`);
+      body.push([{ who: drop.who }, ` gave ${drop.now} reviews, down from ${drop.before}.`]);
     }
     items.push({
       tag: 'Review load',
@@ -159,10 +223,12 @@ export function renderBrief(ctx: DashboardContext): void {
   /* automation */
   if (automation) {
     const { who, opened: n, before, merged, topMerger } = automation;
-    const body = [
+    const body: Line[] = [
       `${pctInt(automation.mergedShare)} merged, median ${dur(automation.medLead)} from open to merge, median ${num(automation.medSize)} lines. That is about 1 in ${automation.oneIn} of all PRs opened.`,
     ];
-    if (topMerger) body.push(`${topMerger.who} merged ${topMerger.merged} of the ${merged}.`);
+    if (topMerger) {
+      body.push([{ who: topMerger.who }, ` merged ${topMerger.merged} of the ${merged}.`]);
+    }
     items.push({
       tag: 'Automation',
       title: `${who} opened ${n} PRs${vs(` (${before} in the previous 30 days)`)}`,
@@ -195,8 +261,12 @@ export function renderBrief(ctx: DashboardContext): void {
   /* backlog */
   {
     const { open, drafts, oldDrafts, owner, waiting, approved } = backlog;
-    const body = [
-      `${oldDrafts} drafts are older than 30 days${owner ? `; ${owner.who} owns ${owner.drafts} of them` : ''}.`,
+    const body: Line[] = [
+      [
+        `${oldDrafts} drafts are older than 30 days`,
+        ...(owner ? ['; ', { who: owner.who }, ` owns ${owner.drafts} of them`] : []),
+        '.',
+      ],
     ];
     body.push(
       waiting.length
@@ -209,7 +279,7 @@ export function renderBrief(ctx: DashboardContext): void {
       body,
       links: waiting
         .slice(0, 5)
-        .map((p) => ({ n: p.n, t: p.t, meta: `${p.a} · ${dur(LAST - p.r)}` })),
+        .map((p) => ({ n: p.n, t: p.t, meta: [...author(p.a), ` · ${dur(LAST - p.r)}`] })),
       watch: waiting.length > 0,
     });
 
@@ -221,7 +291,7 @@ export function renderBrief(ctx: DashboardContext): void {
         links: approved.slice(0, 5).map(({ pr, since }) => ({
           n: pr.n,
           t: pr.t,
-          meta: `${pr.a} · approved ${dur(since)} ago`,
+          meta: [...author(pr.a), ` · approved ${dur(since)} ago`],
         })),
         watch: true,
       });
@@ -232,21 +302,26 @@ export function renderBrief(ctx: DashboardContext): void {
   {
     const { closed, quick, closer, reverts, revertsBefore, newcomers, busiest } = churn;
     const dow = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const body: string[] = [];
+    const body: Line[] = [];
     if (closed) {
-      body.push(
-        `${quick} of ${closed} unmerged closes happened within a day of opening${closer ? `; ${closer.who} closed the most (${closer.closed})` : ''}.`,
-      );
+      body.push([
+        `${quick} of ${closed} unmerged closes happened within a day of opening`,
+        ...(closer ? ['; ', { who: closer.who }, ` closed the most (${closer.closed})`] : []),
+        '.',
+      ]);
     }
     // "New contributor" is a first-ever claim: with bounded coverage an author
     // whose earlier PRs fell outside the window would look new, so it is
     // omitted rather than mislabelled.
-    const firstEver = fullHistory
-      ? ` ${newcomers.length ? `New contributors: ${newcomers.join(', ')}.` : 'No new contributors.'}`
-      : '';
-    body.push(
-      `${reverts} revert${reverts === 1 ? '' : 's'}${vs(` (${revertsBefore} before)`)}.${firstEver}`,
-    );
+    const firstEver: Frag[] = fullHistory
+      ? newcomers.length
+        ? [' New contributors: ', ...joinFrags(newcomers.map(author), ', '), '.']
+        : [' No new contributors.']
+      : [];
+    body.push([
+      `${reverts} revert${reverts === 1 ? '' : 's'}${vs(` (${revertsBefore} before)`)}.`,
+      ...firstEver,
+    ]);
     if (busiest) {
       body.push(`${dow[busiest.day]} is the busiest merge day (${busiest.merges} merges).`);
     }
@@ -259,13 +334,41 @@ export function renderBrief(ctx: DashboardContext): void {
   }
 
   /* ---- render ---- */
-  const head = el('div', { class: 'brief-head' }, [
-    el('h2', { text: 'Last 30 days at a glance' }),
+  // Flagged items lead; the rest keep their fixed order.
+  const ordered = [...items.filter((i) => i.watch), ...items.filter((i) => !i.watch)];
+  const head = el('div', { class: 'brief-head' }, [el('h2', { text: 'Last 30 days at a glance' })]);
+  // Collapsed by default to one line; the reader's choice to open it is kept.
+  const summary = briefSummaryLine(ordered);
+  const summaryText = el('span', { class: 'brief-summary-text', text: summary.headline });
+  const summaryMore = el('span', { class: 'brief-summary-more', text: moreText(summary.more) });
+  const toggle = el('button', {
+    type: 'button',
+    class: 'brief-toggle',
+    'aria-expanded': 'false',
+    'aria-controls': 'brief-body',
+  });
+  head.append(el('div', { class: 'brief-summary' }, [summaryText, summaryMore, toggle]));
+  const body = el('div', { class: 'brief-body', id: 'brief-body' });
+  body.append(
     el('p', {
       class: 'desc',
       text: `${fmtDate(LAST - 30 * DAY)} – ${fmtDate(LAST)}${vs(', compared with the 30 days before')}. Bots excluded except under Automation. The filters below do not change this section.`,
     }),
-  ]);
+  );
+  let expanded = readExpanded();
+  const apply = (): void => {
+    toggle.setAttribute('aria-expanded', String(expanded));
+    toggle.textContent = expanded ? 'Show less' : 'Show more';
+    body.hidden = !expanded;
+    summaryText.hidden = expanded;
+    summaryMore.hidden = expanded || summary.more === 0;
+    host.dataset.expanded = expanded ? '1' : '0';
+  };
+  toggle.addEventListener('click', () => {
+    expanded = !expanded;
+    writeExpanded(expanded);
+    apply();
+  });
   if (!compare) {
     const row = el('div', { class: 'brief-compare' }, [
       el('p', { class: 'desc brief-compare-note', text: COMPARE_NOTE }),
@@ -283,11 +386,10 @@ export function renderBrief(ctx: DashboardContext): void {
       btn.addEventListener('click', () => requestMore(COMPARE_RANGE));
       row.append(btn);
     }
-    head.append(row);
+    body.append(row);
   }
   const grid = el('div', { class: 'brief-grid' });
-  // Items flagged for attention lead; the rest keep their fixed order.
-  for (const it of [...items.filter((i) => i.watch), ...items.filter((i) => !i.watch)]) {
+  for (const it of ordered) {
     const card = el('article', { class: 'ins' });
     const top = el('div', { class: 'ins-top' }, [el('span', { class: 'ins-tag', text: it.tag })]);
     if (it.watch) {
@@ -304,21 +406,23 @@ export function renderBrief(ctx: DashboardContext): void {
       top.append(flag);
     }
     card.append(top, el('h3', { text: it.title }));
-    for (const line of it.body) card.append(el('p', { text: line }));
+    for (const l of it.body) card.append(el('p', {}, line(l)));
     if (it.links?.length) {
       const ul = el('ul', { class: 'ins-links' });
       for (const l of it.links) {
         const a = el('a', {
-          href: prUrl(l.n),
+          href: prUrl(data.repo, l.n),
           target: '_blank',
           rel: 'noopener',
           text: `#${l.n} ${l.t.length > 48 ? `${l.t.slice(0, 48)}…` : l.t}`,
         });
-        ul.append(el('li', {}, [a, el('span', { class: 'ins-meta', text: l.meta })]));
+        ul.append(el('li', {}, [a, el('span', { class: 'ins-meta' }, l.meta.map(frag))]));
       }
       card.append(ul);
     }
     grid.append(card);
   }
-  host.append(head, grid);
+  body.append(grid);
+  host.append(head, body);
+  apply();
 }

@@ -1,9 +1,11 @@
 ---
-import '@fontsource-variable/inter';
 import '@bilan/ui/dist/bilan-ui.css';
 import '../styles/site.css';
 
+import BrandMark from '../components/BrandMark.astro';
+import PrivateLock from '../components/PrivateLock.astro';
 import UserMenu from '../components/UserMenu.astro';
+import { FONT_FACES, PRELOAD_FONTS } from '../styles/fonts.ts';
 
 import type { SessionUser } from '../lib/session.ts';
 
@@ -14,9 +16,19 @@ interface Props {
   crumb?: { owner: string; name: string; isPrivate?: boolean };
   /** Where to land after signing in; defaults to the current page. */
   next?: string;
+  /** Page summary for search results and link previews. */
+  description?: string;
 }
 
-const { title, user, crumb, next } = Astro.props;
+const {
+  title,
+  user,
+  crumb,
+  next,
+  description = 'The pulse of a GitHub repository: who is contributing, which areas are moving, how reviews flow, and where work gets stuck.',
+} = Astro.props;
+/** Link previews need an absolute image URL; the app sets no `site`, so build it per request. */
+const ogImage = new URL('/brand/og.png', Astro.url).href;
 ---
 
 <!doctype html>
@@ -24,7 +36,23 @@ const { title, user, crumb, next } = Astro.props;
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
     <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="icon" href="/brand/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
+    <link rel="manifest" href="/brand/site.webmanifest" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0d0e10" />
+    <meta property="og:site_name" content="bilan" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="[bilan): the pulse of a GitHub repository" />
+    <meta name="twitter:card" content="summary_large_image" />
     <script is:inline>
       // Apply the saved theme before first paint; `auto` follows the OS.
       try {
@@ -32,27 +60,36 @@ const { title, user, crumb, next } = Astro.props;
         if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
       } catch {}
     </script>
+    {
+      PRELOAD_FONTS.map((href) => (
+        <link rel="preload" href={href} as="font" type="font/woff2" crossorigin="anonymous" />
+      ))
+    }
+    <style is:inline set:html={FONT_FACES} />
   </head>
   <body>
     <header class="hdr">
       <div class="hdr-in">
-        <a class="wordmark" href="/">bilan</a>
+        <a class="wordmark" href="/" aria-label="bilan, home">
+          <BrandMark size={18} />
+          bilan
+        </a>
         {
           crumb && (
-            <span class="crumb" title={`${crumb.owner}/${crumb.name}`}>
-              <span class="sep" aria-hidden="true">/</span>
-              <span class="owner">{crumb.owner}</span>
-              <span class="sep" aria-hidden="true">/</span>
-              <b>{crumb.name}</b>
-              {crumb.isPrivate && (
-                <svg class="icon" viewBox="0 0 16 16" aria-label="Private" role="img">
-                  <title>Private</title>
-                  <path
-                    fill="currentColor"
-                    d="M4 6V4.5a4 4 0 1 1 8 0V6h.5A1.5 1.5 0 0 1 14 7.5v6a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 13.5v-6A1.5 1.5 0 0 1 3.5 6H4Zm1.5 0h5V4.5a2.5 2.5 0 0 0-5 0V6Z"
-                  />
-                </svg>
-              )}
+            <span class="crumb">
+              <a
+                class="crumb-link"
+                href={`https://github.com/${crumb.owner}/${crumb.name}`}
+                target="_blank"
+                rel="noopener"
+                title={`${crumb.owner}/${crumb.name} on GitHub`}
+              >
+                <span class="sep" aria-hidden="true">/</span>
+                <span class="owner">{crumb.owner}</span>
+                <span class="sep" aria-hidden="true">/</span>
+                <b>{crumb.name}</b>
+              </a>
+              {crumb.isPrivate && <PrivateLock id="crumb" />}
             </span>
           )
         }
@@ -128,6 +165,16 @@ const { title, user, crumb, next } = Astro.props;
       // remembered in localStorage. The dashboard redraws its charts when the
       // attribute changes (see `mount` in @bilan/ui).
       const html = document.documentElement;
+      /** The browser chrome follows a forced theme too, not only the OS scheme. */
+      const PAGE = { light: '#ffffff', dark: '#0d0e10' } as const;
+      const themeColors = document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]');
+      const paintChrome = (): void => {
+        const t = html.dataset.theme;
+        for (const meta of themeColors) {
+          const own = meta.media.includes('dark') ? PAGE.dark : PAGE.light;
+          meta.content = t === 'light' || t === 'dark' ? PAGE[t] : own;
+        }
+      };
       const buttons = document.querySelectorAll<HTMLButtonElement>('[data-theme-pick]');
       const press = (): void => {
         const current = html.dataset.theme ?? 'auto';
@@ -140,6 +187,7 @@ const { title, user, crumb, next } = Astro.props;
       }
       new MutationObserver(() => {
         press();
+        paintChrome();
         try {
           const t = html.dataset.theme ?? 'auto';
           if (t === 'auto') localStorage.removeItem('bilan-theme');
@@ -149,6 +197,7 @@ const { title, user, crumb, next } = Astro.props;
         }
       }).observe(html, { attributes: true, attributeFilter: ['data-theme'] });
       press();
+      paintChrome();
     </script>
   </body>
 </html>

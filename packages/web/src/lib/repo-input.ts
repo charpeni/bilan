@@ -1,6 +1,6 @@
 import type { RepoRef } from '@bilan/core';
 
-/** What `/me` says when the "open a repository" field cannot be read as a repository. */
+/** What `/repositories` says when the "open a repository" field cannot be read as a repository. */
 export const REPO_INPUT_HINT = 'Enter a repository as owner/name, or paste its GitHub URL.';
 
 /** GitHub's owner alphabet: no dots, so another host (`gitlab.com/…`) never reads as an owner. */

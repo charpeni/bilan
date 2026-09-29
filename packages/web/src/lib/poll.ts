@@ -11,6 +11,8 @@
  * A new `x-bilan-synced-at`, or a 200 after a 202, means the sync published.
  */
 
+import { syncErrorText } from './sync-status.ts';
+
 export const POLL_INTERVAL_MS = 4000;
 
 export const SYNC_ACTIVE_HEADER = 'x-bilan-sync-active';
@@ -103,6 +105,16 @@ export interface JobProbe {
   createdAt?: string | null;
   /** Pull requests stored for the repo so far (see `countStoredPrs`). */
   prsStored?: number | null;
+  /** How far along the run is (see `sync-progress.ts`); absent from older workers. */
+  progress?: { read: number; total: number | null; fraction: number | null; label: string } | null;
+  /** The Workflow instance's own status, null once its record is gone. */
+  workflow?: { status: string } | null;
+  /**
+   * Staged runs only (a first sync publishes the last 7 days, then reads on
+   * to 30): which stage is running, of how many, and a ready-to-show label
+   * such as "Last 7 days published; reading up to 30 days".
+   */
+  stage?: { current: number; total: number; label: string } | null;
 }
 
 /** What the page can say about a running sync, from whichever endpoint it watches. */
@@ -112,18 +124,49 @@ export interface SyncProgress {
   prsStored: number | null;
   /** When the job was queued, when known (own jobs only). */
   startedAt: string | null;
+  /** Ready-to-show progress sentence from the API (own jobs only). */
+  label: string | null;
+  /** 0..1 when the run's target is known (full-history runs), else null. */
+  fraction: number | null;
+  /** The Workflow instance's status (`running`, `waiting`, …), when known. */
+  workflowStatus: string | null;
+  /** The API's stage label for a staged run, when it sent one. */
+  stageLabel: string | null;
+  /**
+   * A staged run is past its first stage, so an interim payload has been
+   * published while the job keeps going.
+   */
+  interim: boolean;
 }
 
 export function jobProgress(job: JobProbe): SyncProgress {
+  const progress = job.progress ?? null;
+  const fraction = progress?.fraction;
   return {
     phase: job.status === 'queued' ? 'queued' : 'running',
-    prsStored: readCount(job.prsStored),
+    prsStored: readCount(progress?.read ?? job.prsStored),
     startedAt: typeof job.createdAt === 'string' ? job.createdAt : null,
+    label: typeof progress?.label === 'string' && progress.label !== '' ? progress.label : null,
+    fraction: typeof fraction === 'number' && fraction >= 0 && fraction <= 1 ? fraction : null,
+    workflowStatus: typeof job.workflow?.status === 'string' ? job.workflow.status : null,
+    stageLabel:
+      typeof job.stage?.label === 'string' && job.stage.label !== '' ? job.stage.label : null,
+    interim: typeof job.stage?.current === 'number' && job.stage.current > 1,
   };
 }
 
 export function payloadProgress(probe: PayloadProbe): SyncProgress {
-  return { phase: 'active', prsStored: probe.prsStored, startedAt: null };
+  return {
+    phase: 'active',
+    prsStored: probe.prsStored,
+    startedAt: null,
+    label: null,
+    fraction: null,
+    workflowStatus: null,
+    stageLabel: null,
+    // The payload endpoint says nothing about stages; a 200 while active is decided by the outcome.
+    interim: false,
+  };
 }
 
 /**
@@ -137,9 +180,7 @@ export function jobPollOutcome(status: number, job: JobProbe | null): PollOutcom
     return { kind: 'failed', message: `Could not read job status (${status}).` };
   }
   if (job.settled) return { kind: 'ready' };
-  if (job.status === 'errored') {
-    return { kind: 'failed', message: `Sync failed: ${job.error ?? 'unknown error'}` };
-  }
+  if (job.status === 'errored') return { kind: 'failed', message: syncErrorText(job.error) };
   return { kind: 'wait' };
 }
 

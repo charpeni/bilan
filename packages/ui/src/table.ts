@@ -15,6 +15,8 @@ export interface Col<T> {
   bar?: boolean;
   val(r: T): SortValue;
   fmt?(v: SortValue, r: T): string;
+  /** Render the cell as a node (a profile link, say) instead of `fmt` text; sorting still uses `val`. */
+  node?(v: SortValue, r: T): Node;
 }
 
 const render = <T>(c: Col<T>, v: SortValue, r: T): string =>
@@ -84,9 +86,11 @@ export function table<T>(host: HTMLElement, cols: Col<T>[], rows: T[], initial: 
           td.classList.add('bar-cell');
           const max = Math.max(1, ...rows.map((x) => Number(c.val(x) ?? 0)));
           const fill = el('div', { class: 'fill' });
-          fill.style.width = `${(Number(v ?? 0) / max) * 100}%`;
+          fill.style.setProperty('--share', String(Number(v ?? 0) / max));
           td.append(fill);
           td.append(el('span', { text: render(c, v, r) }));
+        } else if (c.node) {
+          td.append(c.node(v, r));
         } else {
           td.textContent = render(c, v, r);
         }

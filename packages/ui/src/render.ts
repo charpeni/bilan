@@ -22,6 +22,7 @@ import {
 } from '@bilan/core';
 
 import { barChart, columnChart, heatmap, legend, timeChart } from './charts.ts';
+import { person, prLink, svgPerson } from './person.ts';
 import { table } from './table.ts';
 import { HOUR, compact, css, dur, el, fmtDate, num, pctFmt, plural } from './utils.ts';
 
@@ -62,13 +63,14 @@ export const hoursFmt = (v: number): string => {
 
 interface Insight {
   text: string;
-  detail: string;
+  /** Plain text, or text with a PR link in it. */
+  detail: string | (Node | string)[];
   bad: boolean;
 }
 
 export function render(ctx: DashboardContext): void {
-  const { root, data, prs, last: LAST, tip } = ctx;
-  const w = windowed(scope(prs, ctx.bots, ctx.state, LAST), LAST);
+  const { root, data, prs, last: LAST, tip, bots } = ctx;
+  const w = windowed(scope(prs, bots, ctx.state, LAST), LAST);
   const { merged, opened, winReviews, stillOpen } = w;
   const app = root.querySelector<HTMLElement>('#app');
   if (!app) return;
@@ -143,15 +145,26 @@ export function render(ctx: DashboardContext): void {
 
   /* 2. open backlog */
   {
-    const vals = openBacklog(w, wb);
-    const c = card('third', 'Open PR backlog', 'PRs still open at the end of each week.');
+    const backlog = openBacklog(w, wb);
+    const c = card(
+      'third',
+      'Open PR backlog',
+      'PRs still open at the end of each week, and how many of them were still drafts. Drafts are counted from the ready-for-review event.',
+    );
+    legend(c, [
+      { name: 'Open', color: S1() },
+      { name: 'Of which drafts', color: S2() },
+    ]);
     const h = chartHost(c);
     grid.append(c);
     queueMicrotask(() =>
       timeChart(h, {
         xs: weeks,
         mode: 'area',
-        series: [{ name: 'Open PRs', color: S1(), values: vals }],
+        series: [
+          { name: 'Open', color: S1(), values: backlog.open },
+          { name: 'Of which drafts', color: S2(), values: backlog.drafts },
+        ],
         tip,
       }),
     );
@@ -236,8 +249,10 @@ export function render(ctx: DashboardContext): void {
   /* 7. merge timing heatmap */
   {
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const cols = Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2, '0')}:00`);
-    const cells = mergeHeatmap(merged);
+    const hours = Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2, '0')}:00`);
+    // Core gives day × hour; the chart reads hours down the side and days across.
+    const byDay = mergeHeatmap(merged);
+    const cells = hours.map((_, h) => days.map((__, d) => byDay[d]?.[h] ?? 0));
     const c = card(
       'half',
       'When PRs get merged',
@@ -246,7 +261,16 @@ export function render(ctx: DashboardContext): void {
     const h = chartHost(c);
     grid.append(c);
     queueMicrotask(() =>
-      heatmap(h, { cells, rowLabels: days, colLabels: cols, title: 'Merges', tooltip: tip }),
+      heatmap(h, {
+        cells,
+        rowLabels: hours,
+        colLabels: days,
+        rowHeight: 8,
+        rowStep: 3,
+        tipTitle: (hour, day) => `${day}, ${hour}`,
+        title: 'Merges',
+        tooltip: tip,
+      }),
     );
   }
 
@@ -263,7 +287,13 @@ export function render(ctx: DashboardContext): void {
     const h = chartHost(c);
     grid.append(c);
     const cols: Col<ContributorRow>[] = [
-      { key: 'login', label: 'Contributor', val: (r) => r.login, fmt: (v) => String(v ?? '') },
+      {
+        key: 'login',
+        label: 'Contributor',
+        val: (r) => r.login,
+        fmt: (v) => String(v ?? ''),
+        node: (v) => person(String(v ?? ''), bots),
+      },
       { key: 'opened', label: 'Opened', val: (r) => r.opened, bar: true },
       { key: 'merged', label: 'Merged', val: (r) => r.merged },
       { key: 'closed', label: 'Closed', val: (r) => r.closed, cls: 'dim' },
@@ -313,7 +343,13 @@ export function render(ctx: DashboardContext): void {
     const h = chartHost(c);
     grid.append(c);
     const cols: Col<ReviewerRow>[] = [
-      { key: 'login', label: 'Reviewer', val: (r) => r.login, fmt: (v) => String(v ?? '') },
+      {
+        key: 'login',
+        label: 'Reviewer',
+        val: (r) => r.login,
+        fmt: (v) => String(v ?? ''),
+        node: (v) => person(String(v ?? ''), bots),
+      },
       { key: 'given', label: 'Reviews', val: (r) => r.reviews, bar: true },
       { key: 'prs', label: 'PRs reviewed', val: (r) => r.prsReviewed },
       { key: 'share', label: 'Share', val: (r) => r.share, fmt: pctFmt, cls: 'dim' },
@@ -339,6 +375,7 @@ export function render(ctx: DashboardContext): void {
   {
     const rows = topReviewers(people).map((r) => ({
       label: String(r.login),
+      labelNodes: () => [svgPerson(String(r.login), bots)],
       value: r.reviews,
       rec: r,
     }));
@@ -363,6 +400,11 @@ export function render(ctx: DashboardContext): void {
   {
     const rows = reviewPairs(winReviews).map((p) => ({
       label: `${p.reviewer} → ${p.author}`,
+      labelNodes: () => [
+        svgPerson(p.reviewer, bots),
+        document.createTextNode(' → '),
+        svgPerson(p.author, bots),
+      ],
       value: p.reviews,
       sub: 'Reviews',
     }));
@@ -412,7 +454,7 @@ export function render(ctx: DashboardContext): void {
   /* 13. insights */
   {
     const s = standouts(w, people);
-    const items = [
+    const candidates: (Insight | false | 0)[] = [
       s.merged && {
         text: `${pctFmt(s.unreviewedShare)} of merged PRs had no review from anyone else`,
         detail: `${s.unreviewed} of ${s.merged} merges`,
@@ -450,7 +492,13 @@ export function render(ctx: DashboardContext): void {
       },
       s.stale && {
         text: `${s.stale} open PRs are older than ${STALE_DAYS} days`,
-        detail: s.oldest ? `oldest is #${s.oldest.n}, opened ${fmtDate(s.oldest.c)}` : '',
+        detail: s.oldest
+          ? [
+              'oldest is ',
+              prLink(data.repo, s.oldest.n, `#${s.oldest.n}`),
+              `, opened ${fmtDate(s.oldest.c)}`,
+            ]
+          : '',
         bad: s.stale > 20,
       },
       s.reverts && {
@@ -463,7 +511,8 @@ export function render(ctx: DashboardContext): void {
         detail: `p90 wait is ${dur(s.p90First)}`,
         bad: false,
       },
-    ].filter((it): it is Insight => Boolean(it));
+    ];
+    const items = candidates.filter((it): it is Insight => Boolean(it));
 
     const c = card(
       'half',
@@ -475,7 +524,7 @@ export function render(ctx: DashboardContext): void {
       const dot = el('span', { class: 'ico' });
       dot.style.cssText = `width:8px;height:8px;border-radius:50%;margin-top:6px;background:${it.bad ? css('--warning') : css('--s1')}`;
       const body = el('div', {}, [el('b', { text: it.text })]);
-      if (it.detail) body.append(el('div', { class: 'mono', text: it.detail }));
+      if (it.detail) body.append(el('div', { class: 'mono' }, it.detail));
       list.append(el('li', {}, [dot, body]));
     }
     c.append(list);
@@ -503,8 +552,18 @@ export function render(ctx: DashboardContext): void {
             const t = String(v);
             return `#${p.n} ${t.length > 54 ? `${t.slice(0, 54)}…` : t}`;
           },
+          node: (v, p) => {
+            const t = String(v);
+            return prLink(data.repo, p.n, `#${p.n} ${t.length > 54 ? `${t.slice(0, 54)}…` : t}`);
+          },
         },
-        { key: 'author', label: 'Author', val: (p) => p.a ?? '—', fmt: (v) => String(v ?? '') },
+        {
+          key: 'author',
+          label: 'Author',
+          val: (p) => p.a ?? '—',
+          fmt: (v) => String(v ?? ''),
+          node: (v, p) => (p.a === null ? document.createTextNode('—') : person(p.a, bots)),
+        },
         { key: 'age', label: 'Age', val: (p) => LAST - p.c, fmt: dur },
         {
           key: 'draft',

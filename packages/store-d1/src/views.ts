@@ -13,6 +13,8 @@ export interface RepoViewRow {
   lastViewedAt: string;
   lastSyncedAt: string | null;
   coverageSince: string | null;
+  /** See `repos.sync_started_at`: set while a run is in flight (or was cut short). */
+  syncStartedAt: string | null;
 }
 
 /** Record that `userId` opened `repoId` now. */
@@ -44,6 +46,7 @@ export async function listRepoViews(db: Db, userId: number): Promise<RepoViewRow
       lastViewedAt: repoViews.lastViewedAt,
       lastSyncedAt: repos.lastSyncedAt,
       coverageSince: repos.coverageSince,
+      syncStartedAt: repos.syncStartedAt,
     })
     .from(repoViews)
     .innerJoin(repos, eq(repoViews.repoId, repos.id))

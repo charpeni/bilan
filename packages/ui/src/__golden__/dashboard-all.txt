@@ -1,0 +1,388 @@
+TEXT
+acme/widgets Pull request activity from Jan 5, 2026 to Apr 13, 2026 Auto Light Dark Last 30 days at a glanceMedian first review in 3.5h (was 11h)· 3 more worth a lookShow moreMar 14, 2026 – Apr 13, 2026, compared with the 30 days before. Bots excluded except under Automation. The filters below do not change this section.Review speedWorth a lookMedian first review in 3.5h (was 11h)50% of ready PRs got a review within a day (100% before).Median time to merge is 4.3h (was 2.7d); 0% of merges took over a week (0% before).Review loadWorth a lookThe top 3 reviewers gave 100% of all reviewscarol (1), alice (1). 2 people reviewed in total.BacklogWorth a look3 open PRs, 1 of them drafts1 drafts are older than 30 days; carol owns 1 of them.1 ready PR has waited over 2 days without a review:#10 Waiting for reviewalice · 10dBacklogWorth a look1 approved PR not merged after 3+ daysApproved work that is sitting still. It goes stale and picks up conflicts.#11 Approved but stalledbob · approved 8.0d agoThroughput2 PRs merged, flat on the previous 30 days4 opened by 3 authors (3 before). 0 closed without merging.PR sizeThe median PR is 50 lines, up from 500% of PRs change more than 1,000 lines (33% before).Small PRs (≤100 lines) get a first review in 3.5h and merge in 4.3h. PRs over 1,000 lines wait — and —.Review depthReviews rarely block: 0% requested changes0% of reviews were comment-only (33% before), so discussion happens in comments rather than verdicts.50% of merged PRs carried an approval.Other signalsChurn, reverts and rhythm0 reverts (0 before). No new contributors.Friday is the busiest merge day (1 merges). Last 30 days Last 90 days Last 180 days All time All areasapi (9)web (4)docs (2) Everyonealicebobcarol Exclude bots 14 PRs synced · 4/13/2026, 12:00:00 PM · full history Not in this report. Re-run the CLI to include it. PRs opened123 authorsMerged889% of resolvedClosed unmerged13 still openMedian time to merge14hp90 2.0d · from readyMedian time to first review4.0h73% ever reviewedMedian time in draft1.3d17% opened as draftReviews given103 reviewersThroughputPRs opened, merged, and closed without merging, bucketed by ISO week. The last point is the current, partial week.OpenedMergedClosed unmerged01122Jan 5Jan 19Feb 2Feb 16Mar 2Mar 16Mar 30Apr 13Open PR backlogPRs still open at the end of each week, and how many of them were still drafts. Drafts are counted from the ready-for-review event.OpenOf which drafts0123Jan 5Jan 19Feb 2Feb 16Mar 2Mar 16Mar 30Apr 13Cycle time trendWeekly median time from ready-for-review to first review, and to merge. Weeks with no data are skipped; the last point is the current, partial week.Ready → first reviewReady → merged01.0d2.1d3.1d4.2dJan 5Jan 19Feb 2Feb 16Mar 2Mar 16Mar 30Apr 13Time to mergeReady-for-review to merge, for PRs merged in range. The long tail is where review debt hides.01122<1h<4h<12h<1d<2d<3d<1w<2w2w+PR sizeLines added + deleted per PR opened in range.035810≤10≤50≤100≤250≤500≤1k1k+Where the work landsMerged PRs touching each top-level area. A PR touching two areas counts in both; area comes from a sample of up to 30 changed files.api5web4When PRs get mergedLocal time of merge. Stronger blue means more merges.MonTueWedThuFriSatSun00:0003:0006:0009:0012:0015:0018:0021:00ContributorsAuthoring and reviewing side by side. Sort by any column. Durations start at ready-for-review, so draft time is not charged to review latency.ContributorOpenedMergedClosedOpenMerge rateMed. draftMed. to 1st reviewMed. to mergep90 to mergeMed. size+ lines− linesAreasReviews givenReview : PRalice5401100%1.3d6.0h1.4d2.0d502,220530330.6carol421167%—2.5h5.0h2.0h5016040341.0bob3201100%—3.0h18h5.0h5012030231.0ReviewersReview volume, verdict mix, and turnaround. Turnaround runs from the review request (or ready-for-review) to that reviewer's first review on the PR.ReviewerReviewsPRs reviewedShareApprovedChanges req.Comment onlyPushback rateMed. turnaroundp90 turnaroundAuthors helpedcarol4340%31025.0%4.0h4.0h2alice3330%3000.0%4.0h4.0h2bob3330%2010.0%5.0h5.0h2Top reviewersWho carries the review load.carol4alice3bob3Strongest review pairsReviewer → author. Heavy concentration here means knowledge is pooling in pairs.carol → alice3bob → alice2alice → bob2bob → carol1carol → bob1alice → carol1Bus factor by areaHow many people it takes to account for half the merged PRs in an area. 1 means one person carries it. Areas with fewer than 5 merged PRs are omitted.api1What stands outComputed against the current filters. Amber items are the ones worth a second look.13% of merged PRs had no review from anyone else1 of 8 merges88% of merged PRs carried an explicit approval7 of 875% of merges were done by the PR authorSelf-merge is fine with prior approval, worth watching without oneThe top 3 reviewers give 100% of all reviews3 people reviewed at all13% of PRs merged within an hour of becoming ready1 PRs — usually trivial or pre-reviewed17% of PRs were opened as draftsmedian 1.3d spent in draft38% of merges happened on a weekend3 merges on Sat/Sun1 open PRs are older than 14 daysoldest is #9, opened Mar 6, 20261 revert PRs opened in range8% of all PRs opened73% of PRs got their first review within a dayp90 wait is 10hOldest open PRsSorted by age. These are where the backlog actually lives.PRAuthorAgeStateReviewsSize#9 Old forgotten draftcarol1.3modraft050#10 Waiting for reviewalice10dready050#11 Approved but stalledbob8.1dready150
+
+GEOMETRY
+svg 0 Throughput
+  line x1=46 x2=786 y1=204 y2=204
+  text x=38 y=208 text-anchor=end "0"
+  line x1=46 x2=786 y1=155.5 y2=155.5
+  text x=38 y=159.5 text-anchor=end "1"
+  line x1=46 x2=786 y1=107 y2=107
+  text x=38 y=111 text-anchor=end "1"
+  line x1=46 x2=786 y1=58.5 y2=58.5
+  text x=38 y=62.5 text-anchor=end "2"
+  line x1=46 x2=786 y1=10 y2=10
+  text x=38 y=14 text-anchor=end "2"
+  text x=46 y=220 text-anchor=start "Jan 5"
+  text x=151.71428571428572 y=220 text-anchor=middle "Jan 19"
+  text x=257.42857142857144 y=220 text-anchor=middle "Feb 2"
+  text x=363.14285714285717 y=220 text-anchor=middle "Feb 16"
+  text x=468.85714285714283 y=220 text-anchor=middle "Mar 2"
+  text x=574.5714285714286 y=220 text-anchor=middle "Mar 16"
+  text x=680.2857142857143 y=220 text-anchor=middle "Mar 30"
+  text x=786 y=220 text-anchor=end "Apr 13"
+  path d=M46.0,10.0L98.9,107.0L151.7,107.0L204.6,107.0L257.4,204.0L310.3,107.0L363.1,204.0L416.0,107.0L468.9,107.0L521.7,204.0L574.6,204.0L627.4,204.0L680.3,10.0L733.1,10.0L786.0,204.0
+  circle cx=786 cy=204 r=4
+  path d=M46.0,10.0L98.9,107.0L151.7,107.0L204.6,204.0L257.4,204.0L310.3,204.0L363.1,107.0L416.0,204.0L468.9,107.0L521.7,204.0L574.6,204.0L627.4,204.0L680.3,204.0L733.1,10.0L786.0,204.0
+  circle cx=786 cy=204 r=4
+  path d=M46.0,204.0L98.9,204.0L151.7,204.0L204.6,107.0L257.4,204.0L310.3,204.0L363.1,204.0L416.0,204.0L468.9,204.0L521.7,204.0L574.6,204.0L627.4,204.0L680.3,204.0L733.1,204.0L786.0,204.0
+  circle cx=786 cy=204 r=4
+  line y1=10 y2=204
+  circle cx=46 cy=10 r=4
+  circle cx=46 cy=10 r=4
+  circle cx=46 cy=10 r=4
+  rect x=46 y=0 width=740 height=230
+svg 1 Open PR backlog
+  line x1=46 x2=786 y1=204 y2=204
+  text x=38 y=208 text-anchor=end "0"
+  line x1=46 x2=786 y1=139.33333333333334 y2=139.33333333333334
+  text x=38 y=143.33333333333334 text-anchor=end "1"
+  line x1=46 x2=786 y1=74.66666666666669 y2=74.66666666666669
+  text x=38 y=78.66666666666669 text-anchor=end "2"
+  line x1=46 x2=786 y1=10 y2=10
+  text x=38 y=14 text-anchor=end "3"
+  text x=46 y=220 text-anchor=start "Jan 5"
+  text x=151.71428571428572 y=220 text-anchor=middle "Jan 19"
+  text x=257.42857142857144 y=220 text-anchor=middle "Feb 2"
+  text x=363.14285714285717 y=220 text-anchor=middle "Feb 16"
+  text x=468.85714285714283 y=220 text-anchor=middle "Mar 2"
+  text x=574.5714285714286 y=220 text-anchor=middle "Mar 16"
+  text x=680.2857142857143 y=220 text-anchor=middle "Mar 30"
+  text x=786 y=220 text-anchor=end "Apr 13"
+  path d=M46.0,204.0L98.9,204.0L151.7,204.0L204.6,204.0L257.4,204.0L310.3,139.3L363.1,204.0L416.0,139.3L468.9,139.3L521.7,139.3L574.6,139.3L627.4,139.3L680.3,10.0L733.1,10.0L786.0,10.0L786,204L46,204Z
+  path d=M46.0,204.0L98.9,204.0L151.7,204.0L204.6,204.0L257.4,204.0L310.3,139.3L363.1,204.0L416.0,139.3L468.9,139.3L521.7,139.3L574.6,139.3L627.4,139.3L680.3,10.0L733.1,10.0L786.0,10.0
+  circle cx=786 cy=10 r=4
+  path d=M46.0,204.0L98.9,204.0L151.7,204.0L204.6,204.0L257.4,204.0L310.3,204.0L363.1,204.0L416.0,204.0L468.9,139.3L521.7,139.3L574.6,139.3L627.4,139.3L680.3,139.3L733.1,139.3L786.0,139.3L786,204L46,204Z
+  path d=M46.0,204.0L98.9,204.0L151.7,204.0L204.6,204.0L257.4,204.0L310.3,204.0L363.1,204.0L416.0,204.0L468.9,139.3L521.7,139.3L574.6,139.3L627.4,139.3L680.3,139.3L733.1,139.3L786.0,139.3
+  circle cx=786 cy=139.33333333333334 r=4
+  line y1=10 y2=204
+  circle cx=46 cy=10 r=4
+  circle cx=46 cy=10 r=4
+  rect x=46 y=0 width=740 height=230
+svg 2 Cycle time trend
+  line x1=46 x2=786 y1=204 y2=204
+  text x=38 y=208 text-anchor=end "0"
+  line x1=46 x2=786 y1=155.5 y2=155.5
+  text x=38 y=159.5 text-anchor=end "1.0d"
+  line x1=46 x2=786 y1=107 y2=107
+  text x=38 y=111 text-anchor=end "2.1d"
+  line x1=46 x2=786 y1=58.5 y2=58.5
+  text x=38 y=62.5 text-anchor=end "3.1d"
+  line x1=46 x2=786 y1=10 y2=10
+  text x=38 y=14 text-anchor=end "4.2d"
+  text x=46 y=220 text-anchor=start "Jan 5"
+  text x=151.71428571428572 y=220 text-anchor=middle "Jan 19"
+  text x=257.42857142857144 y=220 text-anchor=middle "Feb 2"
+  text x=363.14285714285717 y=220 text-anchor=middle "Feb 16"
+  text x=468.85714285714283 y=220 text-anchor=middle "Mar 2"
+  text x=574.5714285714286 y=220 text-anchor=middle "Mar 16"
+  text x=680.2857142857143 y=220 text-anchor=middle "Mar 30"
+  text x=786 y=220 text-anchor=end "Apr 13"
+  path d=M46.0,196.2L98.9,196.2L151.7,202.1L310.3,184.6L416.0,180.7L680.3,198.2L733.1,196.2
+  circle cx=733.1428571428571 cy=196.24 r=4
+  path d=M46.0,179.8L98.9,110.9L151.7,200.1L363.1,10.0L468.9,145.8L733.1,195.8
+  circle cx=733.1428571428571 cy=195.755 r=4
+  line y1=10 y2=204
+  circle cx=46 cy=10 r=4
+  circle cx=46 cy=10 r=4
+  rect x=46 y=0 width=740 height=230
+svg 3 Time to merge
+  line x1=42 x2=692 y1=170 y2=170
+  text x=34 y=174 text-anchor=end "0"
+  line x1=42 x2=692 y1=130.5 y2=130.5
+  text x=34 y=134.5 text-anchor=end "1"
+  line x1=42 x2=692 y1=91 y2=91
+  text x=34 y=95 text-anchor=end "1"
+  line x1=42 x2=692 y1=51.5 y2=51.5
+  text x=34 y=55.5 text-anchor=end "2"
+  line x1=42 x2=692 y1=12 y2=12
+  text x=34 y=16 text-anchor=end "2"
+  path d=M66.11111111111111,95 a4,4 0 0 1 4,-4 h16 a4,4 0 0 1 4,4 v75 h-24 z
+  text x=78.11111111111111 y=186 text-anchor=middle "<1h"
+  rect x=42 y=12 width=72.22222222222223 height=158
+  path d=M138.33333333333334,95 a4,4 0 0 1 4,-4 h16 a4,4 0 0 1 4,4 v75 h-24 z
+  text x=150.33333333333334 y=186 text-anchor=middle "<4h"
+  rect x=114.22222222222223 y=12 width=72.22222222222223 height=158
+  path d=M210.55555555555557,16 a4,4 0 0 1 4,-4 h16 a4,4 0 0 1 4,4 v154 h-24 z
+  text x=222.55555555555557 y=186 text-anchor=middle "<12h"
+  rect x=186.44444444444446 y=12 width=72.22222222222223 height=158
+  path d=M282.7777777777778,95 a4,4 0 0 1 4,-4 h16 a4,4 0 0 1 4,4 v75 h-24 z
+  text x=294.7777777777778 y=186 text-anchor=middle "<1d"
+  rect x=258.6666666666667 y=12 width=72.22222222222223 height=158
+  path d=M355,95 a4,4 0 0 1 4,-4 h16 a4,4 0 0 1 4,4 v75 h-24 z
+  text x=367 y=186 text-anchor=middle "<2d"
+  rect x=330.8888888888889 y=12 width=72.22222222222223 height=158
+  path d=M427.2222222222223,95 a4,4 0 0 1 4,-4 h16 a4,4 0 0 1 4,4 v75 h-24 z
+  text x=439.2222222222223 y=186 text-anchor=middle "<3d"
+  rect x=403.11111111111114 y=12 width=72.22222222222223 height=158
+  path d=M499.44444444444446,95 a4,4 0 0 1 4,-4 h16 a4,4 0 0 1 4,4 v75 h-24 z
+  text x=511.44444444444446 y=186 text-anchor=middle "<1w"
+  rect x=475.33333333333337 y=12 width=72.22222222222223 height=158
+  text x=583.6666666666667 y=186 text-anchor=middle "<2w"
+  rect x=547.5555555555557 y=12 width=72.22222222222223 height=158
+  text x=655.8888888888889 y=186 text-anchor=middle "2w+"
+  rect x=619.7777777777778 y=12 width=72.22222222222223 height=158
+svg 4 PR size
+  line x1=42 x2=692 y1=170 y2=170
+  text x=34 y=174 text-anchor=end "0"
+  line x1=42 x2=692 y1=130.5 y2=130.5
+  text x=34 y=134.5 text-anchor=end "3"
+  line x1=42 x2=692 y1=91 y2=91
+  text x=34 y=95 text-anchor=end "5"
+  line x1=42 x2=692 y1=51.5 y2=51.5
+  text x=34 y=55.5 text-anchor=end "8"
+  line x1=42 x2=692 y1=12 y2=12
+  text x=34 y=16 text-anchor=end "10"
+  text x=88.42857142857143 y=186 text-anchor=middle "≤10"
+  rect x=42 y=12 width=92.85714285714286 height=158
+  path d=M169.28571428571428,16 a4,4 0 0 1 4,-4 h16 a4,4 0 0 1 4,4 v154 h-24 z
+  text x=181.28571428571428 y=186 text-anchor=middle "≤50"
+  rect x=134.85714285714286 y=12 width=92.85714285714286 height=158
+  text x=274.14285714285717 y=186 text-anchor=middle "≤100"
+  rect x=227.71428571428572 y=12 width=92.85714285714286 height=158
+  text x=367 y=186 text-anchor=middle "≤250"
+  rect x=320.57142857142856 y=12 width=92.85714285714286 height=158
+  text x=459.8571428571429 y=186 text-anchor=middle "≤500"
+  rect x=413.42857142857144 y=12 width=92.85714285714286 height=158
+  path d=M540.7142857142858,158.2 a4,4 0 0 1 4,-4 h16 a4,4 0 0 1 4,4 v11.800000000000011 h-24 z
+  text x=552.7142857142858 y=186 text-anchor=middle "≤1k"
+  rect x=506.28571428571433 y=12 width=92.85714285714286 height=158
+  path d=M633.5714285714286,158.2 a4,4 0 0 1 4,-4 h16 a4,4 0 0 1 4,4 v11.800000000000011 h-24 z
+  text x=645.5714285714286 y=186 text-anchor=middle "1k+"
+  rect x=599.1428571428571 y=12 width=92.85714285714286 height=158
+svg 5 Where the work lands
+  text x=23 y=17 text-anchor=end "api"
+  path d=M33,4 h611 a4,4 0 0 1 4,4 v10 a4,4 0 0 1 -4,4 h-611 z
+  text x=656 y=17 "5"
+  rect x=0 y=0 width=700 height=26
+  text x=23 y=43 text-anchor=end "web"
+  path d=M33,30 h488 a4,4 0 0 1 4,4 v10 a4,4 0 0 1 -4,4 h-488 z
+  text x=533 y=43 "4"
+  rect x=0 y=26 width=700 height=26
+svg 6 When PRs get merged
+  text x=90.28571428571428 y=11 text-anchor=middle "Mon"
+  text x=182.85714285714283 y=11 text-anchor=middle "Tue"
+  text x=275.42857142857144 y=11 text-anchor=middle "Wed"
+  text x=368 y=11 text-anchor=middle "Thu"
+  text x=460.57142857142856 y=11 text-anchor=middle "Fri"
+  text x=553.1428571428571 y=11 text-anchor=middle "Sat"
+  text x=645.7142857142858 y=11 text-anchor=middle "Sun"
+  text x=36 y=26 text-anchor=end "00:00"
+  rect x=45 y=19 rx=3 width=90.57142857142857 height=6
+  rect x=137.57142857142856 y=19 rx=3 width=90.57142857142857 height=6
+  rect x=230.14285714285714 y=19 rx=3 width=90.57142857142857 height=6
+  rect x=322.7142857142857 y=19 rx=3 width=90.57142857142857 height=6
+  rect x=415.2857142857143 y=19 rx=3 width=90.57142857142857 height=6
+  rect x=507.85714285714283 y=19 rx=3 width=90.57142857142857 height=6
+  rect x=600.4285714285714 y=19 rx=3 width=90.57142857142857 height=6
+  rect x=45 y=27 rx=3 width=90.57142857142857 height=6
+  rect x=137.57142857142856 y=27 rx=3 width=90.57142857142857 height=6
+  rect x=230.14285714285714 y=27 rx=3 width=90.57142857142857 height=6
+  rect x=322.7142857142857 y=27 rx=3 width=90.57142857142857 height=6
+  rect x=415.2857142857143 y=27 rx=3 width=90.57142857142857 height=6
+  rect x=507.85714285714283 y=27 rx=3 width=90.57142857142857 height=6
+  rect x=600.4285714285714 y=27 rx=3 width=90.57142857142857 height=6
+  rect x=45 y=35 rx=3 width=90.57142857142857 height=6
+  rect x=137.57142857142856 y=35 rx=3 width=90.57142857142857 height=6
+  rect x=230.14285714285714 y=35 rx=3 width=90.57142857142857 height=6
+  rect x=322.7142857142857 y=35 rx=3 width=90.57142857142857 height=6
+  rect x=415.2857142857143 y=35 rx=3 width=90.57142857142857 height=6
+  rect x=507.85714285714283 y=35 rx=3 width=90.57142857142857 height=6
+  rect x=600.4285714285714 y=35 rx=3 width=90.57142857142857 height=6
+  text x=36 y=50 text-anchor=end "03:00"
+  rect x=45 y=43 rx=3 width=90.57142857142857 height=6
+  rect x=137.57142857142856 y=43 rx=3 width=90.57142857142857 height=6
+  rect x=230.14285714285714 y=43 rx=3 width=90.57142857142857 height=6
+  rect x=322.7142857142857 y=43 rx=3 width=90.57142857142857 height=6
+  rect x=415.2857142857143 y=43 rx=3 width=90.57142857142857 height=6
+  rect x=507.85714285714283 y=43 rx=3 width=90.57142857142857 height=6
+  rect x=600.4285714285714 y=43 rx=3 width=90.57142857142857 height=6
+  rect x=45 y=51 rx=3 width=90.57142857142857 height=6
+  rect x=137.57142857142856 y=51 rx=3 width=90.57142857142857 height=6
+  rect x=230.14285714285714 y=51 rx=3 width=90.57142857142857 height=6
+  rect x=322.7142857142857 y=51 rx=3 width=90.57142857142857 height=6
+  rect x=415.2857142857143 y=51 rx=3 width=90.57142857142857 height=6
+  rect x=507.85714285714283 y=51 rx=3 width=90.57142857142857 height=6
+  rect x=600.4285714285714 y=51 rx=3 width=90.57142857142857 height=6
+  rect x=45 y=59 rx=3 width=90.57142857142857 height=6
+  rect x=137.57142857142856 y=59 rx=3 width=90.57142857142857 height=6
+  rect x=230.14285714285714 y=59 rx=3 width=90.57142857142857 height=6
+  rect x=322.7142857142857 y=59 rx=3 width=90.57142857142857 height=6
+  rect x=415.2857142857143 y=59 rx=3 width=90.57142857142857 height=6
+  rect x=507.85714285714283 y=59 rx=3 width=90.57142857142857 height=6
+  rect x=600.4285714285714 y=59 rx=3 width=90.57142857142857 height=6
+  text x=36 y=74 text-anchor=end "06:00"
+  rect x=45 y=67 rx=3 width=90.57142857142857 height=6
+  rect x=137.57142857142856 y=67 rx=3 width=90.57142857142857 height=6
+  rect x=230.14285714285714 y=67 rx=3 width=90.57142857142857 height=6
+  rect x=322.7142857142857 y=67 rx=3 width=90.57142857142857 height=6
+  rect x=415.2857142857143 y=67 rx=3 width=90.57142857142857 height=6
+  rect x=507.85714285714283 y=67 rx=3 width=90.57142857142857 height=6
+  rect x=600.4285714285714 y=67 rx=3 width=90.57142857142857 height=6
+  rect x=45 y=75 rx=3 width=90.57142857142857 height=6
+  rect x=137.57142857142856 y=75 rx=3 width=90.57142857142857 height=6
+  rect x=230.14285714285714 y=75 rx=3 width=90.57142857142857 height=6
+  rect x=322.7142857142857 y=75 rx=3 width=90.57142857142857 height=6
+  rect x=415.2857142857143 y=75 rx=3 width=90.57142857142857 height=6
+  rect x=507.85714285714283 y=75 rx=3 width=90.57142857142857 height=6
+  rect x=600.4285714285714 y=75 rx=3 width=90.57142857142857 height=6
+  rect x=45 y=83 rx=3 width=90.57142857142857 height=6
+  rect x=137.57142857142856 y=83 rx=3 width=90.57142857142857 height=6
+  rect x=230.14285714285714 y=83 rx=3 width=90.57142857142857 height=6
+  rect x=322.7142857142857 y=83 rx=3 width=90.57142857142857 height=6
+  rect x=415.2857142857143 y=83 rx=3 width=90.57142857142857 height=6
+  rect x=507.85714285714283 y=83 rx=3 width=90.57142857142857 height=6
+  rect x=600.4285714285714 y=83 rx=3 width=90.57142857142857 height=6
+  text x=36 y=98 text-anchor=end "09:00"
+  rect x=45 y=91 rx=3 width=90.57142857142857 height=6
+  rect x=137.57142857142856 y=91 rx=3 width=90.57142857142857 height=6
+  rect x=230.14285714285714 y=91 rx=3 width=90.57142857142857 height=6
+  rect x=322.7142857142857 y=91 rx=3 width=90.57142857142857 height=6
+  rect x=415.2857142857143 y=91 rx=3 width=90.57142857142857 height=6
+  rect x=507.85714285714283 y=91 rx=3 width=90.57142857142857 height=6
+  rect x=600.4285714285714 y=91 rx=3 width=90.57142857142857 height=6
+  rect x=45 y=99 rx=3 width=90.57142857142857 height=6
+  rect x=137.57142857142856 y=99 rx=3 width=90.57142857142857 height=6
+  rect x=230.14285714285714 y=99 rx=3 width=90.57142857142857 height=6
+  rect x=322.7142857142857 y=99 rx=3 width=90.57142857142857 height=6
+  rect x=415.2857142857143 y=99 rx=3 width=90.57142857142857 height=6
+  rect x=507.85714285714283 y=99 rx=3 width=90.57142857142857 height=6
+  rect x=600.4285714285714 y=99 rx=3 width=90.57142857142857 height=6
+  rect x=45 y=107 rx=3 width=90.57142857142857 height=6
+  rect x=137.57142857142856 y=107 rx=3 width=90.57142857142857 height=6
+  rect x=230.14285714285714 y=107 rx=3 width=90.57142857142857 height=6
+  rect x=322.7142857142857 y=107 rx=3 width=90.57142857142857 height=6
+  rect x=415.2857142857143 y=107 rx=3 width=90.57142857142857 height=6
+  rect x=507.85714285714283 y=107 rx=3 width=90.57142857142857 height=6
+  rect x=600.4285714285714 y=107 rx=3 width=90.57142857142857 height=6
+  text x=36 y=122 text-anchor=end "12:00"
+  rect x=45 y=115 rx=3 width=90.57142857142857 height=6
+  rect x=137.57142857142856 y=115 rx=3 width=90.57142857142857 height=6
+  rect x=230.14285714285714 y=115 rx=3 width=90.57142857142857 height=6
+  rect x=322.7142857142857 y=115 rx=3 width=90.57142857142857 height=6
+  rect x=415.2857142857143 y=115 rx=3 width=90.57142857142857 height=6
+  rect x=507.85714285714283 y=115 rx=3 width=90.57142857142857 height=6
+  rect x=600.4285714285714 y=115 rx=3 width=90.57142857142857 height=6
+  rect x=45 y=123 rx=3 width=90.57142857142857 height=6
+  rect x=137.57142857142856 y=123 rx=3 width=90.57142857142857 height=6
+  rect x=230.14285714285714 y=123 rx=3 width=90.57142857142857 height=6
+  rect x=322.7142857142857 y=123 rx=3 width=90.57142857142857 height=6
+  rect x=415.2857142857143 y=123 rx=3 width=90.57142857142857 height=6
+  rect x=507.85714285714283 y=123 rx=3 width=90.57142857142857 height=6
+  rect x=600.4285714285714 y=123 rx=3 width=90.57142857142857 height=6
+  rect x=45 y=131 rx=3 width=90.57142857142857 height=6
+  rect x=137.57142857142856 y=131 rx=3 width=90.57142857142857 height=6
+  rect x=230.14285714285714 y=131 rx=3 width=90.57142857142857 height=6
+  rect x=322.7142857142857 y=131 rx=3 width=90.57142857142857 height=6
+  rect x=415.2857142857143 y=131 rx=3 width=90.57142857142857 height=6
+  rect x=507.85714285714283 y=131 rx=3 width=90.57142857142857 height=6
+  rect x=600.4285714285714 y=131 rx=3 width=90.57142857142857 height=6
+  text x=36 y=146 text-anchor=end "15:00"
+  rect x=45 y=139 rx=3 width=90.57142857142857 height=6
+  rect x=137.57142857142856 y=139 rx=3 width=90.57142857142857 height=6
+  rect x=230.14285714285714 y=139 rx=3 width=90.57142857142857 height=6
+  rect x=322.7142857142857 y=139 rx=3 width=90.57142857142857 height=6
+  rect x=415.2857142857143 y=139 rx=3 width=90.57142857142857 height=6
+  rect x=507.85714285714283 y=139 rx=3 width=90.57142857142857 height=6
+  rect x=600.4285714285714 y=139 rx=3 width=90.57142857142857 height=6
+  rect x=45 y=147 rx=3 width=90.57142857142857 height=6
+  rect x=137.57142857142856 y=147 rx=3 width=90.57142857142857 height=6
+  rect x=230.14285714285714 y=147 rx=3 width=90.57142857142857 height=6
+  rect x=322.7142857142857 y=147 rx=3 width=90.57142857142857 height=6
+  rect x=415.2857142857143 y=147 rx=3 width=90.57142857142857 height=6
+  rect x=507.85714285714283 y=147 rx=3 width=90.57142857142857 height=6
+  rect x=600.4285714285714 y=147 rx=3 width=90.57142857142857 height=6
+  rect x=45 y=155 rx=3 width=90.57142857142857 height=6
+  rect x=137.57142857142856 y=155 rx=3 width=90.57142857142857 height=6
+  rect x=230.14285714285714 y=155 rx=3 width=90.57142857142857 height=6
+  rect x=322.7142857142857 y=155 rx=3 width=90.57142857142857 height=6
+  rect x=415.2857142857143 y=155 rx=3 width=90.57142857142857 height=6
+  rect x=507.85714285714283 y=155 rx=3 width=90.57142857142857 height=6
+  rect x=600.4285714285714 y=155 rx=3 width=90.57142857142857 height=6
+  text x=36 y=170 text-anchor=end "18:00"
+  rect x=45 y=163 rx=3 width=90.57142857142857 height=6
+  rect x=137.57142857142856 y=163 rx=3 width=90.57142857142857 height=6
+  rect x=230.14285714285714 y=163 rx=3 width=90.57142857142857 height=6
+  rect x=322.7142857142857 y=163 rx=3 width=90.57142857142857 height=6
+  rect x=415.2857142857143 y=163 rx=3 width=90.57142857142857 height=6
+  rect x=507.85714285714283 y=163 rx=3 width=90.57142857142857 height=6
+  rect x=600.4285714285714 y=163 rx=3 width=90.57142857142857 height=6
+  rect x=45 y=171 rx=3 width=90.57142857142857 height=6
+  rect x=137.57142857142856 y=171 rx=3 width=90.57142857142857 height=6
+  rect x=230.14285714285714 y=171 rx=3 width=90.57142857142857 height=6
+  rect x=322.7142857142857 y=171 rx=3 width=90.57142857142857 height=6
+  rect x=415.2857142857143 y=171 rx=3 width=90.57142857142857 height=6
+  rect x=507.85714285714283 y=171 rx=3 width=90.57142857142857 height=6
+  rect x=600.4285714285714 y=171 rx=3 width=90.57142857142857 height=6
+  rect x=45 y=179 rx=3 width=90.57142857142857 height=6
+  rect x=137.57142857142856 y=179 rx=3 width=90.57142857142857 height=6
+  rect x=230.14285714285714 y=179 rx=3 width=90.57142857142857 height=6
+  rect x=322.7142857142857 y=179 rx=3 width=90.57142857142857 height=6
+  rect x=415.2857142857143 y=179 rx=3 width=90.57142857142857 height=6
+  rect x=507.85714285714283 y=179 rx=3 width=90.57142857142857 height=6
+  rect x=600.4285714285714 y=179 rx=3 width=90.57142857142857 height=6
+  text x=36 y=194 text-anchor=end "21:00"
+  rect x=45 y=187 rx=3 width=90.57142857142857 height=6
+  rect x=137.57142857142856 y=187 rx=3 width=90.57142857142857 height=6
+  rect x=230.14285714285714 y=187 rx=3 width=90.57142857142857 height=6
+  rect x=322.7142857142857 y=187 rx=3 width=90.57142857142857 height=6
+  rect x=415.2857142857143 y=187 rx=3 width=90.57142857142857 height=6
+  rect x=507.85714285714283 y=187 rx=3 width=90.57142857142857 height=6
+  rect x=600.4285714285714 y=187 rx=3 width=90.57142857142857 height=6
+  rect x=45 y=195 rx=3 width=90.57142857142857 height=6
+  rect x=137.57142857142856 y=195 rx=3 width=90.57142857142857 height=6
+  rect x=230.14285714285714 y=195 rx=3 width=90.57142857142857 height=6
+  rect x=322.7142857142857 y=195 rx=3 width=90.57142857142857 height=6
+  rect x=415.2857142857143 y=195 rx=3 width=90.57142857142857 height=6
+  rect x=507.85714285714283 y=195 rx=3 width=90.57142857142857 height=6
+  rect x=600.4285714285714 y=195 rx=3 width=90.57142857142857 height=6
+  rect x=45 y=203 rx=3 width=90.57142857142857 height=6
+  rect x=137.57142857142856 y=203 rx=3 width=90.57142857142857 height=6
+  rect x=230.14285714285714 y=203 rx=3 width=90.57142857142857 height=6
+  rect x=322.7142857142857 y=203 rx=3 width=90.57142857142857 height=6
+  rect x=415.2857142857143 y=203 rx=3 width=90.57142857142857 height=6
+  rect x=507.85714285714283 y=203 rx=3 width=90.57142857142857 height=6
+  rect x=600.4285714285714 y=203 rx=3 width=90.57142857142857 height=6
+svg 7 Top reviewers
+  text x=37 y=17 text-anchor=end "carol"
+  path d=M47,4 h597 a4,4 0 0 1 4,4 v10 a4,4 0 0 1 -4,4 h-597 z
+  text x=656 y=17 "4"
+  rect x=0 y=0 width=700 height=26
+  text x=37 y=43 text-anchor=end "alice"
+  path d=M47,30 h446.75 a4,4 0 0 1 4,4 v10 a4,4 0 0 1 -4,4 h-446.75 z
+  text x=505.75 y=43 "3"
+  rect x=0 y=26 width=700 height=26
+  text x=37 y=69 text-anchor=end "bob"
+  path d=M47,56 h446.75 a4,4 0 0 1 4,4 v10 a4,4 0 0 1 -4,4 h-446.75 z
+  text x=505.75 y=69 "3"
+  rect x=0 y=52 width=700 height=26
+svg 8 Strongest review pairs
+  text x=93 y=17 text-anchor=end "carol → alice"
+  path d=M103,4 h541 a4,4 0 0 1 4,4 v10 a4,4 0 0 1 -4,4 h-541 z
+  text x=656 y=17 "3"
+  rect x=0 y=0 width=700 height=26
+  text x=93 y=43 text-anchor=end "bob → alice"
+  path d=M103,30 h359.3333333333333 a4,4 0 0 1 4,4 v10 a4,4 0 0 1 -4,4 h-359.3333333333333 z
+  text x=474.3333333333333 y=43 "2"
+  rect x=0 y=26 width=700 height=26
+  text x=93 y=69 text-anchor=end "alice → bob"
+  path d=M103,56 h359.3333333333333 a4,4 0 0 1 4,4 v10 a4,4 0 0 1 -4,4 h-359.3333333333333 z
+  text x=474.3333333333333 y=69 "2"
+  rect x=0 y=52 width=700 height=26
+  text x=93 y=95 text-anchor=end "bob → carol"
+  path d=M103,82 h177.66666666666666 a4,4 0 0 1 4,4 v10 a4,4 0 0 1 -4,4 h-177.66666666666666 z
+  text x=292.66666666666663 y=95 "1"
+  rect x=0 y=78 width=700 height=26
+  text x=93 y=121 text-anchor=end "carol → bob"
+  path d=M103,108 h177.66666666666666 a4,4 0 0 1 4,4 v10 a4,4 0 0 1 -4,4 h-177.66666666666666 z
+  text x=292.66666666666663 y=121 "1"
+  rect x=0 y=104 width=700 height=26
+  text x=93 y=147 text-anchor=end "alice → carol"
+  path d=M103,134 h177.66666666666666 a4,4 0 0 1 4,4 v10 a4,4 0 0 1 -4,4 h-177.66666666666666 z
+  text x=292.66666666666663 y=147 "1"
+  rect x=0 y=130 width=700 height=26
+svg 9 Bus factor by area
+  text x=23 y=17 text-anchor=end "api"
+  path d=M33,4 h611 a4,4 0 0 1 4,4 v10 a4,4 0 0 1 -4,4 h-611 z
+  text x=656 y=17 "1"
+  rect x=0 y=0 width=700 height=26

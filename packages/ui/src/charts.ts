@@ -35,6 +35,9 @@ export function legend(c: HTMLElement, items: LegendItem[]): HTMLElement {
   return box;
 }
 
+/** Resting opacity of bars and columns; the hovered one goes to full ink. */
+const REST = 0.9;
+
 const setNum = (node: Element, name: string, v: number): void => {
   node.setAttribute(name, String(v));
 };
@@ -146,7 +149,7 @@ export function timeChart(
       const fill = svgEl('path', {
         d: `${d}L${last[0]},${Y(0)}L${first[0]},${Y(0)}Z`,
         fill: s.color,
-        opacity: 0.1,
+        opacity: 0.12,
       });
       svg.append(fill);
     }
@@ -237,6 +240,12 @@ export interface BarRow {
   label: string;
   value: number;
   sub?: string;
+  /**
+   * The label's content when it holds links (people): text nodes and SVG
+   * anchors whose text, concatenated, equals `label`. `label` still sizes the
+   * gutter and names the tooltip.
+   */
+  labelNodes?: () => Node[];
 }
 
 export interface BarChartOptions<R extends BarRow> {
@@ -275,22 +284,21 @@ export function barChart<R extends BarRow>(
     const y = i * rowH + 4;
     const bh = Math.min(18, rowH - 8);
     const w = Math.max(r.value > 0 ? 3 : 0, (r.value / top) * (W - pad.l - pad.r));
-    svg.append(
-      Object.assign(
-        svgEl('text', {
-          class: 'tick',
-          x: pad.l - 10,
-          y: y + bh / 2 + 4,
-          'text-anchor': 'end',
-          fill: css('--ink-2'),
-        }),
-        { textContent: r.label },
-      ),
-    );
+    const label = svgEl('text', {
+      class: 'tick',
+      x: pad.l - 10,
+      y: y + bh / 2 + 4,
+      'text-anchor': 'end',
+      fill: css('--ink-2'),
+    });
+    if (r.labelNodes) label.append(...r.labelNodes());
+    else label.textContent = r.label;
+    svg.append(label);
     const path = svgEl('path', {
+      class: 'mark',
       d: `M${pad.l},${y} h${Math.max(0, w - 4)} a4,4 0 0 1 4,4 v${bh - 8} a4,4 0 0 1 -4,4 h${-Math.max(0, w - 4)} z`,
       fill: color,
-      opacity: 0.92,
+      opacity: REST,
     });
     svg.append(path);
     svg.append(
@@ -309,7 +317,7 @@ export function barChart<R extends BarRow>(
     );
     hit.addEventListener('pointerleave', tooltip.hide);
     hit.addEventListener('pointerenter', () => setNum(path, 'opacity', 1));
-    hit.addEventListener('pointerleave', () => setNum(path, 'opacity', 0.92));
+    hit.addEventListener('pointerleave', () => setNum(path, 'opacity', REST));
   });
 }
 
@@ -381,15 +389,16 @@ export function columnChart(
     const x = pad.l + i * band + (band - bw) / 2;
     const y = Y(b.value);
     const h = Math.max(b.value > 0 ? 2 : 0, H - pad.b - y);
+    let column: SVGPathElement | null = null;
     if (h > 0) {
       const r = Math.min(4, h);
-      svg.append(
-        svgEl('path', {
-          d: `M${x},${y + r} a${r},${r} 0 0 1 ${r},${-r} h${bw - 2 * r} a${r},${r} 0 0 1 ${r},${r} v${h - r} h${-bw} z`,
-          fill: color,
-          opacity: 0.92,
-        }),
-      );
+      column = svgEl('path', {
+        class: 'mark',
+        d: `M${x},${y + r} a${r},${r} 0 0 1 ${r},${-r} h${bw - 2 * r} a${r},${r} 0 0 1 ${r},${r} v${h - r} h${-bw} z`,
+        fill: color,
+        opacity: REST,
+      });
+      svg.append(column);
     }
     svg.append(
       Object.assign(
@@ -409,6 +418,11 @@ export function columnChart(
       tooltip.show(ev, tipTitle(b), [{ color, label: b.sub ?? 'PRs', value: num(b.value) }]),
     );
     hit.addEventListener('pointerleave', tooltip.hide);
+    if (column) {
+      const mark = column;
+      hit.addEventListener('pointerenter', () => setNum(mark, 'opacity', 1));
+      hit.addEventListener('pointerleave', () => setNum(mark, 'opacity', REST));
+    }
   });
 }
 
@@ -419,17 +433,35 @@ export interface HeatmapOptions {
   fmt?: (v: number) => string;
   title: string;
   tooltip: Tooltip;
+  /** Row height in px; 22 by default, tighter when there are many rows (hours). */
+  rowHeight?: number;
+  /** Label every nth row / column (1: all of them). */
+  rowStep?: number;
+  colStep?: number;
+  /** The tooltip's title for a cell; `row, col` by default. */
+  tipTitle?: (rowLabel: string, colLabel: string) => string;
 }
 
-/** Day-of-week × hour heatmap, sequential blue. */
+/** Hour × day-of-week heatmap, sequential blue; an empty cell is plain `--heat-0`. */
 export function heatmap(
   host: HTMLElement,
-  { cells, rowLabels, colLabels, fmt = num, title, tooltip }: HeatmapOptions,
+  {
+    cells,
+    rowLabels,
+    colLabels,
+    fmt = num,
+    title,
+    tooltip,
+    rowHeight = 22,
+    rowStep = 1,
+    colStep = 1,
+    tipTitle = (rl, cl) => `${rl}, ${cl}`,
+  }: HeatmapOptions,
 ): void {
   const W = host.clientWidth || 700;
-  const pad = { l: 38, t: 18, r: 8, b: 4 };
+  const pad = { l: 44, t: 18, r: 8, b: 4 };
   const cw = (W - pad.l - pad.r) / colLabels.length;
-  const ch = 22;
+  const ch = rowHeight;
   const H = pad.t + rowLabels.length * ch + pad.b;
   const svg = svgEl('svg', {
     viewBox: `0 0 ${W} ${H}`,
@@ -443,7 +475,7 @@ export function heatmap(
     css,
   );
   colLabels.forEach((l, c) => {
-    if (c % 3) return;
+    if (c % colStep) return;
     svg.append(
       Object.assign(
         svgEl('text', {
@@ -457,35 +489,44 @@ export function heatmap(
     );
   });
   rowLabels.forEach((rl, r) => {
-    svg.append(
-      Object.assign(
-        svgEl('text', {
-          class: 'tick',
-          x: pad.l - 8,
-          y: pad.t + r * ch + ch / 2 + 4,
-          'text-anchor': 'end',
-        }),
-        { textContent: rl },
-      ),
-    );
+    if (r % rowStep === 0) {
+      svg.append(
+        Object.assign(
+          svgEl('text', {
+            class: 'tick',
+            x: pad.l - 8,
+            y: pad.t + r * ch + ch / 2 + 4,
+            'text-anchor': 'end',
+          }),
+          { textContent: rl },
+        ),
+      );
+    }
     colLabels.forEach((cl, c) => {
       const v = cells[r]?.[c] ?? 0;
       const idx = v === 0 ? -1 : Math.min(ramp.length - 1, Math.floor((v / max) * ramp.length));
-      const fill = idx < 0 ? css('--grid') : (ramp[idx] ?? '');
+      const fill = idx < 0 ? css('--heat-0') : (ramp[idx] ?? '');
       const rect = svgEl('rect', {
         x: pad.l + c * cw + 1,
         y: pad.t + r * ch + 1,
         width: Math.max(1, cw - 2),
         height: ch - 2,
-        rx: 3,
+        rx: Math.min(3, Math.floor((ch - 2) / 2)),
         fill,
-        opacity: idx < 0 ? 0.45 : 1,
       });
       svg.append(rect);
       rect.style.cursor = 'default';
       rect.addEventListener('pointermove', (ev) =>
-        tooltip.show(ev, `${rl}, ${cl}`, [{ color: fill, label: title, value: fmt(v) }]),
+        tooltip.show(ev, tipTitle(rl, cl), [{ color: fill, label: title, value: fmt(v) }]),
       );
+      rect.addEventListener('pointerenter', () => {
+        rect.setAttribute('stroke', css('--ink'));
+        rect.setAttribute('stroke-width', '1.5');
+      });
+      rect.addEventListener('pointerleave', () => {
+        rect.removeAttribute('stroke');
+        rect.removeAttribute('stroke-width');
+      });
       rect.addEventListener('pointerleave', tooltip.hide);
     });
   });

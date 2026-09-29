@@ -30,6 +30,12 @@ export interface SyncWatchDeps {
   sleep?: (ms: number) => Promise<void>;
   /** Called after every probe that says the sync is still running. */
   onProgress?: (progress: SyncProgress) => void;
+  /**
+   * Resolve as soon as any payload is on offer, the interim one of a staged
+   * first sync included, instead of waiting for the run to finish. The
+   * first-sync card uses it to hand over to the dashboard early.
+   */
+  untilFirstPayload?: boolean;
 }
 
 const defaultSleep = (ms: number): Promise<void> =>
@@ -59,6 +65,15 @@ async function probe(
   return { outcome: payloadPollOutcome(read, watch.baseline), progress: payloadProgress(read) };
 }
 
+/** Whether the payload endpoint has a payload to serve (the interim one of a staged run counts). */
+async function payloadOnOffer(deps: SyncWatchDeps): Promise<boolean> {
+  const response = await deps.fetch(`${deps.apiBase}/payload`, {
+    method: 'HEAD',
+    cache: 'no-store',
+  });
+  return response.status === 200;
+}
+
 /**
  * Resolve once a payload newer than `baseline` is published; reject with a
  * `SyncWatchError` when the sync failed or ended without one.
@@ -75,7 +90,11 @@ export async function watchSync(
     if (outcome.kind === 'ready') return;
     if (outcome.kind === 'failed') throw new SyncWatchError('failed', outcome.message);
     if (outcome.kind === 'stopped') throw new SyncWatchError('stopped', STOPPED_MESSAGE);
-    if (outcome.kind === 'wait' && progress) deps.onProgress?.(progress);
+    if (outcome.kind === 'wait' && progress) {
+      // A staged run says it published; confirm the payload is actually on offer before handing over.
+      if (deps.untilFirstPayload && progress.interim && (await payloadOnOffer(deps))) return;
+      deps.onProgress?.(progress);
+    }
     watch = nextWatch(watch, outcome, baseline);
     if (outcome.kind === 'wait') await sleep(POLL_INTERVAL_MS);
   }

@@ -125,7 +125,16 @@ export function mount(root: HTMLElement, payload: Payload, options: MountOptions
   html.dataset.theme = theme;
 
   /* ---- wiring ---- */
-  must('#repo-title').textContent = payload.repo;
+  // The heading links to the repository on GitHub, as quietly as the profile links.
+  must('#repo-title').replaceChildren(
+    el('a', {
+      class: 'quiet',
+      href: `https://github.com/${payload.repo}`,
+      target: '_blank',
+      rel: 'noopener',
+      text: payload.repo,
+    }),
+  );
   must('#repo-sub').textContent = activitySpan(payload.coverageSince, firstActivity(prs), last);
 
   // Populate the dimension filters from the data itself.

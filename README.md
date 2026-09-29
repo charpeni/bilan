@@ -1,8 +1,13 @@
 # bilan
 
-Pull-request analytics for any GitHub repository: throughput, cycle time,
-review load, and per-contributor breakdowns, anchored to when a PR became
-ready for review rather than when it was opened.
+The pulse of a GitHub repository. bilan turns pull request history into a
+picture of what is actually happening: who is contributing, which parts of
+the codebase are moving, how reviews flow and who carries them, and where
+work gets stuck. It is also a way to see what AI-assisted coding is doing
+to a codebase and a team over time: how much gets opened, how big changes
+are, how fast they merge, how many carry a real review, and how review load
+lands on the humans. Latencies are measured from the moment a PR became
+ready for review, so time spent in draft is never charged to reviewers.
 
 Two ways to use it:
 
@@ -114,7 +119,7 @@ wrangler dev                     # or the built worker, after `pnpm build`
 
 Routes: `/auth/github/start?next=/owner/name` starts the login (never with a
 scope), `/auth/github/callback` finishes it, `POST /auth/logout` ends the
-session, `/me` lists the repos you opened, and `/api/me` reports the
+session, `/repositories` lists the repos you opened (`/me` redirects there), and `/api/me` reports the
 signed-in user. A page that needs a token the viewer no longer has redirects
 to the login; the corresponding API calls answer 401.
 

@@ -72,24 +72,101 @@ describe('readPayloadProbe', () => {
   });
 });
 
+/** An own job in stage `current` of a two-stage first sync. */
+const stagedAt = (current: number) =>
+  jobProgress({
+    status: 'running',
+    settled: false,
+    stage: { current, total: 2, label: 'Last 7 days published; reading up to 30 days' },
+  });
+
 describe('jobProgress and payloadProgress', () => {
   it('reads the phase, the count, and the start from an own job', () => {
     expect(jobProgress({ status: 'queued', settled: false, createdAt: T1, prsStored: 0 })).toEqual({
       phase: 'queued',
       prsStored: 0,
       startedAt: T1,
+      label: null,
+      fraction: null,
+      workflowStatus: null,
+      stageLabel: null,
+      interim: false,
     });
     expect(jobProgress({ status: 'running', settled: false, prsStored: 75 })).toEqual({
       phase: 'running',
       prsStored: 75,
       startedAt: null,
+      label: null,
+      fraction: null,
+      workflowStatus: null,
+      stageLabel: null,
+      interim: false,
     });
   });
 
   it('knows only the count when watching the payload', () => {
     expect(
       payloadProgress({ status: 202, syncedAt: null, syncActive: true, prsStored: 30 }),
-    ).toEqual({ phase: 'active', prsStored: 30, startedAt: null });
+    ).toEqual({
+      phase: 'active',
+      prsStored: 30,
+      startedAt: null,
+      label: null,
+      fraction: null,
+      workflowStatus: null,
+      stageLabel: null,
+      interim: false,
+    });
+  });
+
+  it('carries the API progress and the Workflow status of an own job', () => {
+    expect(
+      jobProgress({
+        status: 'running',
+        settled: false,
+        prsStored: 650,
+        progress: {
+          read: 700,
+          total: 1100,
+          fraction: 700 / 1100,
+          label: '700 of 1,100 pull requests · 64%',
+        },
+        workflow: { status: 'waiting' },
+      }),
+    ).toEqual({
+      phase: 'running',
+      prsStored: 700,
+      startedAt: null,
+      label: '700 of 1,100 pull requests · 64%',
+      fraction: 700 / 1100,
+      workflowStatus: 'waiting',
+      stageLabel: null,
+      interim: false,
+    });
+  });
+
+  it('reads the stage of a staged first sync', () => {
+    expect(stagedAt(1)).toMatchObject({
+      interim: false,
+      stageLabel: 'Last 7 days published; reading up to 30 days',
+    });
+    expect(stagedAt(2)).toMatchObject({ interim: true });
+    expect(jobProgress({ status: 'running', settled: false, stage: null })).toMatchObject({
+      interim: false,
+      stageLabel: null,
+    });
+  });
+
+  it('drops a fraction outside 0..1 and an empty label', () => {
+    const progress = jobProgress({
+      status: 'running',
+      settled: false,
+      progress: { read: 5, total: null, fraction: 3, label: '' },
+      workflow: null,
+    });
+    expect(progress.fraction).toBeNull();
+    expect(progress.label).toBeNull();
+    expect(progress.workflowStatus).toBeNull();
   });
 });
 
@@ -173,11 +250,11 @@ describe('jobPollOutcome', () => {
   it('fails with the job error', () => {
     expect(jobPollOutcome(200, { status: 'errored', settled: false, error: 'boom' })).toEqual({
       kind: 'failed',
-      message: 'Sync failed: boom',
+      message: 'The sync stopped: boom.',
     });
     expect(jobPollOutcome(200, { status: 'errored', settled: false, error: null })).toEqual({
       kind: 'failed',
-      message: 'Sync failed: unknown error',
+      message: 'The sync stopped.',
     });
   });
 

@@ -26,7 +26,61 @@ function fakeFetch(answers: Answer[]) {
 
 const sleep = () => Promise.resolve();
 
+/** A staged first sync's job row, in stage `current` of two. */
+const staged = (current: number) => ({
+  status: 'running',
+  settled: false,
+  prsStored: 40,
+  stage: { current, total: 2, label: 'Last 7 days published; reading up to 30 days' },
+});
+
 describe('watchSync', () => {
+  it('hands over to the dashboard once a staged run has published its interim payload', async () => {
+    const { fetch, calls } = fakeFetch([
+      { status: 200, body: staged(1) },
+      { status: 200, body: staged(2) },
+      { status: 200, headers: { [SYNCED_AT_HEADER]: T1, [SYNC_ACTIVE_HEADER]: '1' } },
+    ]);
+    const onProgress = vi.fn();
+    await watchSync({ kind: 'job', jobId: 'j1' }, null, {
+      apiBase: API,
+      fetch,
+      sleep,
+      onProgress,
+      untilFirstPayload: true,
+    });
+    expect(calls).toEqual([
+      { url: '/api/sync/j1', method: 'GET' },
+      { url: '/api/sync/j1', method: 'GET' },
+      { url: `${API}/payload`, method: 'HEAD' },
+    ]);
+    expect(onProgress).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps waiting when the interim payload is not on offer yet', async () => {
+    const { fetch, calls } = fakeFetch([
+      { status: 200, body: staged(2) },
+      { status: 202, headers: { [SYNC_ACTIVE_HEADER]: '1' } },
+      { status: 200, body: { status: 'complete', settled: true } },
+    ]);
+    await watchSync({ kind: 'job', jobId: 'j1' }, null, {
+      apiBase: API,
+      fetch,
+      sleep,
+      untilFirstPayload: true,
+    });
+    expect(calls.map((c) => c.method)).toEqual(['GET', 'HEAD', 'GET']);
+  });
+
+  it('waits for the final payload when not asked to hand over early', async () => {
+    const { fetch, calls } = fakeFetch([
+      { status: 200, body: staged(2) },
+      { status: 200, body: { status: 'complete', settled: true } },
+    ]);
+    await watchSync({ kind: 'job', jobId: 'j1' }, null, { apiBase: API, fetch, sleep });
+    expect(calls.map((c) => c.method)).toEqual(['GET', 'GET']);
+  });
+
   it("follows the viewer's own job on its status endpoint, reporting progress", async () => {
     const { fetch, calls } = fakeFetch([
       { status: 200, body: { status: 'queued', settled: false, createdAt: T1, prsStored: 0 } },
@@ -37,8 +91,26 @@ describe('watchSync', () => {
     await watchSync({ kind: 'job', jobId: 'j1' }, null, { apiBase: API, fetch, sleep, onProgress });
     expect(calls.map((c) => c.url)).toEqual(['/api/sync/j1', '/api/sync/j1', '/api/sync/j1']);
     expect(onProgress.mock.calls.map(([p]) => p)).toEqual([
-      { phase: 'queued', prsStored: 0, startedAt: T1 },
-      { phase: 'running', prsStored: 50, startedAt: T1 },
+      {
+        phase: 'queued',
+        prsStored: 0,
+        startedAt: T1,
+        label: null,
+        fraction: null,
+        workflowStatus: null,
+        stageLabel: null,
+        interim: false,
+      },
+      {
+        phase: 'running',
+        prsStored: 50,
+        startedAt: T1,
+        label: null,
+        fraction: null,
+        workflowStatus: null,
+        stageLabel: null,
+        interim: false,
+      },
     ]);
   });
 
@@ -61,7 +133,16 @@ describe('watchSync', () => {
       { url: `${API}/payload`, method: 'HEAD' },
       { url: `${API}/payload`, method: 'HEAD' },
     ]);
-    expect(onProgress).toHaveBeenCalledWith({ phase: 'active', prsStored: 9, startedAt: null });
+    expect(onProgress).toHaveBeenCalledWith({
+      phase: 'active',
+      prsStored: 9,
+      startedAt: null,
+      label: null,
+      fraction: null,
+      workflowStatus: null,
+      stageLabel: null,
+      interim: false,
+    });
   });
 
   it('falls back to the payload when the job is not readable', async () => {
@@ -89,7 +170,7 @@ describe('watchSync', () => {
     }).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(SyncWatchError);
     expect((error as SyncWatchError).kind).toBe('failed');
-    expect((error as SyncWatchError).message).toBe('Sync failed: rate limited');
+    expect((error as SyncWatchError).message).toBe('The sync stopped: rate limited.');
   });
 
   it('rejects as stopped when nothing runs and nothing new was published', async () => {

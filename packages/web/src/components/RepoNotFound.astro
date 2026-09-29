@@ -2,6 +2,7 @@
 import { env } from 'cloudflare:workers';
 
 import { installUrl, loginHref } from '../lib/oauth.ts';
+import BrandMark from './BrandMark.astro';
 
 import type { SessionUser } from '../lib/session.ts';
 
@@ -23,6 +24,10 @@ Astro.response.status = 404;
 
 <main class="state">
   <div class="state-card">
+    <p class="eyebrow">
+      <BrandMark size={14} />
+      Repository not found
+    </p>
     <h1>{label}</h1>
     <p>
       bilan could not find this repository, or your GitHub account cannot see it. Check the
@@ -35,7 +40,7 @@ Astro.response.status = 404;
           <p>
             bilan reads private repositories through its GitHub App, which must be installed on
             the organization (or the repository) that owns <code>{label}</code>. It only ever reads
-            pull-request metadata; it never writes to your repositories.
+            pull request metadata; it never writes to your repositories.
           </p>
           <p class="muted small">
             Installing takes an organization owner or a repository admin. Anyone else can request
@@ -47,7 +52,7 @@ Astro.response.status = 404;
                 Install bilan on GitHub
               </a>
             )}
-            <a class="btn" href="/me">
+            <a class="btn" href="/repositories">
               Back to your repositories
             </a>
           </div>

@@ -1,0 +1,75 @@
+---
+/**
+ * The lock beside a private repository's name, with a tooltip saying what
+ * private means here and who can open the report. Focusable, described by
+ * the tooltip text, shown on hover and focus, dismissed with Escape.
+ */
+import { PRIVATE_LOCK_COPY, PRIVATE_LOCK_LABEL } from '../lib/private-lock.ts';
+
+interface Props {
+  /** Distinguishes the tooltip ids when several locks share a page. */
+  id: string;
+}
+
+const tipId = `lock-tip-${Astro.props.id}`;
+---
+
+<span
+  class="lock"
+  tabindex="0"
+  role="img"
+  aria-label={PRIVATE_LOCK_LABEL}
+  aria-describedby={tipId}
+  data-lock
+>
+  <svg class="icon" viewBox="0 0 16 16" aria-hidden="true">
+    <path
+      fill="currentColor"
+      d="M4 6V4.5a4 4 0 1 1 8 0V6h.5A1.5 1.5 0 0 1 14 7.5v6a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 13.5v-6A1.5 1.5 0 0 1 3.5 6H4Zm1.5 0h5V4.5a2.5 2.5 0 0 0-5 0V6Z"
+    ></path>
+  </svg>
+  <span class="tt lock-tt" id={tipId} role="tooltip">{PRIVATE_LOCK_COPY}</span>
+</span>
+
+<script>
+  import { tooltipPosition } from '../lib/private-lock.ts';
+
+  for (const lock of document.querySelectorAll<HTMLElement>('[data-lock]')) {
+    const tip = lock.querySelector<HTMLElement>('.lock-tt');
+    if (!tip) continue;
+    const place = (): void => {
+      const a = lock.getBoundingClientRect();
+      const t = tip.getBoundingClientRect();
+      const p = tooltipPosition(
+        { left: a.left, right: a.right, top: a.top, bottom: a.bottom },
+        { width: t.width, height: t.height },
+        { width: window.innerWidth, height: window.innerHeight },
+      );
+      tip.style.left = `${p.left}px`;
+      tip.style.top = `${p.top}px`;
+    };
+    const open = (): void => {
+      if (lock.dataset.dismissed !== undefined) return;
+      place();
+      tip.dataset.open = '1';
+    };
+    const close = (): void => {
+      delete tip.dataset.open;
+    };
+    lock.addEventListener('pointerenter', open);
+    lock.addEventListener('focus', open);
+    lock.addEventListener('pointerleave', () => {
+      delete lock.dataset.dismissed;
+      close();
+    });
+    lock.addEventListener('blur', () => {
+      delete lock.dataset.dismissed;
+      close();
+    });
+    lock.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape') return;
+      lock.dataset.dismissed = '1';
+      close();
+    });
+  }
+</script>
