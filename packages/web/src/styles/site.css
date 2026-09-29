@@ -284,8 +284,8 @@ html {
 .theme-cycle {
   display: inline-grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   padding: 0;
   border: 1px solid var(--line-strong);
   background: var(--page);
