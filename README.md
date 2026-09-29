@@ -98,6 +98,11 @@ install page. Public repositories need no install.
    `GITHUB_TOKEN`, a classic token with no scopes, is optional: it is only used
    as a fallback for public repositories a user token cannot reach.
 
+Every push to `main` that passes CI is deployed by the `Deploy` workflow,
+which applies pending D1 migrations and then runs `wrangler deploy`. It needs
+two repository secrets: `CLOUDFLARE_API_TOKEN` (the "Edit Cloudflare Workers"
+template plus D1 Edit) and `CLOUDFLARE_ACCOUNT_ID`.
+
 For local development, copy `packages/web/.dev.vars.example` to `.dev.vars`,
 fill in the values, run `npx wrangler d1 migrations apply bilan --local`, then
 `pnpm --filter @bilan/web dev`. Workflows require the Workers Paid plan.
