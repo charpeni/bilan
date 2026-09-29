@@ -755,6 +755,30 @@ form + .pop-item,
   flex-direction: column;
   align-self: stretch;
 }
+.gloss {
+  margin: 0 0 40px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  max-width: 30ch;
+}
+.gloss > span {
+  display: block;
+}
+.gloss-word {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 0.3em;
+  font-weight: 650;
+  font-size: 16px;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.gloss-pos {
+  margin-bottom: 8px;
+  font: 400 12px/1.5 var(--font-mono);
+  color: var(--muted);
+}
 /* The contents of the sheet: section numbers in the monospace, one hairline per line. */
 .contents {
   margin-top: auto;
@@ -786,7 +810,7 @@ form + .pop-item,
   color: var(--muted);
 }
 .lp-cover {
-  grid-column: 4 / span 4;
+  grid-column: 4 / span 6;
 }
 .lp-hero h1 {
   font: 650 44px/1.02 var(--font-sans);
@@ -803,80 +827,6 @@ form + .pop-item,
   margin: 0 0 32px;
 }
 /* Four readings: a parameter table, each row's rule broken at the gutter. */
-.readings {
-  grid-column: 8 / -1;
-  display: grid;
-  grid-template-columns: subgrid;
-  align-content: start;
-  min-width: 0;
-  margin: 0;
-  padding-top: 12px;
-  border-top: 1px solid var(--rule);
-}
-.readings > * {
-  grid-column: 1 / -1;
-  min-width: 0;
-}
-.readings-head {
-  margin: 0 0 24px;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--muted);
-}
-.readings-head a {
-  margin-right: 8px;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--ink);
-  text-decoration: none;
-}
-.readings-head a:hover {
-  color: var(--accent);
-  text-decoration: underline;
-}
-.readings-list {
-  display: grid;
-  grid-template-columns: subgrid;
-  margin: 0;
-}
-.readings-list > div {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: subgrid;
-}
-.readings-list dt,
-.readings-list dd {
-  margin: 0;
-  padding: 12px 0 16px;
-  border-top: 1px solid var(--line);
-}
-.readings-list dt {
-  grid-column: 1 / span 2;
-  padding-top: 14px;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--ink);
-}
-.readings-list dd {
-  grid-column: 3 / -1;
-}
-.readings-list .figure-v {
-  display: block;
-  font-size: 36px;
-  line-height: 1;
-}
-.readings-list .figure-d {
-  display: block;
-  margin-top: 8px;
-}
-.readings figcaption {
-  margin-top: 4px;
-  padding-top: 12px;
-  border-top: 1px solid var(--rule);
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--ink-2);
-}
 .lp-hero .btn {
   height: 44px;
   padding: 0 20px;
