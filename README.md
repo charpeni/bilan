@@ -102,6 +102,9 @@ Every push to `main` that passes CI is deployed by the `Deploy` workflow,
 which applies pending D1 migrations and then runs `wrangler deploy`. It needs
 two repository secrets: `CLOUDFLARE_API_TOKEN` (the "Edit Cloudflare Workers"
 template plus D1 Edit) and `CLOUDFLARE_ACCOUNT_ID`.
+The deploy gate verifies that the triggering run was a push to the canonical
+repository's `main`, not a pull request or a fork's branch of the same name.
+Cloudflare credentials are available only to the migration and deploy steps.
 
 For local development, copy `packages/web/.dev.vars.example` to `.dev.vars`,
 fill in the values, run `npx wrangler d1 migrations apply bilan --local`, then
