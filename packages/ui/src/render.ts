@@ -157,11 +157,11 @@ export function render(ctx: DashboardContext): void {
     const c = card(
       'third',
       'Open PR backlog',
-      'PRs still open at the end of each week, and how many of them were still drafts. Drafts are counted from the ready-for-review event.',
+      'PRs still open at the end of each week, and how many of those were still drafts. Drafts are counted from the ready-for-review event, so they are part of the open line, not in addition to it.',
     );
     legend(c, [
       { name: 'Open', ...L1() },
-      { name: 'Of which drafts', ...L2() },
+      { name: 'Drafts', ...L2() },
     ]);
     const h = chartHost(c);
     grid.append(c);
@@ -171,7 +171,7 @@ export function render(ctx: DashboardContext): void {
         mode: 'area',
         series: [
           { name: 'Open', ...L1(), values: backlog.open },
-          { name: 'Of which drafts', ...L2(), values: backlog.drafts },
+          { name: 'Drafts', ...L2(), values: backlog.drafts },
         ],
         tip,
       }),

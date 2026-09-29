@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { BRIEF_COMPARE_DAYS, briefSummaryLine, canCompare, moreText } from './brief.ts';
+import {
+  BRIEF_COMPARE_DAYS,
+  canCompare,
+  collapsedHeight,
+  firstRowCount,
+  toggleText,
+} from './brief.ts';
 import { COVERAGE_SLACK, coversDays, isCovered } from './range.ts';
 import { DAY } from './utils.ts';
-
-import type { BriefItem } from './brief.ts';
 
 const LAST = Date.UTC(2026, 3, 13, 11);
 const daysAgo = (days: number, offset = 0): string =>
@@ -61,37 +65,38 @@ describe('canCompare', () => {
   });
 });
 
-const item = (tag: string, title: string, watch: boolean): BriefItem => ({
-  tag,
-  title,
-  body: [],
-  watch,
+describe('firstRowCount', () => {
+  it('counts the run of cards level with the first one', () => {
+    expect(firstRowCount([0, 0, 0, 240, 240, 240, 480])).toBe(3);
+    expect(firstRowCount([0, 0, 210, 210, 420])).toBe(2);
+    expect(firstRowCount([0, 190, 380])).toBe(1);
+  });
+
+  it('follows the grid, not the top of the page', () => {
+    expect(firstRowCount([120, 120, 340])).toBe(2);
+  });
+
+  it('puts every card on one row when nothing is laid out yet', () => {
+    expect(firstRowCount([0, 0, 0, 0])).toBe(4);
+    expect(firstRowCount([])).toBe(0);
+  });
 });
 
-describe('briefSummaryLine', () => {
-  it('leads with the first item worth a look and counts the rest', () => {
-    const items = [
-      item('Review speed', 'Median first review in 3.5h', true),
-      item('Backlog', '3 open PRs', true),
-      item('Throughput', '98 PRs merged, −24% on the previous 30 days', false),
-    ];
-    expect(briefSummaryLine(items)).toEqual({ headline: 'Median first review in 3.5h', more: 1 });
-    expect(moreText(1)).toBe('· 1 more worth a look');
+describe('collapsedHeight', () => {
+  it('is the tallest first-row card plus the row gap', () => {
+    expect(collapsedHeight([180, 236, 204], 32)).toBe(268);
+    expect(collapsedHeight([150], 0)).toBe(150);
   });
 
-  it('falls back to the throughput headline when nothing is flagged', () => {
-    const items = [
-      item('PR size', 'The median PR is 50 lines', false),
-      item('Throughput', '98 PRs merged, −24% on the previous 30 days', false),
-    ];
-    expect(briefSummaryLine(items)).toEqual({
-      headline: '98 PRs merged, −24% on the previous 30 days',
-      more: 0,
-    });
-    expect(moreText(0)).toBe('');
+  it('is nothing for an empty row', () => {
+    expect(collapsedHeight([], 32)).toBe(0);
   });
+});
 
-  it('says nothing for an empty brief', () => {
-    expect(briefSummaryLine([])).toEqual({ headline: '', more: 0 });
+describe('toggleText', () => {
+  it('counts the clipped cards while collapsed', () => {
+    expect(toggleText(false, 5)).toBe('Show 5 more');
+    expect(toggleText(false, 0)).toBe('Show more');
+    expect(toggleText(true, 5)).toBe('Show less');
   });
 });

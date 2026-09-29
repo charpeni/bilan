@@ -900,32 +900,16 @@ ul.insights .ico {
   letter-spacing: -0.02em;
   margin: 0 0 6px;
 }
-.brief-body > .desc {
+.brief > .desc {
   font-size: 12.5px;
   color: var(--muted);
   margin: 0 0 20px;
   max-width: 80ch;
 }
-/* Collapsed: one line, the item most worth reading, and the disclosure. */
-.brief-summary {
-  display: flex;
-  align-items: baseline;
-  gap: 8px 12px;
-  flex-wrap: wrap;
-  margin: 4px 0 0;
-  font-size: 14px;
-}
-.brief-summary-text {
-  font: 500 16px/1.35 var(--font-sans);
-  color: var(--ink);
-  font-variant-numeric: lining-nums;
-}
-.brief-summary-more {
-  font: 400 12px/1.4 var(--font-mono);
-  color: var(--muted);
-}
-.brief-summary [hidden] {
-  display: none;
+/* The disclosure sits under the grid; collapsed, the grid is clipped to its
+   first row behind a fade so it is plain that more is waiting. */
+.brief-foot {
+  margin-top: 16px;
 }
 .brief-toggle {
   font: inherit;
@@ -946,12 +930,6 @@ ul.insights .ico {
 .brief-toggle:focus-visible {
   outline: none;
   box-shadow: var(--focus);
-}
-.brief-body {
-  margin-top: 20px;
-}
-.brief-body[hidden] {
-  display: none;
 }
 .brief-compare {
   display: flex;
@@ -985,6 +963,27 @@ ul.insights .ico {
   display: grid;
   gap: 32px;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  position: relative;
+  transition: max-height 200ms ease-out;
+}
+/* `max-height` is set inline to the first row's height (see `renderBrief`). */
+.brief-grid[data-clipped] {
+  overflow: hidden;
+}
+.brief-grid::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 56px;
+  background: linear-gradient(to bottom, transparent, var(--page));
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 200ms ease-out;
+}
+.brief[data-expanded='0'] .brief-grid[data-clipped]::after {
+  opacity: 1;
 }
 .ins {
   border-top: 1px solid var(--line-strong);
@@ -1175,6 +1174,10 @@ ul.insights .ico {
 @media (prefers-reduced-motion: reduce) {
   .seg button[aria-busy='true'] .load-mark {
     animation: none;
+  }
+  .brief-grid,
+  .brief-grid::after {
+    transition: none;
   }
 }
 @media (forced-colors: active) {

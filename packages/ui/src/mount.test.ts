@@ -42,6 +42,27 @@ const sixtyDays = (): string => new Date(LAST - 60 * DAY).toISOString();
 
 const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
+/** A card's position among its siblings, for the layout stubs. */
+const index = (card: HTMLElement): number =>
+  [...(card.parentElement?.children ?? [])].indexOf(card);
+
+/**
+ * happy-dom lays nothing out, so the grid is stubbed: `perRow` cards share
+ * each `offsetTop`, and every card is 200px tall but the second, 240px.
+ */
+const layoutCards = (perRow: number): void => {
+  vi.spyOn(HTMLElement.prototype, 'offsetTop', 'get').mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.classList.contains('ins') ? Math.floor(index(this) / perRow) * 260 : 0;
+  });
+  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.classList.contains('ins') ? (index(this) === 1 ? 240 : 200) : 0;
+  });
+};
+
 const texts = (root: ParentNode, sel: string): string[] =>
   [...root.querySelectorAll(sel)].map((n) => n.textContent ?? '');
 
@@ -86,6 +107,13 @@ describe('mount', () => {
   };
   const briefText = (): string => root.querySelector('#brief')?.textContent ?? '';
   const titles = (): string[] => texts(root, '#brief h3');
+  const cards = (): HTMLElement[] => [...root.querySelectorAll<HTMLElement>('#brief .ins')];
+  const grid = (): HTMLElement => {
+    const node = root.querySelector<HTMLElement>('#brief-grid');
+    expect(node).not.toBeNull();
+    return node as HTMLElement;
+  };
+  const shown = (): number => cards().filter((c) => !c.hasAttribute('inert')).length;
 
   it('renders the header, tiles, every card, and the brief', async () => {
     setup();
@@ -496,32 +524,93 @@ describe('mount', () => {
   describe('brief disclosure', () => {
     afterEach(() => {
       localStorage.clear();
+      vi.restoreAllMocks();
+      vi.useRealTimers();
     });
 
-    it('starts collapsed on one line with a real disclosure button', () => {
+    it('starts collapsed on the first row of cards, with a real disclosure button', () => {
+      layoutCards(3);
       setup();
       const toggle = root.querySelector<HTMLButtonElement>('.brief-toggle');
       expect(toggle?.tagName).toBe('BUTTON');
       expect(toggle?.getAttribute('aria-expanded')).toBe('false');
-      expect(toggle?.textContent).toBe('Show more');
-      expect(root.querySelector<HTMLElement>('#brief-body')?.hidden).toBe(true);
-      expect(root.querySelector('.brief-summary-text')?.textContent).toBe(
-        'Median first review in 3.5h (was 11h)',
-      );
-      expect(root.querySelector('.brief-summary-more')?.textContent).toBe('· 3 more worth a look');
+      expect(toggle?.getAttribute('aria-controls')).toBe('brief-grid');
+      expect(cards().length).toBe(8);
+      expect(toggle?.textContent).toBe('Show 5 more');
+      // The first row stays readable; the rest is clipped and inert behind the fade.
+      expect(shown()).toBe(3);
+      expect(cards().map((c) => c.hasAttribute('inert'))).toEqual([
+        false,
+        false,
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+      ]);
+      expect(grid().dataset.clipped).toBe('');
+      expect(grid().style.maxHeight).toBe('240px');
+      expect(root.querySelector<HTMLElement>('#brief')?.dataset.expanded).toBe('0');
+      // The summary sentence is gone: the cards themselves are the summary.
+      expect(root.querySelector('.brief-summary')).toBeNull();
     });
 
-    it('opens on click and remembers the choice', () => {
+    it('opens on click, shows every card, and remembers the choice', () => {
+      vi.useFakeTimers();
+      layoutCards(3);
       setup();
       root.querySelector<HTMLButtonElement>('.brief-toggle')?.click();
       expect(root.querySelector('.brief-toggle')?.getAttribute('aria-expanded')).toBe('true');
       expect(root.querySelector('.brief-toggle')?.textContent).toBe('Show less');
-      expect(root.querySelector<HTMLElement>('#brief-body')?.hidden).toBe(false);
+      expect(shown()).toBe(8);
+      expect(root.querySelector<HTMLElement>('#brief')?.dataset.expanded).toBe('1');
+      // The grid grows through the transition, then sizes itself again.
+      vi.advanceTimersByTime(250);
+      expect(grid().dataset.clipped).toBeUndefined();
+      expect(grid().style.maxHeight).toBe('');
       expect(localStorage.getItem('bilan.brief.expanded')).toBe('1');
       handle?.destroy();
       handle = undefined;
       setup();
       expect(root.querySelector('.brief-toggle')?.getAttribute('aria-expanded')).toBe('true');
+      expect(shown()).toBe(8);
+      expect(grid().dataset.clipped).toBeUndefined();
+    });
+
+    it('closes again from the keyboard-operable button', () => {
+      layoutCards(3);
+      localStorage.setItem('bilan.brief.expanded', '1');
+      setup();
+      root.querySelector<HTMLButtonElement>('.brief-toggle')?.click();
+      expect(root.querySelector('.brief-toggle')?.getAttribute('aria-expanded')).toBe('false');
+      expect(shown()).toBe(3);
+      expect(grid().dataset.clipped).toBe('');
+      expect(grid().style.maxHeight).toBe('240px');
+      expect(localStorage.getItem('bilan.brief.expanded')).toBe('0');
+    });
+
+    it('follows the grid when the window is resized', () => {
+      vi.useFakeTimers();
+      layoutCards(3);
+      setup();
+      expect(shown()).toBe(3);
+      vi.restoreAllMocks();
+      layoutCards(2);
+      window.dispatchEvent(new Event('resize'));
+      vi.advanceTimersByTime(200);
+      expect(shown()).toBe(2);
+      expect(root.querySelector('.brief-toggle')?.textContent).toBe('Show 6 more');
+      expect(grid().style.maxHeight).toBe('240px');
+    });
+
+    it('clips nothing when every card fits on one row', () => {
+      layoutCards(8);
+      setup();
+      expect(shown()).toBe(8);
+      expect(root.querySelector('.brief-toggle')?.textContent).toBe('Show more');
+      expect(grid().dataset.clipped).toBeUndefined();
+      expect(grid().style.maxHeight).toBe('');
     });
   });
 

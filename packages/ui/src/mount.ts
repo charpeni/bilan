@@ -270,7 +270,10 @@ export function mount(root: HTMLElement, payload: Payload, options: MountOptions
   let resizeTimer: ReturnType<typeof setTimeout> | undefined;
   const onResize = (): void => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(draw, 180);
+    resizeTimer = setTimeout(() => {
+      brief.relayout();
+      draw();
+    }, 180);
   };
   const onScheme = (): void => {
     if (html.dataset.theme === 'auto') draw();
@@ -292,7 +295,7 @@ export function mount(root: HTMLElement, payload: Payload, options: MountOptions
   });
   themeObserver.observe(html, { attributes: true, attributeFilter: ['data-theme'] });
 
-  renderBrief(ctx);
+  const brief = renderBrief(ctx);
   draw();
 
   return {
@@ -303,6 +306,7 @@ export function mount(root: HTMLElement, payload: Payload, options: MountOptions
     destroy(): void {
       destroyed = true;
       clearTimeout(resizeTimer);
+      brief.destroy();
       themeObserver.disconnect();
       window.removeEventListener('scroll', onScroll, true);
       window.removeEventListener('resize', onResize);

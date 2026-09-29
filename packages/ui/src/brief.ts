@@ -36,26 +36,41 @@ const joinFrags = (runs: Frag[][], sep: string): Frag[] =>
 /** Where the reader's choice to open the brief is kept. */
 export const BRIEF_EXPANDED_KEY = 'bilan.brief.expanded';
 
-export interface BriefSummary {
-  /** The one line shown while the brief is collapsed. */
-  headline: string;
-  /** How many further items are flagged "worth a look" beyond the one shown. */
-  more: number;
+export interface BriefHandle {
+  /** Measure the first row again (the window was resized, fonts arrived) and re-clip. */
+  relayout(): void;
+  destroy(): void;
 }
 
 /**
- * What the collapsed brief says: the first item flagged "worth a look" (the
- * items are already ordered flagged-first), else the throughput headline;
- * and how many more flagged items wait behind it.
+ * How many cards share the first row of the grid: the run of cards whose
+ * `offsetTop` equals the first card's, so the count follows the grid's natural
+ * wrapping at any width instead of a hard-coded column count.
  */
-export function briefSummaryLine(items: readonly BriefItem[]): BriefSummary {
-  const flagged = items.filter((it) => it.watch);
-  const lead = flagged[0] ?? items.find((it) => it.tag === 'Throughput') ?? items[0];
-  return { headline: lead?.title ?? '', more: flagged.length ? flagged.length - 1 : 0 };
+export function firstRowCount(offsetTops: readonly number[]): number {
+  const first = offsetTops[0];
+  if (first === undefined) return 0;
+  let n = 0;
+  for (const top of offsetTops) {
+    if (top !== first) break;
+    n += 1;
+  }
+  return n;
 }
 
-/** `· 3 more worth a look`, or nothing. */
-export const moreText = (more: number): string => (more > 0 ? `· ${more} more worth a look` : '');
+/**
+ * The collapsed grid's height: the tallest card of the first row plus the row
+ * gap, so the clipped edge falls where the second row starts.
+ */
+export const collapsedHeight = (cardHeights: readonly number[], gap: number): number =>
+  cardHeights.length ? Math.max(...cardHeights) + gap : 0;
+
+/** What the disclosure button says. */
+export const toggleText = (expanded: boolean, hidden: number): string =>
+  expanded ? 'Show less' : hidden > 0 ? `Show ${hidden} more` : 'Show more';
+
+/** How long the max-height transition runs (see `.brief-grid` in styles.css). */
+const SETTLE_MS = 220;
 
 const readExpanded = (): boolean => {
   try {
@@ -108,11 +123,15 @@ export const COMPARE_RANGE = '90' satisfies Range;
  * reach back 60 days, the current period is read out on its own: no deltas,
  * no "before" figures. First-ever claims ("new contributors") need the whole
  * history, so they only appear when coverage is full.
+ *
+ * Collapsed, the brief shows the first row of cards and clips the rest behind
+ * a fade; expanded, it shows them all. The reader's choice is kept.
  */
-export function renderBrief(ctx: DashboardContext): void {
+export function renderBrief(ctx: DashboardContext): BriefHandle {
   const { root, data, prs, bots, last: LAST } = ctx;
+  const none: BriefHandle = { relayout: () => {}, destroy: () => {} };
   const host = root.querySelector<HTMLElement>('#brief');
-  if (!host) return;
+  if (!host) return none;
   host.textContent = '';
   const frag = (f: Frag): Node | string => (typeof f === 'string' ? f : person(f.who, bots));
   const line = (l: Line): (Node | string)[] => (typeof l === 'string' ? [l] : l.map(frag));
@@ -337,38 +356,13 @@ export function renderBrief(ctx: DashboardContext): void {
   // Flagged items lead; the rest keep their fixed order.
   const ordered = [...items.filter((i) => i.watch), ...items.filter((i) => !i.watch)];
   const head = el('div', { class: 'brief-head' }, [el('h2', { text: 'Last 30 days at a glance' })]);
-  // Collapsed by default to one line; the reader's choice to open it is kept.
-  const summary = briefSummaryLine(ordered);
-  const summaryText = el('span', { class: 'brief-summary-text', text: summary.headline });
-  const summaryMore = el('span', { class: 'brief-summary-more', text: moreText(summary.more) });
-  const toggle = el('button', {
-    type: 'button',
-    class: 'brief-toggle',
-    'aria-expanded': 'false',
-    'aria-controls': 'brief-body',
-  });
-  head.append(el('div', { class: 'brief-summary' }, [summaryText, summaryMore, toggle]));
-  const body = el('div', { class: 'brief-body', id: 'brief-body' });
-  body.append(
+  host.append(
+    head,
     el('p', {
       class: 'desc',
       text: `${fmtDate(LAST - 30 * DAY)} – ${fmtDate(LAST)}${vs(', compared with the 30 days before')}. Bots excluded except under Automation. The filters below do not change this section.`,
     }),
   );
-  let expanded = readExpanded();
-  const apply = (): void => {
-    toggle.setAttribute('aria-expanded', String(expanded));
-    toggle.textContent = expanded ? 'Show less' : 'Show more';
-    body.hidden = !expanded;
-    summaryText.hidden = expanded;
-    summaryMore.hidden = expanded || summary.more === 0;
-    host.dataset.expanded = expanded ? '1' : '0';
-  };
-  toggle.addEventListener('click', () => {
-    expanded = !expanded;
-    writeExpanded(expanded);
-    apply();
-  });
   if (!compare) {
     const row = el('div', { class: 'brief-compare' }, [
       el('p', { class: 'desc brief-compare-note', text: COMPARE_NOTE }),
@@ -386,9 +380,9 @@ export function renderBrief(ctx: DashboardContext): void {
       btn.addEventListener('click', () => requestMore(COMPARE_RANGE));
       row.append(btn);
     }
-    body.append(row);
+    host.append(row);
   }
-  const grid = el('div', { class: 'brief-grid' });
+  const grid = el('div', { class: 'brief-grid', id: 'brief-grid' });
   for (const it of ordered) {
     const card = el('article', { class: 'ins' });
     const top = el('div', { class: 'ins-top' }, [el('span', { class: 'ins-tag', text: it.tag })]);
@@ -422,7 +416,82 @@ export function renderBrief(ctx: DashboardContext): void {
     }
     grid.append(card);
   }
-  body.append(grid);
-  host.append(head, body);
-  apply();
+  // The disclosure sits under the clipped grid, on a real button.
+  const toggle = el('button', {
+    type: 'button',
+    class: 'brief-toggle',
+    'aria-expanded': 'false',
+    'aria-controls': 'brief-grid',
+  });
+  host.append(grid, el('div', { class: 'brief-foot' }, [toggle]));
+
+  /* ---- disclosure ---- */
+  const cards = [...grid.children].filter((c): c is HTMLElement => c instanceof HTMLElement);
+  let expanded = readExpanded();
+  let settle: ReturnType<typeof setTimeout> | undefined;
+  const unclip = (): void => {
+    grid.style.maxHeight = '';
+    delete grid.dataset.clipped;
+  };
+  /**
+   * Measure the first row and clip the grid to it, or let it grow. `animate`
+   * when the reader just toggled: the max-height then runs from the grid's
+   * current height, so the CSS transition has two lengths to move between.
+   * Cards past the first row are `inert` while clipped, so their links are
+   * neither read out nor tabbed to from behind the fade.
+   */
+  const layout = (animate: boolean): void => {
+    clearTimeout(settle);
+    const n = expanded ? cards.length : firstRowCount(cards.map((c) => c.offsetTop));
+    const hidden = cards.length - n;
+    toggle.setAttribute('aria-expanded', String(expanded));
+    toggle.textContent = toggleText(expanded, hidden);
+    host.dataset.expanded = expanded ? '1' : '0';
+    cards.forEach((c, i) => c.toggleAttribute('inert', i >= n));
+    if (hidden === 0) {
+      if (animate && grid.dataset.clipped !== undefined) {
+        // Opening: grow to the full height, then let the grid size itself again.
+        grid.style.maxHeight = `${grid.scrollHeight}px`;
+        settle = setTimeout(unclip, SETTLE_MS);
+      } else {
+        unclip();
+      }
+      return;
+    }
+    const gap = Number.parseFloat(getComputedStyle(grid).rowGap) || 0;
+    const target = collapsedHeight(
+      cards.slice(0, n).map((c) => c.offsetHeight),
+      gap,
+    );
+    if (animate && grid.dataset.clipped === undefined) {
+      // Closing from the natural height: start the transition from there.
+      grid.style.maxHeight = `${grid.scrollHeight}px`;
+      grid.dataset.clipped = '';
+      grid.getBoundingClientRect(); // commit that height before the target replaces it
+    }
+    grid.dataset.clipped = '';
+    grid.style.maxHeight = `${target}px`;
+  };
+  toggle.addEventListener('click', () => {
+    expanded = !expanded;
+    writeExpanded(expanded);
+    layout(true);
+  });
+  layout(false);
+  // Web fonts change the cards' heights when they arrive; measure again then.
+  const fonts: FontFaceSet | undefined = document.fonts;
+  let destroyed = false;
+  fonts?.ready.then(
+    () => {
+      if (!destroyed) layout(false);
+    },
+    () => {},
+  );
+  return {
+    relayout: () => layout(false),
+    destroy: () => {
+      destroyed = true;
+      clearTimeout(settle);
+    },
+  };
 }
