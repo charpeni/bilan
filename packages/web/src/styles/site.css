@@ -1620,6 +1620,20 @@ table.flags {
   font: 400 12px/1.5 var(--font-mono);
 }
 
+/* The deployed commit: there for whoever needs it, invisible to everyone else. */
+.footer .footer-sha {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  opacity: 0.45;
+  text-decoration: none;
+}
+.footer .footer-sha:hover,
+.footer .footer-sha:focus-visible {
+  opacity: 1;
+  text-decoration: underline;
+}
+
 /* ---- /repositories ---- */
 .page-head {
   margin: 0 0 32px;

@@ -33,7 +33,7 @@
     "no-underscore-dangle": [
       "error",
       {
-        "allow": ["__typename"]
+        "allow": ["__typename", "__BILAN_COMMIT__"]
       }
     ]
   }

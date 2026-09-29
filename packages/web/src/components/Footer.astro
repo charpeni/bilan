@@ -1,0 +1,39 @@
+---
+import { env } from 'cloudflare:workers';
+
+import BrandMark from './BrandMark.astro';
+import { installUrl } from '../lib/oauth.ts';
+
+const REPO_URL = 'https://github.com/charpeni/bilan';
+const install = installUrl(env);
+/** Set at build time from git (see astro.config.ts); empty when built outside a checkout. */
+const commit = __BILAN_COMMIT__;
+---
+
+<footer class="sheet footer">
+  <div class="footer-in">
+    <div class="footer-brand">
+      <a class="wordmark" href="/" aria-label="bilan, home">
+        <BrandMark size={17} />
+        bilan
+      </a>
+      <p>The pulse of a GitHub repository. For teams to see their own process, not to rank people.</p>
+    </div>
+    <ul>
+      <li><a href={REPO_URL}>Source on GitHub</a></li>
+      {install && <li><a href={install}>Install the GitHub App</a></li>}
+      <li><a href="/#examples">Examples</a></li>
+      <li><a href="/#cli">CLI</a></li>
+    </ul>
+    <p class="footer-made">
+      Made by <a href="https://github.com/charpeni">Nicolas Charpentier</a>. MIT licensed.
+      {
+        commit && (
+          <a class="footer-sha" href={`${REPO_URL}/commit/${commit}`} title="Deployed commit">
+            {commit.slice(0, 7)}
+          </a>
+        )
+      }
+    </p>
+  </div>
+</footer>

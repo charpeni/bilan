@@ -3,6 +3,7 @@ import '@bilan/ui/dist/bilan-ui.css';
 import '../styles/site.css';
 
 import BrandMark from '../components/BrandMark.astro';
+import Footer from '../components/Footer.astro';
 import PrivateLock from '../components/PrivateLock.astro';
 import UserMenu from '../components/UserMenu.astro';
 import { FONT_FACES, PRELOAD_FONTS } from '../styles/fonts.ts';
@@ -127,6 +128,7 @@ const ogImage = new URL('/brand/og.png', Astro.url).href;
       </div>
     </header>
     <slot />
+    <Footer />
     <script>
       // One theme for the whole site, chosen here: `data-theme` on <html>,
       // remembered in localStorage. The dashboard redraws its charts when the

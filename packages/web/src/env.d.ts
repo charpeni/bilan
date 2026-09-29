@@ -3,6 +3,9 @@ import type { SyncRepoParams } from './workflows/sync-repo.ts';
 import type { Runtime } from '@astrojs/cloudflare';
 
 declare global {
+  /** Full git sha of the build, injected by astro.config.ts; empty outside a checkout. */
+  const __BILAN_COMMIT__: string;
+
   /** Bindings declared in wrangler.jsonc. Keep in sync when adding a binding. */
   interface Env {
     ASSETS: Fetcher;

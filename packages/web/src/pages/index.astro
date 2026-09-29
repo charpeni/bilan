@@ -89,7 +89,6 @@ const aiSignals = (() => {
 })();
 const DESCRIPTION =
   'The pulse of a GitHub repository: who is contributing, which areas are moving, how reviews flow, where work gets stuck, and how AI-assisted coding is changing all of it over time.';
-const REPO_URL = 'https://github.com/charpeni/bilan';
 const COMMAND = 'npx github-bilan owner/name --open';
 
 const FLAGS: [string, string][] = [
@@ -561,27 +560,6 @@ const ANCHORS: { metric: string; anchor: string; ready?: boolean; measures: stri
       </div>
     </section>
   </main>
-
-  <footer class="sheet footer">
-    <div class="footer-in">
-      <div class="footer-brand">
-        <a class="wordmark" href="/" aria-label="bilan, home">
-          <BrandMark size={17} />
-          bilan
-        </a>
-        <p>The pulse of a GitHub repository. For teams to see their own process, not to rank people.</p>
-      </div>
-      <ul>
-        <li><a href={REPO_URL}>Source on GitHub</a></li>
-        {install && <li><a href={install}>Install the GitHub App</a></li>}
-        <li><a href="#examples">Examples</a></li>
-        <li><a href="#cli">CLI</a></li>
-      </ul>
-      <p class="footer-made">
-        Made by <a href="https://github.com/charpeni">Nicolas Charpentier</a>. MIT licensed.
-      </p>
-    </div>
-  </footer>
 
   <script>
     import { timelineSteps } from '../lib/timeline.ts';
