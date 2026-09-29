@@ -543,7 +543,7 @@ export function render(ctx: DashboardContext): void {
   {
     const rows = oldestOpen(stillOpen);
     const c = card(
-      'half',
+      'full',
       'Oldest open PRs',
       'Sorted by age. These are where the backlog actually lives.',
     );
