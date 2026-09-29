@@ -89,8 +89,11 @@ install page. Public repositories need no install.
    npx wrangler secret put GITHUB_CLIENT_SECRET
    openssl rand -base64 32 | npx wrangler secret put TOKEN_ENCRYPTION_KEY
    npx wrangler d1 migrations apply bilan --remote
-   pnpm run deploy
+   cd ../.. && pnpm run deploy
    ```
+
+   The deploy runs through turbo, which builds the dashboard and its
+   dependencies before `wrangler deploy`.
 
    `GITHUB_TOKEN`, a classic token with no scopes, is optional: it is only used
    as a fallback for public repositories a user token cannot reach.

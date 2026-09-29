@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "turbo run build",
+    "deploy": "turbo run deploy",
     "examples:build": "node packages/web/scripts/build-examples.mjs",
     "check": "pnpm format:check && pnpm lint && pnpm type-check && pnpm test",
     "format": "oxfmt",

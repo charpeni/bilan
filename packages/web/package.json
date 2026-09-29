@@ -7,7 +7,7 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "wrangler dev",
-    "deploy": "turbo run build --filter=@bilan/web && wrangler deploy",
+    "deploy": "wrangler deploy",
     "type-check": "astro check",
     "test": "vitest run",
     "db:migrate:local": "wrangler d1 migrations apply bilan --local"
