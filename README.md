@@ -20,7 +20,7 @@ Two ways to use it:
 ## CLI
 
 ```sh
-pnpm dlx github-bilan owner/name --open
+npx github-bilan owner/name --open
 ```
 
 One command: it syncs the repository into a local cache, writes

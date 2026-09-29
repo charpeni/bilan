@@ -47,3 +47,55 @@ export function timelineFigure(h: Headline): TimelineFigure | null {
     ticks,
   };
 }
+
+/* ---- drawing the figure in ---- */
+
+/** The baseline draws first, over this long. */
+export const TIMELINE_BASELINE_MS = 360;
+/** Each event mark waits this much longer than the one before it. */
+export const TIMELINE_STAGGER_MS = 120;
+/** How long one event mark takes to appear. */
+export const TIMELINE_MARK_MS = 320;
+/** The anchor lands last, with a little more time to settle. */
+export const TIMELINE_ANCHOR_MS = 400;
+/** The whole draw-in stays under this. */
+export const TIMELINE_MAX_MS = 1200;
+
+export interface TimelineStep {
+  /** `baseline`, an event name, or `anchor`. */
+  name: string;
+  /** Milliseconds after the figure comes into view. */
+  delay: number;
+  /** How long this step's transition runs. */
+  duration: number;
+}
+
+/**
+ * When each part of the figure appears: the baseline first, then the event
+ * marks in the order given (chronological: opened, ready, first review,
+ * merged), each a short stagger after the last and starting while the
+ * baseline is still drawing so the whole thing stays brisk; the "[" anchor
+ * lands last. With `reduceMotion` every step is immediate.
+ */
+export function timelineSteps(events: readonly string[], reduceMotion = false): TimelineStep[] {
+  if (reduceMotion) {
+    return ['baseline', ...events, 'anchor'].map((name) => ({ name, duration: 0, delay: 0 }));
+  }
+  const firstMark = TIMELINE_BASELINE_MS / 2;
+  const marks = events.map((name, i) => ({
+    name,
+    delay: firstMark + i * TIMELINE_STAGGER_MS,
+    duration: TIMELINE_MARK_MS,
+  }));
+  const last = marks.at(-1);
+  const anchorAt = (last ? last.delay : firstMark) + TIMELINE_STAGGER_MS * 2;
+  return [
+    { name: 'baseline', delay: 0, duration: TIMELINE_BASELINE_MS },
+    ...marks,
+    { name: 'anchor', delay: anchorAt, duration: TIMELINE_ANCHOR_MS },
+  ];
+}
+
+/** When the last step ends. */
+export const timelineTotal = (steps: readonly TimelineStep[]): number =>
+  Math.max(0, ...steps.map((s) => s.delay + s.duration));

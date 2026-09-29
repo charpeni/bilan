@@ -90,7 +90,7 @@ const aiSignals = (() => {
 const DESCRIPTION =
   'The pulse of a GitHub repository: who is contributing, which areas are moving, how reviews flow, where work gets stuck, and how AI-assisted coding is changing all of it over time.';
 const REPO_URL = 'https://github.com/charpeni/bilan';
-const COMMAND = 'pnpm dlx github-bilan owner/name --open';
+const COMMAND = 'npx github-bilan owner/name --open';
 
 const FLAGS: [string, string][] = [
   ['--open', 'Open the report in the browser when it is written.'],
@@ -333,35 +333,35 @@ const ANCHORS: { metric: string; anchor: string; ready?: boolean; measures: stri
                 The median pull request in {firstExample.repo} over the last 30 days of its snapshot.
               </p>
               <div class="tl" id="timeline">
-                <div class="tl-lane">
+                <div class="tl-lane" data-step="opened">
                   <span class="tl-bar draft" style={`--x:0%;--w:${figure.ready}%`} />
                   <span class="tl-label" style="--x:0%;--dx:0px">
                     In draft<span class="figure-v">{dur(figure.draftMs)}</span>, not counted as review time
                   </span>
                 </div>
-                <div class="tl-lane">
+                <div class="tl-lane" data-step="first">
                   <span class="tl-bar first" style={`--x:${figure.ready}%;--w:${figure.first}%`} />
                   <span class="tl-label" style={`--x:${figure.ready}%;--dx:10px`}>
                     <b>Time to first review</b>
                     <span class="figure-v">{dur(figure.firstMs)}</span>
                   </span>
                 </div>
-                <div class="tl-lane">
+                <div class="tl-lane" data-step="merged">
                   <span class="tl-bar merge" style={`--x:${figure.ready}%;--w:${figure.merge}%`} />
                   <span class="tl-label" style={`--x:${figure.ready}%;--dx:10px`}>
                     <b>Time to merge</b>
                     <span class="figure-v">{dur(figure.mergeMs)}</span>
                   </span>
                 </div>
-                <div class="tl-anchor" style={`--x:${figure.ready}%`}>
+                <div class="tl-anchor" data-step="anchor" style={`--x:${figure.ready}%`}>
                   <span>
                     <b>Ready for review.</b> <i>Measurement starts here.</i>
                   </span>
                 </div>
-                <div class="tl-axis" aria-hidden="true">
-                  <span class="tl-tick start" style="--x:0%">opened</span>
+                <div class="tl-axis" data-step="baseline" aria-hidden="true">
+                  <span class="tl-tick start" data-step="opened" style="--x:0%">opened</span>
                   {figure.ticks.map((t) => (
-                    <span class="tl-tick" style={`--x:${t.at}%`}>
+                    <span class="tl-tick" data-step="ready" style={`--x:${t.at}%`}>
                       {t.label}
                     </span>
                   ))}
@@ -582,6 +582,39 @@ const ANCHORS: { metric: string; anchor: string; ready?: boolean; measures: stri
       </p>
     </div>
   </footer>
+
+  <script>
+    import { timelineSteps } from '../lib/timeline.ts';
+
+    // Draw the "where review time starts" figure in the first time it scrolls
+    // into view: the baseline, the events in order, then the anchor. Without
+    // this script, or with reduced motion, the figure is simply there.
+    const tl = document.getElementById('timeline');
+    if (tl) {
+      const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      for (const step of timelineSteps(['opened', 'ready', 'first', 'merged'], reduce)) {
+        for (const node of tl.querySelectorAll<HTMLElement>(`[data-step="${step.name}"]`)) {
+          node.style.setProperty('--delay', `${step.delay}ms`);
+          node.style.setProperty('--dur', `${step.duration}ms`);
+        }
+      }
+      const drawn = (): void => tl.classList.add('is-drawn');
+      if (reduce || typeof IntersectionObserver !== 'function') {
+        drawn();
+      } else {
+        tl.dataset.animate = '';
+        const io = new IntersectionObserver(
+          (entries) => {
+            if (!entries.some((e) => e.isIntersecting)) return;
+            io.disconnect();
+            drawn();
+          },
+          { threshold: 0.35 },
+        );
+        io.observe(tl);
+      }
+    }
+  </script>
 
   <script>
     // Copy the CLI command; the button says so, and a live region tells screen readers.

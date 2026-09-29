@@ -1285,6 +1285,57 @@ form + .pop-item,
 .tl-tick.start::before {
   left: 0;
 }
+/*
+ * Drawing the figure in. `data-animate` is set by the page script, so without
+ * it the figure is simply there; `is-drawn` starts the transitions, each part
+ * on the delay the script gave it. Transforms and opacity only: nothing moves
+ * in layout.
+ */
+.tl[data-animate] .tl-bar {
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+}
+.tl[data-animate] .tl-lane,
+.tl[data-animate] .tl-tick,
+.tl[data-animate] .tl-anchor {
+  opacity: 0;
+}
+.tl[data-animate] .tl-anchor {
+  transform: translateY(-8px);
+}
+/* The baseline redraws as a line that extends from the left. */
+.tl[data-animate] .tl-axis {
+  border-top-color: transparent;
+}
+.tl[data-animate] .tl-axis::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -1px;
+  height: 1px;
+  background: var(--rule);
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+}
+.tl[data-animate].is-drawn .tl-axis::after,
+.tl[data-animate].is-drawn .tl-bar {
+  transform: none;
+  transition: transform var(--dur) ease-out var(--delay);
+}
+.tl[data-animate].is-drawn .tl-lane,
+.tl[data-animate].is-drawn .tl-tick {
+  opacity: 1;
+  transition: opacity var(--dur) ease-out var(--delay);
+}
+/* The anchor lands last and settles: a touch past its mark, then back. */
+.tl[data-animate].is-drawn .tl-anchor {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity var(--dur) ease-out var(--delay),
+    transform var(--dur) cubic-bezier(0.2, 0.8, 0.25, 1.15) var(--delay);
+}
 
 /*
  * Datasheet tables. Each cell draws its own rule and stops a gutter short, so
@@ -2128,5 +2179,13 @@ table.flags {
     width: 100%;
     animation: none;
     opacity: 0.6;
+  }
+  /* The timeline is drawn at once. */
+  .tl[data-animate] .tl-bar,
+  .tl[data-animate] .tl-lane,
+  .tl[data-animate] .tl-tick,
+  .tl[data-animate] .tl-anchor,
+  .tl[data-animate] .tl-axis::after {
+    transition: none;
   }
 }
