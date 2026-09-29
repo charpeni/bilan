@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   BRIEF_COMPARE_DAYS,
+  COLLAPSED_PEEK,
   canCompare,
   collapsedHeight,
   firstRowCount,
@@ -85,6 +86,7 @@ describe('firstRowCount', () => {
 describe('collapsedHeight', () => {
   it('is the tallest first-row card plus the row gap', () => {
     expect(collapsedHeight([180, 236, 204], 32)).toBe(268);
+    expect(collapsedHeight([180, 236, 204], 32, true)).toBe(268 + COLLAPSED_PEEK);
     expect(collapsedHeight([150], 0)).toBe(150);
   });
 

@@ -62,8 +62,22 @@ export function firstRowCount(offsetTops: readonly number[]): number {
  * The collapsed grid's height: the tallest card of the first row plus the row
  * gap, so the clipped edge falls where the second row starts.
  */
-export const collapsedHeight = (cardHeights: readonly number[], gap: number): number =>
-  cardHeights.length ? Math.max(...cardHeights) + gap : 0;
+/** How far the collapsed brief peeks into the second row, so the fade covers real content. */
+export const COLLAPSED_PEEK = 40;
+
+/**
+ * Height of the collapsed grid: the tallest first-row card, the row gap, and, when
+ * more rows exist, a peek into the next row so the bottom fade has something to
+ * fade over instead of empty gutter.
+ */
+export const collapsedHeight = (
+  cardHeights: readonly number[],
+  gap: number,
+  moreRows = false,
+): number => {
+  if (cardHeights.length === 0) return 0;
+  return Math.max(...cardHeights) + gap + (moreRows ? COLLAPSED_PEEK : 0);
+};
 
 /** What the disclosure button says. */
 export const toggleText = (expanded: boolean, hidden: number): string =>
@@ -462,6 +476,7 @@ export function renderBrief(ctx: DashboardContext): BriefHandle {
     const target = collapsedHeight(
       cards.slice(0, n).map((c) => c.offsetHeight),
       gap,
+      n < cards.length,
     );
     if (animate && grid.dataset.clipped === undefined) {
       // Closing from the natural height: start the transition from there.
