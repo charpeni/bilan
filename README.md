@@ -55,7 +55,9 @@ out, it shows two built-in example dashboards (`withastro/astro` and
 repository you can read on your own token into a shared cache, so a coworker
 who opens the same link sees the dashboard instantly.
 
-Access is checked per viewer against GitHub with the viewer's own token. A
+Access is checked per viewer against GitHub with the viewer's own token;
+allowed access and public visibility are cached for up to 15 minutes. Job
+progress requires repository access too, even for an old completed job. A
 private repository the viewer cannot read is indistinguishable from one that
 does not exist. Private data nobody has opened in 90 days is deleted.
 

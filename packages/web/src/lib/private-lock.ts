@@ -1,6 +1,6 @@
 /** What the lock icon on a private repository says when hovered or focused. */
 export const PRIVATE_LOCK_COPY =
-  'Private repository. Only people who can see it on GitHub can open this dashboard; bilan checks their access with their own GitHub token each time. Nothing here is public.';
+  'Private repository. Only people who can see it on GitHub can open this dashboard. bilan checks GitHub access and caches permission for up to 15 minutes. Nothing here is public.';
 
 export const PRIVATE_LOCK_LABEL = 'Private repository';
 

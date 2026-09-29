@@ -1,9 +1,9 @@
-import { schema } from '@bilan/store-d1';
+import { getRepoById } from '@bilan/store-d1';
 import { env } from 'cloudflare:workers';
-import { eq } from 'drizzle-orm';
 
+import { accessDeps, checkRepoAccess } from '../../../lib/access.ts';
 import { getDb } from '../../../lib/db.ts';
-import { json, loginRequired } from '../../../lib/http.ts';
+import { githubUnavailable, json, loginRequired } from '../../../lib/http.ts';
 import { isSettledJobStatus, jobVisibility } from '../../../lib/job-visibility.ts';
 import { countStoredPrs, getJob, reconcileJob } from '../../../lib/jobs.ts';
 import { syncProgress, syncStage } from '../../../lib/sync-progress.ts';
@@ -13,21 +13,25 @@ import type { APIRoute } from 'astro';
 const unknownJob = () => json({ message: 'unknown job' }, 404);
 
 /**
- * A job's status is decided from its row alone (`jobVisibility`): the
- * viewer's own jobs are readable, everything else (another user's job, an
- * unknown id) answers the same 404, or 401 signed out. GitHub is never
- * asked, so a job id can never be turned into a probe, and a GitHub outage
- * never changes the answer.
+ * Ownership is checked before repository access, so someone else's job and
+ * an unknown id answer alike. An owned job also needs current repository
+ * access before any live progress or workflow details are read.
  */
 export const GET: APIRoute = async ({ params, locals }) => {
   const id = params.id as string;
   const db = getDb(env);
   const user = locals.user;
+  if (!user) return loginRequired();
   let job = await getJob(db, id);
 
   const visibility = jobVisibility({ job, user });
   if (visibility === 'login-required') return loginRequired();
   if (visibility === 'unknown' || job === undefined) return unknownJob();
+  const repo = await getRepoById(db, job.repoId);
+  if (!repo) return unknownJob();
+  const access = await checkRepoAccess(accessDeps(env), user, repo);
+  if (access.kind === 'unavailable') return githubUnavailable();
+  if (access.kind !== 'ok') return unknownJob();
   // A row can say "running" long after its Workflow instance died; settle it
   // here so the page stops polling and the next sync is not blocked.
   if (job.status === 'queued' || job.status === 'running') {
@@ -48,20 +52,11 @@ export const GET: APIRoute = async ({ params, locals }) => {
   // `stage`: where a staged first sync is (`syncStage`), null for a single-stage run.
   const settled = isSettledJobStatus(job.status);
   const prsStored = await countStoredPrs(db, job.repoId);
-  const repo = await db
-    .select({
-      totalPrs: schema.repos.totalPrs,
-      lastSyncedAt: schema.repos.lastSyncedAt,
-      syncStartedAt: schema.repos.syncStartedAt,
-    })
-    .from(schema.repos)
-    .where(eq(schema.repos.id, job.repoId))
-    .get();
   const stage = syncStage({ job, repo });
   const progress = syncProgress({
     mode: job.mode,
     prsStored,
-    totalPrs: repo?.totalPrs ?? null,
+    totalPrs: repo.totalPrs,
     stage,
   });
   return json({ ...job, settled, prsStored, progress, stage, workflow }, 200, {

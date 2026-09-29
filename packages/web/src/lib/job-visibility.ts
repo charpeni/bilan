@@ -6,9 +6,9 @@ export type VisibleJob = Pick<SyncJob, 'requestedBy'>;
 export type JobVisibility = 'ok' | 'login-required' | 'unknown';
 
 /**
- * Whether the viewer may read a sync job's status. Decided from the row alone:
- * no KV, no GitHub, so the answer is the same whatever GitHub's mood, and the
- * route can never turn a job id into a repo probe.
+ * The ownership gate, before checking repository access. Only the viewer's
+ * own job may proceed to that check, so other job ids are never repo probes.
+ * An `ok` here is necessary, but does not authorize reading live progress.
  *
  * | job            | signed out     | signed in                          |
  * | -------------- | -------------- | ---------------------------------- |
