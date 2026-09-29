@@ -2,13 +2,16 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DEFAULT_DEPTH,
+  INTERIM_DEPTH,
   SYNC_DEPTHS,
   coverageAfterRun,
   coverageAfterSync,
   depthToSince,
+  interimCoverage,
   isSyncDepth,
   openPrsComplete,
   runComplete,
+  syncStages,
   trustUnchangedFrom,
   trustUnchangedFromOpen,
   widenCoverage,
@@ -24,6 +27,10 @@ it('maps a day depth to now minus that many days', () => {
 
 it('has no bound for all', () => {
   expect(depthToSince('all', now)).toBeUndefined();
+});
+
+it('maps the interim stage depth like any other', () => {
+  expect(depthToSince(INTERIM_DEPTH, now)?.toISOString()).toBe('2026-04-24T12:00:00.000Z');
 });
 
 it('defaults to the current time', () => {
@@ -268,5 +275,64 @@ describe('coverageAfterRun', () => {
         '2026-06-01T00:00:00Z',
       ),
     ).toBeNull();
+  });
+});
+
+describe('syncStages', () => {
+  const never = { syncedAt: null };
+  const synced = { syncedAt: '2026-04-30T00:00:00.000Z' };
+  const day7 = '2026-04-24T12:00:00.000Z';
+  const day30 = '2026-04-01T12:00:00.000Z';
+
+  it('splits a first sync at the default depth into an interim 7-day stage and the 30-day one', () => {
+    expect(syncStages(never, '30d', now)).toEqual([
+      { depth: INTERIM_DEPTH, since: day7 },
+      { depth: '30d', since: day30 },
+    ]);
+  });
+
+  it('keeps the bound the job walks to as the final stage', () => {
+    const caughtUp = '2026-03-01T00:00:00.000Z';
+    expect(syncStages(never, '30d', now, caughtUp)).toEqual([
+      { depth: '7d', since: day7 },
+      { depth: '30d', since: caughtUp },
+    ]);
+  });
+
+  it('is a single stage once the repo has a payload', () => {
+    expect(syncStages(synced, '30d', now)).toEqual([{ depth: '30d', since: day30 }]);
+  });
+
+  it('is a single stage for an explicit deeper load, first sync or not', () => {
+    expect(syncStages(never, '90d', now)).toEqual([
+      { depth: '90d', since: '2026-01-31T12:00:00.000Z' },
+    ]);
+    expect(syncStages(never, 'all', now)).toEqual([{ depth: 'all', since: undefined }]);
+    expect(syncStages(synced, 'all', now)).toEqual([{ depth: 'all', since: undefined }]);
+  });
+
+  it('drops the interim stage when the job bound is not deeper than it', () => {
+    expect(syncStages(never, '30d', now, day7)).toEqual([{ depth: '30d', since: day7 }]);
+    expect(syncStages(never, '30d', now, '2026-04-28T00:00:00.000Z')).toEqual([
+      { depth: '30d', since: '2026-04-28T00:00:00.000Z' },
+    ]);
+  });
+});
+
+describe('interimCoverage', () => {
+  const stage = { depth: INTERIM_DEPTH, since: '2026-04-24T12:00:00.000Z' } as const;
+  const syncedAt = '2026-05-01T12:00:00.000Z';
+
+  it('claims the stage bound, whatever the walk reached below it', () => {
+    const below = Date.parse('2026-04-20T00:00:00.000Z');
+    expect(interimCoverage(stage, below, syncedAt)).toBe(stage.since);
+    expect(interimCoverage(stage, null, syncedAt)).toBe(stage.since);
+  });
+
+  it('matches what the final publish would claim for a walk stopped at the same bound', () => {
+    const oldest = Date.parse('2026-04-23T00:00:00.000Z');
+    expect(interimCoverage(stage, oldest, syncedAt)).toBe(
+      coverageAfterSync({ stop: 'since', since: stage.since, oldestReached: oldest, syncedAt }),
+    );
   });
 });

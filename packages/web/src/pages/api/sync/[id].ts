@@ -6,7 +6,7 @@ import { getDb } from '../../../lib/db.ts';
 import { json, loginRequired } from '../../../lib/http.ts';
 import { isSettledJobStatus, jobVisibility } from '../../../lib/job-visibility.ts';
 import { countStoredPrs, getJob, reconcileJob } from '../../../lib/jobs.ts';
-import { syncProgress } from '../../../lib/sync-progress.ts';
+import { syncProgress, syncStage } from '../../../lib/sync-progress.ts';
 
 import type { APIRoute } from 'astro';
 
@@ -45,15 +45,26 @@ export const GET: APIRoute = async ({ params, locals }) => {
   }
   // `settled`: a payload was published (`complete`, or `partial` for a budget-cut run).
   // `prsStored`: rows written for the repo so far, which the page shows as progress.
+  // `stage`: where a staged first sync is (`syncStage`), null for a single-stage run.
   const settled = isSettledJobStatus(job.status);
   const prsStored = await countStoredPrs(db, job.repoId);
   const repo = await db
-    .select({ totalPrs: schema.repos.totalPrs })
+    .select({
+      totalPrs: schema.repos.totalPrs,
+      lastSyncedAt: schema.repos.lastSyncedAt,
+      syncStartedAt: schema.repos.syncStartedAt,
+    })
     .from(schema.repos)
     .where(eq(schema.repos.id, job.repoId))
     .get();
-  const progress = syncProgress({ mode: job.mode, prsStored, totalPrs: repo?.totalPrs ?? null });
-  return json({ ...job, settled, prsStored, progress, workflow }, 200, {
+  const stage = syncStage({ job, repo });
+  const progress = syncProgress({
+    mode: job.mode,
+    prsStored,
+    totalPrs: repo?.totalPrs ?? null,
+    stage,
+  });
+  return json({ ...job, settled, prsStored, progress, stage, workflow }, 200, {
     'cache-control': 'no-store',
   });
 };

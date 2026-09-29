@@ -8,8 +8,10 @@ import { getDb } from '../lib/db.ts';
 import {
   coverageAfterRun,
   coverageAfterSync,
+  interimCoverage,
   openPrsComplete,
   runComplete,
+  syncStages,
   trustUnchangedFrom,
   trustUnchangedFromOpen,
 } from '../lib/depth.ts';
@@ -18,7 +20,7 @@ import { payloadKey } from '../lib/payload-key.ts';
 import { serverToken } from '../lib/token-source.ts';
 import { ReauthRequiredError, useUserToken } from '../lib/tokens.ts';
 
-import type { OpenWalkStop, PriorCoverage, WalkStop } from '../lib/depth.ts';
+import type { OpenWalkStop, PriorCoverage, SyncDepth, SyncStage, WalkStop } from '../lib/depth.ts';
 import type { WorkflowEvent, WorkflowStep } from 'cloudflare:workers';
 
 /**
@@ -33,6 +35,8 @@ export type SyncRepoParams = SyncTokenSource & {
   owner: string;
   name: string;
   mode: 'incremental' | 'full';
+  /** How far back the job was asked to guarantee activity; `since` is its bound, caught up. */
+  depth: SyncDepth;
   /**
    * ISO instant. Stop walking once a page is older than this, then fetch every
    * open PR so the backlog is complete whatever the depth. Omit for full history.
@@ -53,6 +57,9 @@ interface PageStepResult {
   oldestUpdatedAt: number | null;
 }
 
+/** An interim stage: one with a bound to publish at. */
+type InterimStage = SyncStage & { since: string };
+
 const PAGE_SIZE = 25;
 const RATE_LIMIT_RESERVE = 200;
 const UNCHANGED_PAGES_TO_STOP = 2;
@@ -65,7 +72,7 @@ const PAGE_RETRIES = {
 
 export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
   override async run(event: Readonly<WorkflowEvent<SyncRepoParams>>, step: WorkflowStep) {
-    const { owner, name, mode } = event.payload;
+    const { owner, name, mode, depth, since, maxPrs } = event.payload;
     const jobId = event.instanceId;
     const repoLabel = `${owner}/${name}`;
     const env = this.env;
@@ -76,41 +83,56 @@ export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
       withClientFor(env, event.payload, fn);
 
     try {
-      const { repoId, prior, startedAt } = await step.do('resolve-repo', PAGE_RETRIES, async () => {
-        const { meta } = await withClient((client) => client.repoMeta({ owner, name }));
-        const repo = await upsertRepo(db, {
-          id: meta.id,
-          owner,
-          name,
-          isPrivate: meta.isPrivate,
-          totalPrs: meta.pullRequests.totalCount,
-        });
-        await db
-          .update(schema.syncJobs)
-          .set({ status: 'running', progressAt: new Date().toISOString() })
-          .where(eq(schema.syncJobs.id, jobId));
-        // Read the prior state before stamping this run as started: `interrupted`
-        // must reflect the previous run, not this one. The marker keeps the
-        // earliest unfinished start (`markStarted` only sets it when null), so
-        // that is the instant this run reconciles from and what `reconciledAt`
-        // becomes once it completes.
-        const repoStore = new D1Store(db, repo.id, repoLabel);
-        const stored = await repoStore.meta();
-        const runStartedAt = stored.syncStartedAt ?? new Date().toISOString();
-        await repoStore.markStarted(runStartedAt);
-        const priorCoverage: PriorCoverage = {
-          syncedAt: stored.syncedAt,
-          coverageSince: stored.coverageSince,
-          openPrsSyncedAt: stored.openPrsSyncedAt,
-          interrupted: stored.interrupted,
-          reconciledAt: stored.reconciledAt,
-        };
-        return { repoId: repo.id, prior: priorCoverage, startedAt: runStartedAt };
-      });
+      const { repoId, prior, startedAt, stages } = await step.do(
+        'resolve-repo',
+        PAGE_RETRIES,
+        async () => {
+          const { meta } = await withClient((client) => client.repoMeta({ owner, name }));
+          const repo = await upsertRepo(db, {
+            id: meta.id,
+            owner,
+            name,
+            isPrivate: meta.isPrivate,
+            totalPrs: meta.pullRequests.totalCount,
+          });
+          await db
+            .update(schema.syncJobs)
+            .set({ status: 'running', progressAt: new Date().toISOString() })
+            .where(eq(schema.syncJobs.id, jobId));
+          // Read the prior state before stamping this run as started: `interrupted`
+          // must reflect the previous run, not this one. The marker keeps the
+          // earliest unfinished start (`markStarted` only sets it when null), so
+          // that is the instant this run reconciles from and what `reconciledAt`
+          // becomes once it completes.
+          const repoStore = new D1Store(db, repo.id, repoLabel);
+          const stored = await repoStore.meta();
+          const runStartedAt = stored.syncStartedAt ?? new Date().toISOString();
+          await repoStore.markStarted(runStartedAt);
+          const priorCoverage: PriorCoverage = {
+            syncedAt: stored.syncedAt,
+            coverageSince: stored.coverageSince,
+            openPrsSyncedAt: stored.openPrsSyncedAt,
+            interrupted: stored.interrupted,
+            reconciledAt: stored.reconciledAt,
+          };
+          // A first sync at the default depth publishes an interim payload on the
+          // way (`syncStages`); the bounds are fixed here so retries see the same.
+          const runStages = syncStages(priorCoverage, depth, new Date(), since);
+          return {
+            repoId: repo.id,
+            prior: priorCoverage,
+            startedAt: runStartedAt,
+            stages: runStages,
+          };
+        },
+      );
 
       const store = new D1Store(db, repoId, repoLabel);
-      const { since, maxPrs } = event.payload;
       const sinceMs = since === undefined ? undefined : Date.parse(since);
+      // Every stage but the last publishes an interim payload; the last stops the walk at `since`.
+      const interimStages: InterimStage[] = stages
+        .slice(0, -1)
+        .flatMap((stage) => (stage.since === undefined ? [] : [{ ...stage, since: stage.since }]));
       // Unchanged pages only count toward the incremental stop below these
       // bounds, as in core's `sync()`: never while deepening beyond what the
       // store already covers, never after an interrupted run (its rows look
@@ -166,6 +188,53 @@ export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
           .where(eq(schema.syncJobs.id, jobId));
         return result;
       };
+      /** Gzip the payload to R2 under the key `GET /payload` reads for `syncedAt`. */
+      const publish = async (syncedAt: string, payload: ReturnType<typeof buildPayload>) => {
+        const body = await gzip(JSON.stringify(payload));
+        await env.PAYLOADS.put(payloadKey(repoId, syncedAt), body, {
+          httpMetadata: { contentType: 'application/json', contentEncoding: 'gzip' },
+        });
+      };
+      /**
+       * Interim publish for a staged first sync: the payload so far, served by
+       * `GET /payload` as soon as `last_synced_at` is set, stamped as a partial
+       * run (`complete: false`) so the in-flight marker stays, `reconciledAt`
+       * and the open set are untouched, and coverage claims only this stage's
+       * bound. The step key is fixed per stage, so a retry publishes again under
+       * a later `syncedAt` and the final publish supersedes it either way.
+       */
+      const publishInterim = async (index: number, stage: InterimStage): Promise<void> => {
+        await step.do(`build-payload-${index + 1}`, PAGE_RETRIES, async () => {
+          const syncedAt = new Date().toISOString();
+          const coverage = interimCoverage(stage, oldestReached, syncedAt);
+          const payload = buildPayload(
+            {
+              repo: repoLabel,
+              syncedAt,
+              coverageSince: coverageAfterRun(prior, coverage),
+              openPrsSyncedAt: prior.openPrsSyncedAt,
+              reconciledAt: prior.reconciledAt,
+              interrupted: true,
+              syncStartedAt: startedAt,
+            },
+            await store.all(),
+          );
+          await publish(syncedAt, payload);
+          await store.markSynced(syncedAt, coverage, false, false);
+          // The status endpoint tells the stage from the rows (`syncStage`); keep the heartbeat beating.
+          await db
+            .update(schema.syncJobs)
+            .set({ progressAt: new Date().toISOString(), pointsSpent })
+            .where(eq(schema.syncJobs.id, jobId));
+          return {
+            syncedAt,
+            prs: payload.prs.length,
+            coverage,
+            stage: index + 1,
+            stages: stages.length,
+          };
+        });
+      };
       /** GitHub's window resets on the hour; park the instance until then before the next page. */
       const parkIfLow = async (label: string, result: PageStepResult): Promise<void> => {
         if (result.remaining < RATE_LIMIT_RESERVE) {
@@ -173,9 +242,12 @@ export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
         }
       };
 
-      // Main pass: every PR by updatedAt desc, until `since` (or one of the other stops).
+      // Main pass: every PR by updatedAt desc, until `since` (or one of the
+      // other stops). A staged first sync publishes an interim payload once a
+      // page dips below each interim bound and walks on from the same cursor.
       let cursor: string | null = null;
       let unchangedStreak = 0;
+      let nextInterim = 0;
       for (let page = 1; ; page++) {
         if (pagesUsed >= MAX_PAGES) break;
         const result = await fetchPage(`page-${page}`, cursor);
@@ -199,9 +271,17 @@ export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
           break;
         }
         // Pages are ordered by updatedAt desc: once one dips below `since`, so does the rest.
-        if (sinceMs !== undefined && (result.oldestUpdatedAt ?? -Infinity) < sinceMs) {
+        const oldest = result.oldestUpdatedAt ?? -Infinity;
+        if (sinceMs !== undefined && oldest < sinceMs) {
           stop = 'since';
           break;
+        }
+        // Below an interim bound too: publish, then walk on from this page's cursor.
+        while (nextInterim < interimStages.length) {
+          const stage = interimStages[nextInterim];
+          if (stage === undefined || oldest >= Date.parse(stage.since)) break;
+          await publishInterim(nextInterim, stage);
+          nextInterim++;
         }
         await parkIfLow(`page-${page}`, result);
         cursor = result.nextCursor;
@@ -264,10 +344,7 @@ export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
           },
           await store.all(),
         );
-        const body = await gzip(JSON.stringify(payload));
-        await env.PAYLOADS.put(payloadKey(repoId, syncedAt), body, {
-          httpMetadata: { contentType: 'application/json', contentEncoding: 'gzip' },
-        });
+        await publish(syncedAt, payload);
         await store.markSynced(syncedAt, coverage, openComplete, complete);
         if (mode === 'full' && complete) {
           await db

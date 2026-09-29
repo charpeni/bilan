@@ -18,6 +18,7 @@ import {
   SYNCED_AT_HEADER,
 } from '../../../../../lib/poll.ts';
 import { isStale } from '../../../../../lib/stale.ts';
+import { COVERAGE_SINCE_HEADER } from '../../../../../lib/sync-progress.ts';
 
 import type { SessionUser } from '../../../../../lib/session.ts';
 import type { APIRoute } from 'astro';
@@ -27,8 +28,11 @@ import type { APIRoute } from 'astro';
  * it may not read (see `lib/poll.ts`): `x-bilan-synced-at` names the payload
  * on offer and `x-bilan-sync-active` says whether a job is queued or running.
  * Both are answered only once the viewer passed the same access check as the
- * payload itself. `HEAD` answers the same status and headers without the body,
- * so polling never re-downloads the payload.
+ * payload itself. `x-bilan-coverage-since` is how far back the payload on
+ * offer reaches (empty: none yet, or full history), so a page watching a
+ * staged first sync can say what its interim payload covers. `HEAD` answers
+ * the same status and headers without the body, so polling never re-downloads
+ * the payload.
  *
  * A built-in example is answered first, for anyone, from the static asset
  * shipped with the app (`public/examples/`): no database, no GitHub, no login.
@@ -63,6 +67,7 @@ async function respond(
   const progress = job ? { [PRS_STORED_HEADER]: String(await countStoredPrs(db, repo.id)) } : {};
   const syncActive = {
     [SYNC_ACTIVE_HEADER]: job ? '1' : '0',
+    [COVERAGE_SINCE_HEADER]: repo.coverageSince ?? '',
     'cache-control': 'no-store',
     ...progress,
   };
@@ -95,6 +100,7 @@ async function respond(
       [SYNCED_AT_HEADER]: repo.lastSyncedAt,
       'x-bilan-stale': isStale(repo.lastSyncedAt) ? '1' : '0',
       [SYNC_ACTIVE_HEADER]: syncActive[SYNC_ACTIVE_HEADER],
+      [COVERAGE_SINCE_HEADER]: syncActive[COVERAGE_SINCE_HEADER],
       ...progress,
     },
   });

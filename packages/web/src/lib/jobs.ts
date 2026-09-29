@@ -104,6 +104,16 @@ export function findActiveJob(db: Db, repoId: string): Promise<SyncJob | undefin
     .get();
 }
 
+/** The most recent job for a repo, whatever its status; undefined when it never had one. */
+export function findLastJob(db: Db, repoId: string): Promise<SyncJob | undefined> {
+  return db
+    .select()
+    .from(schema.syncJobs)
+    .where(eq(schema.syncJobs.repoId, repoId))
+    .orderBy(desc(schema.syncJobs.createdAt))
+    .get();
+}
+
 /**
  * Pull requests stored for a repo: while a job runs, how far it got (each
  * page's rows are written as the page lands), which the page shows as
@@ -228,6 +238,7 @@ export async function startSync(
       ? { tokenSource: 'server' }
       : { tokenSource: 'user', userId: source.userId }),
     mode,
+    depth,
     ...(since === undefined ? {} : { since }),
     ...(options.maxPrs === undefined ? {} : { maxPrs: options.maxPrs }),
   };

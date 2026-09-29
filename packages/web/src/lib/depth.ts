@@ -6,6 +6,15 @@ export const SYNC_DEPTHS: readonly SyncDepth[] = ['30d', '90d', '180d', 'all'];
 /** The product default: what the cron and a plain `POST /sync` load. */
 export const DEFAULT_DEPTH: SyncDepth = '30d';
 
+/**
+ * How far a run's stage walks: a depth the user can ask for, or the interim
+ * bound a first sync publishes at before going on (see `syncStages`).
+ */
+export type StageDepth = typeof INTERIM_DEPTH | SyncDepth;
+
+/** How far back the first stage of a staged first sync walks before publishing. */
+export const INTERIM_DEPTH = '7d';
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const isSyncDepth = (value: unknown): value is SyncDepth =>
@@ -16,10 +25,61 @@ export const isSyncDepth = (value: unknown): value is SyncDepth =>
  * `all` (no bound). This is the instant recorded as coverage once the sync
  * lands, so it is computed once at job start rather than per page.
  */
-export function depthToSince(depth: SyncDepth, now: Date = new Date()): Date | undefined {
+export function depthToSince(depth: StageDepth, now: Date = new Date()): Date | undefined {
   if (depth === 'all') return undefined;
   const days = Number(depth.slice(0, -1));
   return new Date(now.getTime() - days * DAY_MS);
+}
+
+/** One leg of a run's main walk: stop once a page is older than `since` (`undefined`: never). */
+export interface SyncStage {
+  depth: StageDepth;
+  since: string | undefined;
+}
+
+/**
+ * The bounds a run's main walk publishes at, in order. A repo's first sync at
+ * the default depth has nothing to show for minutes on a busy repo, so it runs
+ * in two stages: down to `INTERIM_DEPTH`, where an interim payload is published,
+ * then on from the same cursor to the depth's bound, the open-PR pass, and the
+ * final payload. Every other run (a repo that already has a payload, or an
+ * explicit deeper load) is a single stage.
+ *
+ * `since` is the bound the job actually walks to (`catchUpSince` may have moved
+ * it earlier than the depth's own); it becomes the last stage's. An interim
+ * stage is only kept when it is strictly shallower than that bound.
+ */
+export function syncStages(
+  prior: Pick<PriorCoverage, 'syncedAt'>,
+  depth: SyncDepth,
+  now: Date = new Date(),
+  since: string | undefined = depthToSince(depth, now)?.toISOString(),
+): SyncStage[] {
+  const final: SyncStage = { depth, since };
+  if (prior.syncedAt !== null || depth !== DEFAULT_DEPTH) return [final];
+  const interimSince = depthToSince(INTERIM_DEPTH, now)?.toISOString();
+  if (
+    interimSince === undefined ||
+    (since !== undefined && Date.parse(since) >= Date.parse(interimSince))
+  ) {
+    return [final];
+  }
+  return [{ depth: INTERIM_DEPTH, since: interimSince }, final];
+}
+
+/**
+ * The coverage an interim publish can claim: the walk went below the stage's
+ * bound (that is what triggers it), so it is the bound itself, under the same
+ * exclusive-bound rules as the final publish (`coverageAfterSync`).
+ */
+export function interimCoverage(
+  stage: SyncStage & { since: string },
+  oldestReached: number | null,
+  syncedAt: string,
+): string {
+  return (
+    coverageAfterSync({ stop: 'since', since: stage.since, oldestReached, syncedAt }) ?? stage.since
+  );
 }
 
 /** Why a page walk ended; core's `StopReason` plus the Workflow step budget. */
