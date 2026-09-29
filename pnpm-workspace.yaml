@@ -5,6 +5,11 @@ allowBuilds:
   esbuild: true
   workerd: true
 
+# Security patches while upstream development tools still pin affected copies.
+# Drizzle Kit's legacy loader only uses esbuild's transform API.
+overrides:
+  '@esbuild-kit/core-utils>esbuild': 0.25.12
+
 minimumReleaseAgeExclude:
   - '@turbo/darwin-64@2.11.3'
   - '@turbo/darwin-arm64@2.11.3'
