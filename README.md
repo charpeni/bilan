@@ -65,6 +65,9 @@ them, including mid-sync. Private repositories require the app to be installed
 on the organization, once, by an owner; members can request it from the app's
 install page. Public repositories need no install.
 
+Installation callbacks without browser-bound OAuth state restart normal
+sign-in; their supplied authorization code is never used to create a session.
+
 ### Running it yourself
 
 1. Create a GitHub App with permissions Pull requests: Read-only and Metadata:

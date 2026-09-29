@@ -146,16 +146,16 @@ export function tokenGrant(tokens: OAuth2Tokens, now: number = Date.now()): Toke
   };
 }
 
-export type CallbackFlow = 'browser' | 'install' | 'reject';
+export type CallbackFlow = 'browser' | 'restart' | 'reject';
 
 /**
  * Which flow a callback request belongs to. A sign-in started on our page
  * carries the `state` we put in the cookie. An authorization started from
  * GitHub's install screen ("request user authorization during installation")
  * arrives with `code`, `installation_id`, and `setup_action` but no `state`,
- * because nothing on our side began it; the single-use code bound to our app
- * is the only proof, so that path is accepted only when GitHub says it is an
- * install and no state was echoed at all.
+ * because nothing on our side began it. Those query parameters are untrusted:
+ * they can only restart sign-in, never authorize exchanging the supplied code.
+ * Only a callback bound to this browser's state may create a session.
  */
 export function callbackFlow(params: {
   code: string | null;
@@ -165,9 +165,9 @@ export function callbackFlow(params: {
   stored: OauthState | null;
 }): CallbackFlow {
   if (!params.code) return 'reject';
-  if (params.state === null && params.setupAction !== null && params.installationId !== null) {
-    return 'install';
-  }
   if (params.stored && statesMatch(params.stored.state, params.state)) return 'browser';
+  if (params.state === null && params.setupAction !== null && params.installationId !== null) {
+    return 'restart';
+  }
   return 'reject';
 }

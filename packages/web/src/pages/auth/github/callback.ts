@@ -8,6 +8,7 @@ import {
   callbackFlow,
   decodeOauthState,
   githubProvider,
+  loginHref,
   OAUTH_COOKIE,
   tokenGrant,
 } from '../../../lib/oauth.ts';
@@ -32,12 +33,13 @@ export const GET: APIRoute = async ({ url, cookies, redirect }) => {
     installationId: url.searchParams.get('installation_id'),
     stored,
   });
+  // Installation callbacks have no browser-bound state. Discard their code
+  // and start a normal authorization transaction in the visiting browser.
+  if (flow === 'restart') return redirect(loginHref('/repositories'), 302);
   if (flow === 'reject' || code === null) {
     return json({ message: 'OAuth state mismatch or expired; start the sign-in again' }, 400);
   }
-  // Coming back from GitHub's install screen: land on the repo list, where the
-  // newly reachable private repos can be opened.
-  const next = flow === 'install' ? '/repositories' : (stored?.next ?? '/repositories');
+  const next = stored?.next ?? '/repositories';
 
   try {
     await tokenKey(env);

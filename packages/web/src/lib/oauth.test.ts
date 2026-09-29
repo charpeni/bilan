@@ -173,7 +173,7 @@ describe('callbackFlow', () => {
     ).toBe('browser');
   });
 
-  it('accepts an install-initiated authorization that carries no state', () => {
+  it('restarts install-initiated authorization instead of accepting its code', () => {
     expect(
       callbackFlow({
         code: 'c',
@@ -182,7 +182,21 @@ describe('callbackFlow', () => {
         installationId: '165970809',
         stored: null,
       }),
-    ).toBe('install');
+    ).toBe('restart');
+  });
+
+  it('cannot authorize a session using forged install flags or an unrelated state cookie', () => {
+    for (const cookie of [null, stored]) {
+      expect(
+        callbackFlow({
+          code: 'attacker-code',
+          state: null,
+          setupAction: '',
+          installationId: '',
+          stored: cookie,
+        }),
+      ).toBe('restart');
+    }
   });
 
   it('rejects everything else', () => {
