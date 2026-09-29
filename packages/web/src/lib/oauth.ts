@@ -145,3 +145,29 @@ export function tokenGrant(tokens: OAuth2Tokens, now: number = Date.now()): Toke
     refreshExpiresAt: at('refresh_token_expires_in'),
   };
 }
+
+export type CallbackFlow = 'browser' | 'install' | 'reject';
+
+/**
+ * Which flow a callback request belongs to. A sign-in started on our page
+ * carries the `state` we put in the cookie. An authorization started from
+ * GitHub's install screen ("request user authorization during installation")
+ * arrives with `code`, `installation_id`, and `setup_action` but no `state`,
+ * because nothing on our side began it; the single-use code bound to our app
+ * is the only proof, so that path is accepted only when GitHub says it is an
+ * install and no state was echoed at all.
+ */
+export function callbackFlow(params: {
+  code: string | null;
+  state: string | null;
+  setupAction: string | null;
+  installationId: string | null;
+  stored: OauthState | null;
+}): CallbackFlow {
+  if (!params.code) return 'reject';
+  if (params.state === null && params.setupAction !== null && params.installationId !== null) {
+    return 'install';
+  }
+  if (params.stored && statesMatch(params.stored.state, params.state)) return 'browser';
+  return 'reject';
+}

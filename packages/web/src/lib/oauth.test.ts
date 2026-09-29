@@ -2,13 +2,14 @@ import { OAuth2Tokens } from 'arctic';
 import { describe, expect, it } from 'vitest';
 
 import {
+  LOGIN_SCOPES,
+  callbackFlow,
   callbackUrl,
   decodeOauthState,
   encodeOauthState,
   githubProvider,
   installUrl,
   isOauthConfigured,
-  LOGIN_SCOPES,
   loginHref,
   safeNext,
   statesMatch,
@@ -160,5 +161,54 @@ describe('tokenGrant', () => {
       refreshExpiresAt: null,
     });
     expect(() => tokens.accessTokenExpiresAt()).toThrow();
+  });
+});
+
+describe('callbackFlow', () => {
+  const stored = { state: 'abc', next: '/acme/widgets' };
+
+  it('accepts a browser sign-in whose state matches the cookie', () => {
+    expect(
+      callbackFlow({ code: 'c', state: 'abc', setupAction: null, installationId: null, stored }),
+    ).toBe('browser');
+  });
+
+  it('accepts an install-initiated authorization that carries no state', () => {
+    expect(
+      callbackFlow({
+        code: 'c',
+        state: null,
+        setupAction: 'install',
+        installationId: '165970809',
+        stored: null,
+      }),
+    ).toBe('install');
+  });
+
+  it('rejects everything else', () => {
+    expect(
+      callbackFlow({ code: 'c', state: 'nope', setupAction: null, installationId: null, stored }),
+    ).toBe('reject');
+    expect(
+      callbackFlow({ code: 'c', state: null, setupAction: null, installationId: null, stored }),
+    ).toBe('reject');
+    expect(
+      callbackFlow({
+        code: 'c',
+        state: 'abc',
+        setupAction: 'install',
+        installationId: '1',
+        stored: null,
+      }),
+    ).toBe('reject');
+    expect(
+      callbackFlow({
+        code: null,
+        state: null,
+        setupAction: 'install',
+        installationId: '1',
+        stored: null,
+      }),
+    ).toBe('reject');
   });
 });

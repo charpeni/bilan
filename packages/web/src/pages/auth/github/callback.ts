@@ -5,10 +5,10 @@ import { env } from 'cloudflare:workers';
 import { getDb } from '../../../lib/db.ts';
 import { json } from '../../../lib/http.ts';
 import {
+  callbackFlow,
   decodeOauthState,
   githubProvider,
   OAUTH_COOKIE,
-  statesMatch,
   tokenGrant,
 } from '../../../lib/oauth.ts';
 import {
@@ -25,9 +25,19 @@ export const GET: APIRoute = async ({ url, cookies, redirect }) => {
   const stored = decodeOauthState(cookies.get(OAUTH_COOKIE)?.value);
   cookies.delete(OAUTH_COOKIE, { path: '/' });
   const code = url.searchParams.get('code');
-  if (!stored || !code || !statesMatch(stored.state, url.searchParams.get('state'))) {
+  const flow = callbackFlow({
+    code,
+    state: url.searchParams.get('state'),
+    setupAction: url.searchParams.get('setup_action'),
+    installationId: url.searchParams.get('installation_id'),
+    stored,
+  });
+  if (flow === 'reject' || code === null) {
     return json({ message: 'OAuth state mismatch or expired; start the sign-in again' }, 400);
   }
+  // Coming back from GitHub's install screen: land on the repo list, where the
+  // newly reachable private repos can be opened.
+  const next = flow === 'install' ? '/me' : (stored?.next ?? '/me');
 
   try {
     await tokenKey(env);
@@ -58,5 +68,5 @@ export const GET: APIRoute = async ({ url, cookies, redirect }) => {
   const expiresAt = sessionExpiry();
   await createSession(db, { id: sessionId, userId, expiresAt });
   cookies.set(SESSION_COOKIE, sessionId, sessionCookieOptions(url, expiresAt));
-  return redirect(stored.next, 302);
+  return redirect(next, 302);
 };
