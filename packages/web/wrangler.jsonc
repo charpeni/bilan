@@ -42,6 +42,9 @@
       "class_name": "SyncRepoWorkflow",
     },
   ],
+  // Serve on bilan.charpeni.workers.dev; no per-version preview URLs (the GitHub App callback is bound to one host).
+  "workers_dev": true,
+  "preview_urls": false,
   "triggers": {
     "crons": ["0 6 * * *"],
   },
