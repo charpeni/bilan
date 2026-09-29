@@ -11,17 +11,3 @@ overrides:
   undici@7.29.0: 7.29.1
   sharp@0.35.2: 0.35.4
   '@esbuild-kit/core-utils>esbuild': 0.25.12
-
-minimumReleaseAgeExclude:
-  - '@turbo/darwin-64@2.11.3'
-  - '@turbo/darwin-arm64@2.11.3'
-  - '@turbo/linux-64@2.11.3'
-  - '@turbo/linux-arm64@2.11.3'
-  - '@turbo/windows-64@2.11.3'
-  - '@turbo/windows-arm64@2.11.3'
-  - turbo@2.11.3
-  - '@astrojs/cloudflare@14.3.3'
-  - '@astrojs/markdown-satteri@0.4.2'
-  - '@cloudflare/workers-types@5.20260923.1'
-  - astro@7.3.4
-  - wrangler@4.137.0
