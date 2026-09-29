@@ -19,7 +19,7 @@
     {
       "binding": "DB",
       "database_name": "bilan",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "a706a39a-208a-4e35-a8f0-cb7ed1c029a4",
       "migrations_dir": "../store-d1/migrations",
     },
   ],
@@ -32,7 +32,7 @@
   "kv_namespaces": [
     {
       "binding": "CACHE",
-      "id": "00000000000000000000000000000000",
+      "id": "5d8223fa9ec74ff3b172ff74b408a98f",
     },
   ],
   "workflows": [
