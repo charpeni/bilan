@@ -21,7 +21,7 @@ import {
   windowed,
 } from '@bilan/core';
 
-import { barChart, columnChart, heatmap, legend, timeChart } from './charts.ts';
+import { DASH, barChart, columnChart, heatmap, legend, timeChart } from './charts.ts';
 import { person, prLink, svgPerson } from './person.ts';
 import { table } from './table.ts';
 import { HOUR, compact, css, dur, el, fmtDate, num, pctFmt, plural } from './utils.ts';
@@ -34,6 +34,13 @@ import type { ContributorRow, MetricPr, ReviewerRow } from '@bilan/core';
 const S1 = (): string => css('--s1');
 const S2 = (): string => css('--s2');
 const S3 = (): string => css('--s3');
+/**
+ * Each chart ink keeps one line pattern wherever it appears, so a series reads
+ * without its hue: blue is solid, green dashed, brown dotted.
+ */
+const L1 = (): { color: string; dash: typeof DASH.solid } => ({ color: S1(), dash: DASH.solid });
+const L2 = (): { color: string; dash: typeof DASH.dotted } => ({ color: S2(), dash: DASH.dotted });
+const L3 = (): { color: string; dash: typeof DASH.dashed } => ({ color: S3(), dash: DASH.dashed });
 
 export function card(cls: string, title: string, desc?: string): HTMLDivElement {
   const c = el('div', { class: `card ${cls}` }, [el('h2', { text: title })]);
@@ -92,13 +99,14 @@ export function render(ctx: DashboardContext): void {
   const tiles = el('div', { class: 'tiles' });
   // The frame clips the tiles' outer separators, so a short last row is plain surface.
   const frame = el('div', { class: 'tiles-frame' }, [tiles]);
-  const tile = (k: string, v: string, d: string, hero?: boolean): void => {
+  // Seven equal readings: the brief's sentence above them provides the lead.
+  const tile = (k: string, v: string, d: string): void => {
     const t = el('div', { class: 'tile' }, [el('div', { class: 'k', text: k })]);
-    t.append(el('div', { class: hero ? 'hero' : 'v', text: v }));
+    t.append(el('div', { class: 'v', text: v }));
     if (d) t.append(el('div', { class: 'd', text: d }));
     tiles.append(t);
   };
-  tile('PRs opened', H.opened.toLocaleString(), plural(H.authors, 'author'), true);
+  tile('PRs opened', H.opened.toLocaleString(), plural(H.authors, 'author'));
   tile('Merged', H.merged.toLocaleString(), `${pctFmt(H.mergedShare)} of resolved`);
   tile('Closed unmerged', H.rejected.toLocaleString(), `${H.stillOpen} still open`);
   tile('Median time to merge', dur(H.medMerge), `p90 ${dur(H.p90Merge)} · from ready`);
@@ -123,9 +131,9 @@ export function render(ctx: DashboardContext): void {
       'PRs opened, merged, and closed without merging, bucketed by ISO week. The last point is the current, partial week.',
     );
     legend(c, [
-      { name: 'Opened', color: S1() },
-      { name: 'Merged', color: S3() },
-      { name: 'Closed unmerged', color: S2() },
+      { name: 'Opened', ...L1() },
+      { name: 'Merged', ...L3() },
+      { name: 'Closed unmerged', ...L2() },
     ]);
     const h = chartHost(c);
     grid.append(c);
@@ -134,9 +142,9 @@ export function render(ctx: DashboardContext): void {
         xs: weeks,
         mode: 'line',
         series: [
-          { name: 'Opened', color: S1(), values: t.opened },
-          { name: 'Merged', color: S3(), values: t.merged },
-          { name: 'Closed unmerged', color: S2(), values: t.closed },
+          { name: 'Opened', ...L1(), values: t.opened },
+          { name: 'Merged', ...L3(), values: t.merged },
+          { name: 'Closed unmerged', ...L2(), values: t.closed },
         ],
         tip,
       }),
@@ -152,8 +160,8 @@ export function render(ctx: DashboardContext): void {
       'PRs still open at the end of each week, and how many of them were still drafts. Drafts are counted from the ready-for-review event.',
     );
     legend(c, [
-      { name: 'Open', color: S1() },
-      { name: 'Of which drafts', color: S2() },
+      { name: 'Open', ...L1() },
+      { name: 'Of which drafts', ...L2() },
     ]);
     const h = chartHost(c);
     grid.append(c);
@@ -162,8 +170,8 @@ export function render(ctx: DashboardContext): void {
         xs: weeks,
         mode: 'area',
         series: [
-          { name: 'Open', color: S1(), values: backlog.open },
-          { name: 'Of which drafts', color: S2(), values: backlog.drafts },
+          { name: 'Open', ...L1(), values: backlog.open },
+          { name: 'Of which drafts', ...L2(), values: backlog.drafts },
         ],
         tip,
       }),
@@ -179,8 +187,8 @@ export function render(ctx: DashboardContext): void {
       'Weekly median time from ready-for-review to first review, and to merge. Weeks with no data are skipped; the last point is the current, partial week.',
     );
     legend(c, [
-      { name: 'Ready → first review', color: S2() },
-      { name: 'Ready → merged', color: S3() },
+      { name: 'Ready → first review', ...L2() },
+      { name: 'Ready → merged', ...L3() },
     ]);
     const h = chartHost(c);
     grid.append(c);
@@ -190,8 +198,8 @@ export function render(ctx: DashboardContext): void {
         mode: 'line',
         yFmt: hoursFmt,
         series: [
-          { name: 'Ready → first review', color: S2(), values: trend.toFirst },
-          { name: 'Ready → merged', color: S3(), values: trend.toMerge },
+          { name: 'Ready → first review', ...L2(), values: trend.toFirst },
+          { name: 'Ready → merged', ...L3(), values: trend.toMerge },
         ],
         tip,
       }),

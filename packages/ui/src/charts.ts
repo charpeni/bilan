@@ -18,17 +18,33 @@ export function ticks(max: number, count = 4): number[] {
   return out;
 }
 
+/**
+ * Line patterns, so a series never depends on hue alone: solid, dashed (6,3),
+ * and dotted (2,3), as SVG `stroke-dasharray` values ('' is solid).
+ */
+export const DASH = { solid: '', dashed: '6 3', dotted: '2 3' } as const;
+export type Dash = (typeof DASH)[keyof typeof DASH];
+
 export interface LegendItem {
   name: string;
   color: string;
   shape?: 'line' | 'rect';
+  /** The series' line pattern; solid when omitted. */
+  dash?: Dash;
+}
+
+/** The swatch's CSS background: the colour, broken into the same dashes as the line. */
+function swatch(color: string, dash: Dash | undefined): string {
+  const [on, off] = (dash ?? '').split(' ').map(Number);
+  if (!on || !off) return color;
+  return `repeating-linear-gradient(90deg, ${color} 0 ${on}px, transparent ${on}px ${on + off}px)`;
 }
 
 export function legend(c: HTMLElement, items: LegendItem[]): HTMLElement {
   const box = el('div', { class: 'legend' });
   for (const it of items) {
     const sw = el('i', { class: it.shape ?? 'line' });
-    sw.style.background = it.color;
+    sw.style.background = it.shape === 'rect' ? it.color : swatch(it.color, it.dash);
     box.append(el('span', {}, [sw, document.createTextNode(it.name)]));
   }
   c.append(box);
@@ -38,7 +54,15 @@ export function legend(c: HTMLElement, items: LegendItem[]): HTMLElement {
 /** Resting opacity of bars and columns; the hovered one goes to full ink. */
 const REST = 0.9;
 /** Side of the square point markers on line charts, in px. */
-const MARK = 7;
+const MARK = 8;
+/** Stroke width of every line series, in px. */
+const STROKE = 2;
+/** Direct labels at the line ends take over from the legend from this viewport width. */
+const DIRECT_LABELS_MIN = 768;
+/** Vertical room one end label needs, in px. */
+const LABEL_GAP = 16;
+/** Approximate advance of one character of an end label (12.5px Archivo), in px. */
+const LABEL_CHAR = 6.9;
 
 const setNum = (node: Element, name: string, v: number): void => {
   node.setAttribute(name, String(v));
@@ -49,6 +73,8 @@ export interface Series {
   color: string;
   values: (number | null)[];
   xLabel?: (x: number) => string;
+  /** The line pattern; solid when omitted. */
+  dash?: Dash;
 }
 
 export interface TimeChartOptions {
@@ -61,8 +87,36 @@ export interface TimeChartOptions {
 }
 
 /**
+ * Spread end labels so none overlaps the next: each keeps its own y where it
+ * can, and a crowded group is pushed apart evenly, inside [lo, hi].
+ */
+export function spreadLabels(ys: number[], gap: number, lo: number, hi: number): number[] {
+  const order = ys.map((y, i) => ({ y, i })).toSorted((a, b) => a.y - b.y);
+  const out = order.map((o) => Math.min(hi, Math.max(lo, o.y)));
+  for (let k = 1; k < out.length; k++) {
+    const prev = out[k - 1] ?? lo;
+    if ((out[k] ?? 0) < prev + gap) out[k] = prev + gap;
+  }
+  const overflow = (out[out.length - 1] ?? hi) - hi;
+  if (overflow > 0) {
+    for (let k = out.length - 1; k >= 0; k--) {
+      const next = k === out.length - 1 ? hi + gap : (out[k + 1] ?? hi);
+      out[k] = Math.min(out[k] ?? hi, next - gap);
+    }
+  }
+  const result: number[] = Array.from({ length: ys.length }, () => 0);
+  order.forEach((o, k) => {
+    result[o.i] = out[k] ?? o.y;
+  });
+  return result;
+}
+
+/**
  * Multi-series time chart with a snapping crosshair. `mode` is "line" or "area".
  * Every series must share the same x positions (we bucket before calling).
+ * From 768px wide, and when the plot keeps most of the width, each series is
+ * named at its line end and the card's legend is set aside for assistive
+ * technology (the host gets `data-direct="1"`).
  */
 export function timeChart(
   host: HTMLElement,
@@ -70,7 +124,13 @@ export function timeChart(
 ): void {
   const W = host.clientWidth || 800;
   const H = height;
-  const pad = { t: 10, r: 14, b: 26, l: 46 };
+  const labelW = Math.ceil(Math.max(0, ...series.map((s) => s.name.length)) * LABEL_CHAR) + 24;
+  const wide =
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia(`(min-width: ${DIRECT_LABELS_MIN}px)`).matches;
+  const direct = wide && series.length > 1 && W - 46 - labelW >= W * 0.55;
+  host.dataset.direct = direct ? '1' : '0';
+  const pad = { t: 10, r: direct ? labelW : 14, b: 26, l: 46 };
   const svg = svgEl('svg', {
     viewBox: `0 0 ${W} ${H}`,
     height: H,
@@ -139,6 +199,7 @@ export function timeChart(
     );
   }
 
+  const ends: { s: Series; x: number; y: number }[] = [];
   for (const s of series) {
     const pts = s.values
       .map((v, i): [number, number] | null => (v === null ? null : [X(i), Y(v)]))
@@ -146,6 +207,7 @@ export function timeChart(
     const first = pts[0];
     const last = pts[pts.length - 1];
     if (!first || !last) continue;
+    ends.push({ s, x: last[0], y: last[1] });
     const d = pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join('');
     if (mode === 'area') {
       const fill = svgEl('path', {
@@ -160,7 +222,8 @@ export function timeChart(
         d,
         fill: 'none',
         stroke: s.color,
-        'stroke-width': 1.5,
+        'stroke-width': STROKE,
+        'stroke-dasharray': s.dash || null,
         'stroke-linejoin': 'miter',
         'stroke-linecap': 'butt',
       }),
@@ -174,9 +237,42 @@ export function timeChart(
         height: MARK,
         fill: s.color,
         stroke: css('--page'),
-        'stroke-width': 1.5,
+        'stroke-width': 2,
       }),
     );
+  }
+
+  // Direct labels: each series named in the right gutter, level with its last
+  // point where there is room, joined to it by a leader in its colour and dash.
+  if (direct && ends.length) {
+    const gx = W - pad.r;
+    const ys = spreadLabels(
+      ends.map((e) => e.y),
+      LABEL_GAP,
+      pad.t + 4,
+      H - pad.b - 2,
+    );
+    ends.forEach((e, k) => {
+      const ly = ys[k] ?? e.y;
+      svg.append(
+        svgEl('path', {
+          class: 'leader',
+          d: `M${(e.x + MARK / 2 + 2).toFixed(1)},${e.y.toFixed(1)}L${(gx + 8).toFixed(1)},${ly.toFixed(1)}L${(gx + 16).toFixed(1)},${ly.toFixed(1)}`,
+          fill: 'none',
+          stroke: e.s.color,
+          'stroke-width': 1.5,
+          'stroke-dasharray': e.s.dash || null,
+        }),
+      );
+      const label = svgEl('text', {
+        class: 'elabel',
+        x: gx + 20,
+        y: ly + 4.5,
+        'aria-hidden': 'true',
+      });
+      label.textContent = e.s.name;
+      svg.append(label);
+    });
   }
 
   const hair = svgEl('line', { class: 'crosshair', y1: pad.t, y2: H - pad.b, opacity: 0 });

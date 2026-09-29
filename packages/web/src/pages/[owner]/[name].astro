@@ -589,57 +589,62 @@ const chipTitle =
     view === 'syncing' && (
       <main class="state">
         <div class="state-card">
-          <p class="eyebrow">
+          <p class="eyebrow state-rail">
             <BrandMark size={14} />
             First sync
           </p>
-          <h1>{label}</h1>
-          <p id="message">
-            {syncError ?? 'bilan is reading the last 30 days of activity, plus every open pull request, on your GitHub token.'}
-          </p>
-          <div class="progress" id="progress" hidden={syncError !== null} aria-hidden="true" />
-          <p class="progress-text" id="detail" role="status" aria-live="polite">
-            {syncError === null ? 'Starting…' : ''}
-          </p>
-          <p class="progress-sub" id="detail-2" />
-          <p class="progress-warn" id="stall" hidden>
-            <svg class="icon" viewBox="0 0 16 16" aria-hidden="true">
-              <path class="flag-tri" d="M8 1.5 15 14H1z" />
-              <path class="flag-mark" d="M8 6v4M8 11.6v.4" />
-            </svg>
-            <span id="stall-text" />
-          </p>
-          <p class="muted small" id="expect" hidden={syncError !== null}>
-            This usually takes under a minute; very busy repositories take a few. You can leave
-            this page: the sync keeps running, and the dashboard will be here (and in{' '}
-            <a href="/repositories">your repositories</a>) when it is done.
-          </p>
-          <div class="actions" id="retry" hidden={syncError === null}>
-            {canSync ? (
-              <>
-                <button class="btn btn-primary" type="button" id="restart">
-                  Start again
-                </button>
-                <a class="btn btn-primary" id="sign-in-again" href={loginHref} hidden>
-                  Sign in again
+          <div class="state-body">
+            <h1>{label}</h1>
+            <p class="progress-text" id="detail" role="status" aria-live="polite">
+              {syncError === null ? 'Starting…' : ''}
+            </p>
+            <div class="progress" id="progress" hidden={syncError !== null} aria-hidden="true" />
+            <p class="progress-sub" id="detail-2" />
+            <p class="progress-warn" id="stall" hidden>
+              <svg class="icon" viewBox="0 0 16 16" aria-hidden="true">
+                <path class="flag-tri" d="M8 1.5 15 14H1z" />
+                <path class="flag-mark" d="M8 6v4M8 11.6v.4" />
+              </svg>
+              <span id="stall-text" />
+            </p>
+            <p id="message">
+              {syncError ?? 'bilan is reading the last 30 days of activity, plus every open pull request, on your GitHub token.'}
+            </p>
+            <div id="expect" hidden={syncError !== null}>
+              <h2>What happens next</h2>
+              <p class="muted small">
+                This usually takes under a minute; very busy repositories take a few. You can leave
+                this page: the sync keeps running, and the dashboard will be here (and in{' '}
+                <a href="/repositories">your repositories</a>) when it is done.
+              </p>
+            </div>
+            <div class="actions" id="retry" hidden={syncError === null}>
+              {canSync ? (
+                <>
+                  <button class="btn btn-primary" type="button" id="restart">
+                    Start again
+                  </button>
+                  <a class="btn btn-primary" id="sign-in-again" href={loginHref} hidden>
+                    Sign in again
+                  </a>
+                </>
+              ) : (
+                <a class="btn btn-primary" href={Astro.url.pathname}>
+                  Try again
                 </a>
-              </>
-            ) : (
-              <a class="btn btn-primary" href={Astro.url.pathname}>
-                Try again
+              )}
+              <a class="btn" href="/repositories">
+                Your repositories
               </a>
-            )}
-            <a class="btn" href="/repositories">
-              Your repositories
-            </a>
+            </div>
+            <div
+              id="sync"
+              data-api-base={apiBase}
+              data-own-job-id={ownJobId ?? ''}
+              data-sync-active={syncActive ? '1' : '0'}
+              data-auto-start={canSync && syncError === null ? '1' : '0'}
+            />
           </div>
-          <div
-            id="sync"
-            data-api-base={apiBase}
-            data-own-job-id={ownJobId ?? ''}
-            data-sync-active={syncActive ? '1' : '0'}
-            data-auto-start={canSync && syncError === null ? '1' : '0'}
-          />
         </div>
         <script>
           import { fmtCount, liveCount, splitAtCount } from '../../lib/count-up.ts';
@@ -786,22 +791,24 @@ const chipTitle =
     view === 'unavailable' && (
       <main class="state">
         <div class="state-card">
-          <p class="eyebrow">
+          <p class="eyebrow state-rail">
             <BrandMark size={14} />
             Temporarily unavailable
           </p>
-          <h1>{label}</h1>
-          <p>
-            GitHub is not answering right now, so bilan cannot check whether you may see this
-            repository. Nothing is wrong with your access.
-          </p>
-          <div class="actions">
-            <a class="btn btn-primary" href={Astro.url.pathname}>
-              Try again
-            </a>
-            <a class="btn" href="/repositories">
-              Your repositories
-            </a>
+          <div class="state-body">
+            <h1>{label}</h1>
+            <p>
+              GitHub is not answering right now, so bilan cannot check whether you may see this
+              repository. Nothing is wrong with your access.
+            </p>
+            <div class="actions">
+              <a class="btn btn-primary" href={Astro.url.pathname}>
+                Try again
+              </a>
+              <a class="btn" href="/repositories">
+                Your repositories
+              </a>
+            </div>
           </div>
         </div>
       </main>
@@ -811,32 +818,34 @@ const chipTitle =
     view === 'sign-in' && (
       <main class="state">
         <div class="state-card">
-          <p class="eyebrow">
+          <p class="eyebrow state-rail">
             <BrandMark size={14} />
-            Repository activity
+            Sign in needed
           </p>
-          <h1>{label}</h1>
-          <p>
-            Sign in with GitHub to see what is moving in this repository. The dashboard opens for
-            anyone who can see the repository on GitHub.
-          </p>
-          <p class="muted small">
-            bilan reads pull request metadata with read-only permissions and never writes to your
-            repositories.
-          </p>
-          <div class="actions">
-            {oauthReady ? (
-              <a class="btn btn-primary" href={loginHref}>
-                Sign in with GitHub
+          <div class="state-body">
+            <h1>{label}</h1>
+            <p>
+              Sign in with GitHub to see what is moving in this repository. The dashboard opens for
+              anyone who can see the repository on GitHub.
+            </p>
+            <p class="muted small">
+              bilan reads pull request metadata with read-only permissions and never writes to your
+              repositories.
+            </p>
+            <div class="actions">
+              {oauthReady ? (
+                <a class="btn btn-primary" href={loginHref}>
+                  Sign in with GitHub
+                </a>
+              ) : (
+                <button class="btn btn-primary" type="button" disabled title="GITHUB_CLIENT_ID is not set">
+                  Sign in with GitHub
+                </button>
+              )}
+              <a class="btn" href="/#examples">
+                See an example
               </a>
-            ) : (
-              <button class="btn btn-primary" type="button" disabled title="GITHUB_CLIENT_ID is not set">
-                Sign in with GitHub
-              </button>
-            )}
-            <a class="btn" href="/#examples">
-              See an example
-            </a>
+            </div>
           </div>
         </div>
       </main>

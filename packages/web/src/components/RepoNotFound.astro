@@ -24,50 +24,52 @@ Astro.response.status = 404;
 
 <main class="state">
   <div class="state-card">
-    <p class="eyebrow">
+    <p class="eyebrow state-rail">
       <BrandMark size={14} />
       Repository not found
     </p>
-    <h1>{label}</h1>
-    <p>
-      bilan could not find this repository, or your GitHub account cannot see it. Check the
-      spelling of the owner and the name.
-    </p>
-    {
-      user !== null && (
-        <>
-          <h2>Is this a private repository?</h2>
-          <p>
-            bilan reads private repositories through its GitHub App, which must be installed on
-            the organization (or the repository) that owns <code>{label}</code>. It only ever reads
-            pull request metadata; it never writes to your repositories.
-          </p>
-          <p class="muted small">
-            Installing takes an organization owner or a repository admin. Anyone else can request
-            the install from the same page, and GitHub notifies the owners.
-          </p>
-          <div class="actions">
-            {install && (
-              <a class="btn btn-primary" href={install}>
-                Install bilan on GitHub
+    <div class="state-body">
+      <h1>{label}</h1>
+      <p>
+        bilan could not find this repository, or your GitHub account cannot see it. Check the
+        spelling of the owner and the name.
+      </p>
+      {
+        user !== null && (
+          <>
+            <h2>Is this a private repository?</h2>
+            <p>
+              bilan reads private repositories through its GitHub App, which must be installed on
+              the organization (or the repository) that owns <code>{label}</code>. It only ever reads
+              pull request metadata; it never writes to your repositories.
+            </p>
+            <p class="muted small">
+              Installing takes an organization owner or a repository admin. Anyone else can request
+              the install from the same page, and GitHub notifies the owners.
+            </p>
+            <div class="actions">
+              {install && (
+                <a class="btn btn-primary" href={install}>
+                  Install bilan on GitHub
+                </a>
+              )}
+              <a class="btn" href="/repositories">
+                Back to your repositories
               </a>
-            )}
-            <a class="btn" href="/repositories">
-              Back to your repositories
+            </div>
+          </>
+        )
+      }
+      {
+        user === null && (
+          <div class="actions">
+            <a class="btn btn-primary" href={loginHref(Astro.url.pathname)}>
+              Sign in with GitHub
             </a>
+            <span class="muted small">to sync repositories on your own token.</span>
           </div>
-        </>
-      )
-    }
-    {
-      user === null && (
-        <div class="actions">
-          <a class="btn btn-primary" href={loginHref(Astro.url.pathname)}>
-            Sign in with GitHub
-          </a>
-          <span class="muted small">to sync repositories on your own token.</span>
-        </div>
-      )
-    }
+        )
+      }
+    </div>
   </div>
 </main>

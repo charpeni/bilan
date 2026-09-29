@@ -55,8 +55,7 @@ const cardNamed = (root: ParentNode, title: string): Element | undefined =>
     (c) => c.querySelector('h2')?.textContent === title,
   );
 
-const heroValue = (root: ParentNode): string =>
-  root.querySelector('.tile .hero')?.textContent ?? '';
+const heroValue = (root: ParentNode): string => root.querySelector('.tile .v')?.textContent ?? '';
 
 describe('mount', () => {
   let root: HTMLElement;

@@ -3,9 +3,11 @@
  * and the web app around them (packages/web/src/styles/site.css consumes
  * these and defines none of its own). A datasheet: white or near-black paper,
  * ink and cool greys, hairline rules, zero radius, one grotesk for words and
- * one monospace for every figure and label. The ink-blue accent is spent on
- * three things only: the pressed state, links, and the "[" of the mark. Chart
- * inks keep their validated palette. Every token is defined for light and dark.
+ * one monospace for aligned figures. Labels are set in the grotesk, sentence
+ * case, never below 12px. The ink-blue accent is spent on the pressed state,
+ * links, focus, and the "[" of the mark. Chart inks keep their validated
+ * palette and every series also has its own dash pattern. Every token is
+ * defined for light and dark.
  */
 :root {
   /* planes: the page, raised surfaces, insets, and row hover */
@@ -59,12 +61,12 @@
   --font-mono:
     'JetBrains Mono Variable', 'JetBrains Mono Fallback', ui-monospace, 'SF Mono', Menlo, Consolas,
     monospace;
-  /* shape: square corners everywhere, flat planes, an ink focus ring */
+  /* shape: square corners everywhere, flat planes, a two-layer ink-blue focus ring */
   --radius: 0;
   --radius-sm: 0;
   --radius-xs: 0;
   --shadow: none;
-  --focus: 0 0 0 2px var(--page), 0 0 0 4px var(--ink);
+  --focus: 0 0 0 2px var(--page), 0 0 0 4px var(--accent);
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -206,7 +208,7 @@ body {
   text-decoration: underline;
 }
 .wrap svg a.quiet:focus-visible {
-  outline: 2px solid var(--ink);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -230,10 +232,9 @@ header.page h1 {
 header.page h1::before {
   content: 'Repository' / '';
   display: block;
-  margin-bottom: 12px;
-  font: 500 11px/1 var(--font-mono);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  margin-bottom: 10px;
+  font: 500 13px/1 var(--font-sans);
+  letter-spacing: 0;
   color: var(--muted);
 }
 header.page .sub {
@@ -310,7 +311,7 @@ thead th .sort:focus-visible,
   min-height: 32px;
   padding: 0 8px;
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 .range-seg button + button {
   box-shadow: none;
@@ -350,13 +351,13 @@ thead th .sort:focus-visible,
 .load-mark {
   display: inline-grid;
   place-items: center;
-  width: 13px;
-  height: 13px;
+  width: 15px;
+  height: 15px;
   margin-left: 6px;
   border: 1px solid var(--line-strong);
   color: var(--ink-2);
-  font: 600 10px/1 var(--font-mono);
-  vertical-align: 0;
+  font: 600 12px/1 var(--font-mono);
+  vertical-align: -1px;
 }
 .seg button[aria-busy='true'] {
   color: var(--ink);
@@ -427,7 +428,7 @@ label.check:hover {
 }
 .filters .note {
   color: var(--muted);
-  font: 400 11.5px/1.4 var(--font-mono);
+  font: 400 12px/1.4 var(--font-mono);
   margin-left: auto;
 }
 .filters .load-note {
@@ -482,8 +483,7 @@ label.check:hover {
   position: absolute;
   top: 12px;
   right: 0;
-  font: 500 11px/1 var(--font-mono);
-  letter-spacing: 0.04em;
+  font: 500 12px/1 var(--font-mono);
   color: var(--muted);
 }
 .card.half {
@@ -508,21 +508,25 @@ label.check:hover {
   margin: 0 40px 4px 0;
 }
 .card > .desc {
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.5;
   color: var(--muted);
   margin: 0 0 16px;
   max-width: 72ch;
 }
 
-/* ---- headline figures: a parameter strip between two ink rules ---- */
+/*
+ * ---- headline figures: seven equal readings between two ink rules ----
+ * No reading is larger than another: the brief's sentence above them says
+ * which one matters this time.
+ */
 .tiles {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 }
 /*
  * Each tile spans three shared rows (label, figure, note), so every figure in
- * a row sits on one baseline however its label wraps or however large it is.
+ * a row sits on one baseline however its label wraps.
  */
 .tiles > .tile {
   display: grid;
@@ -553,14 +557,11 @@ label.check:hover {
   min-width: 0;
 }
 .tile .k {
-  font: 500 10.5px/1.35 var(--font-mono);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 16px;
+  font: 500 13px/1.35 var(--font-sans);
+  color: var(--ink-2);
+  margin-bottom: 12px;
 }
-.tile .v,
-.hero {
+.tile .v {
   align-self: last baseline;
   font-family: var(--font-mono);
   font-weight: 500;
@@ -572,21 +573,18 @@ label.check:hover {
 .tile .v {
   font-size: 30px;
 }
-.hero {
-  font-size: 44px;
-}
 .tile .d {
-  font: 400 11.5px/1.45 var(--font-mono);
+  font: 400 12px/1.45 var(--font-mono);
   color: var(--ink-2);
   margin-top: 10px;
 }
 
-/* ---- legend ---- */
+/* ---- legend: a swatch drawn with the series' own dash pattern, then its name ---- */
 .legend {
   display: flex;
   gap: 4px 16px;
   flex-wrap: wrap;
-  font: 400 11.5px/1.5 var(--font-mono);
+  font: 400 13px/1.5 var(--font-sans);
   color: var(--ink-2);
   margin: 0 0 12px;
 }
@@ -599,8 +597,20 @@ label.check:hover {
   display: inline-block;
 }
 .legend i.line {
-  width: 16px;
+  width: 22px;
   height: 2px;
+}
+/*
+ * With direct labels at the line ends the legend is redundant on screen; it
+ * stays in the document for assistive technology and comes back below 768px.
+ */
+.card:has(> [data-direct='1']) > .legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 .legend i.rect {
   width: 8px;
@@ -621,19 +631,26 @@ label.check:hover {
 .tick {
   fill: var(--muted);
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 .tick.blabel {
   font-family: var(--font-sans);
-  font-size: 11.5px;
+  font-size: 12.5px;
 }
 .dlabel {
   fill: var(--ink);
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
+}
+/* A series named at the end of its line, in text ink; the leader carries its colour and dash. */
+.elabel {
+  fill: var(--ink-2);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 500;
 }
 .crosshair {
   stroke: var(--ink);
@@ -662,7 +679,7 @@ label.check:hover {
   opacity: 1;
 }
 .tt .h {
-  font: 500 11.5px/1.4 var(--font-mono);
+  font: 500 12px/1.4 var(--font-mono);
   color: var(--ink);
   padding-bottom: 6px;
   margin-bottom: 4px;
@@ -688,24 +705,53 @@ label.check:hover {
   padding-left: 16px;
 }
 
-/* ---- tables: a tabular datasheet ---- */
+/*
+ * ---- tables: a tabular datasheet in its own scroll box ----
+ * The box scrolls both ways, so the header row sticks to its top and the name
+ * column to its left. Each cell draws its own hairline and stops a gutter
+ * short, so the rows break between columns like the landing's tables. While
+ * columns sit off to the right, the box says so above the table and shades
+ * its right edge.
+ */
+.tablebox {
+  position: relative;
+}
+.tablebox[data-scroll] {
+  padding-top: 22px;
+}
+.tablebox[data-scroll]::before {
+  position: absolute;
+  top: 0;
+  right: 0;
+  font: 400 12px/1 var(--font-mono);
+  color: var(--muted);
+}
+.tablebox[data-scroll='more']::before {
+  content: 'Scroll for more columns →' / '';
+}
+.tablebox[data-scroll='end']::before {
+  content: '← Scroll back to the first columns' / '';
+}
 .tablewrap {
-  overflow-x: auto;
+  overflow: auto;
+  max-height: min(75vh, 720px);
+  overscroll-behavior-x: contain;
   /* A shade on the right edge while more columns sit off to the side. */
   background:
     linear-gradient(to left, transparent, var(--page) 70%) right / 32px 100% no-repeat local,
-    linear-gradient(to left, color-mix(in srgb, var(--ink) 14%, transparent), transparent) right /
-      12px 100% no-repeat scroll;
+    linear-gradient(to left, color-mix(in srgb, var(--ink) 22%, transparent), transparent) right /
+      16px 100% no-repeat scroll;
 }
 .wrap table {
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   width: 100%;
   font-size: 13px;
 }
 .wrap th,
 .wrap td {
   text-align: right;
-  padding: 7px 10px;
+  padding: 8px 0 8px 16px;
   white-space: nowrap;
 }
 .wrap th:first-child,
@@ -714,24 +760,32 @@ label.check:hover {
   position: sticky;
   left: 0;
   z-index: 1;
-  background: var(--page);
-  padding-left: 0;
+  background-color: var(--page);
+  padding: 8px 16px 8px 0;
 }
 .wrap thead th {
-  font: 500 10.5px/1.3 var(--font-mono);
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  border-bottom: 1px solid var(--rule);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  font: 500 12.5px/1.3 var(--font-sans);
+  color: var(--ink-2);
+  background: linear-gradient(var(--rule), var(--rule)) right bottom / calc(100% - 16px) 1px
+    no-repeat var(--page);
   user-select: none;
   padding-top: 0;
   padding-bottom: 0;
+}
+.wrap thead th:first-child {
+  z-index: 3;
+  padding-top: 0;
+  padding-bottom: 0;
+  background-position: left bottom;
 }
 .wrap thead th .sort {
   all: unset;
   display: inline-flex;
   align-items: center;
-  min-height: 32px;
+  min-height: 36px;
   cursor: pointer;
 }
 .wrap thead th .sort:hover {
@@ -750,22 +804,25 @@ label.check:hover {
   content: '↑' / '';
 }
 .wrap tbody td {
-  border-bottom: 1px solid var(--line);
+  background: linear-gradient(var(--line), var(--line)) right bottom / calc(100% - 16px) 1px
+    no-repeat;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
   font-variant-numeric: tabular-nums slashed-zero;
   color: var(--ink-2);
 }
-.wrap tbody tr:hover td {
-  background: var(--wash);
-}
 .wrap tbody td:first-child {
+  background-position: left bottom;
+  background-color: var(--page);
   color: var(--ink);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 500;
   /* Logins and titles keep proportional forms. */
   font-variant-numeric: normal;
+}
+.wrap tbody tr:hover td {
+  background-color: var(--wash);
 }
 .wrap td.n {
   color: var(--ink);
@@ -779,9 +836,9 @@ label.check:hover {
 /* Magnitude as a hairline bar under the figure, right-aligned with it. */
 .wrap .bar-cell .fill {
   position: absolute;
-  right: 10px;
-  bottom: 2px;
-  width: calc((100% - 20px) * var(--share));
+  right: 0;
+  bottom: 3px;
+  width: calc((100% - 16px) * var(--share));
   height: 2px;
   background: var(--s1);
   opacity: 0.7;
@@ -908,7 +965,7 @@ ul.insights .ico {
 }
 .brief-load {
   font: inherit;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--ink);
   background: var(--field);
@@ -946,19 +1003,15 @@ ul.insights .ico {
   min-height: 16px;
 }
 .ins-tag {
-  font: 500 10.5px/1.3 var(--font-mono);
+  font: 500 12.5px/1.3 var(--font-sans);
   color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
 }
 .ins-flag {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   margin-left: auto;
-  font: 500 10.5px/1.3 var(--font-mono);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font: 600 12.5px/1.3 var(--font-sans);
   color: var(--ink);
 }
 .ins-flag svg {
@@ -1012,21 +1065,33 @@ ul.insights .ico {
   margin-left: auto;
   color: var(--muted);
   white-space: nowrap;
-  font: 400 11.5px/1.4 var(--font-mono);
+  font: 400 12px/1.4 var(--font-mono);
 }
 
 /* ---- small screens and touch ---- */
 @media (max-width: 600px) {
   .wrap {
-    padding: 24px 16px 64px;
+    padding: 12px 16px 64px;
+  }
+  header.page {
+    margin-bottom: 14px;
+  }
+  .brief {
+    padding-top: 8px;
   }
   header.page h1 {
     font-size: 30px;
+    margin-bottom: 6px;
+  }
+  header.page h1::before {
+    margin-bottom: 8px;
   }
   .filters {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    margin-top: 32px;
+    gap: 6px;
+    margin: 12px 0 16px;
+    padding: 8px 0 0;
   }
   .filters .range-seg,
   .filters .note {
@@ -1055,22 +1120,56 @@ ul.insights .ico {
   .grid {
     row-gap: 40px;
   }
+  /* Two columns of readings; a short last row reads as page. */
+  .tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .tiles-frame {
+    margin-bottom: 20px;
+  }
   .tile {
-    padding: 12px 12px 16px;
+    padding: 8px 12px 10px 0;
+  }
+  .tiles .tile:nth-child(even) {
+    padding-left: 12px;
+  }
+  .tile .k {
+    margin-bottom: 6px;
   }
   .tile .v {
-    font-size: 26px;
+    font-size: 24px;
   }
-  .hero {
-    font-size: 36px;
+  .tile .d {
+    margin-top: 4px;
+  }
+  .brief-head h2 {
+    margin-bottom: 4px;
+    font-size: 19px;
+  }
+  /* Long names (PR titles) give the sticky column a limit, so the figures still show. */
+  .wrap td:first-child > * {
+    display: inline-block;
+    max-width: 44vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: bottom;
   }
 }
-@media (pointer: coarse) {
+/* Touch: every range button, select, toggle, and header sort control is at least 44px tall. */
+@media (hover: none), (pointer: coarse) {
   .seg button,
   select.dim,
   label.check,
-  .brief-load {
-    min-height: 40px;
+  .brief-load,
+  .brief-toggle {
+    min-height: 44px;
+  }
+  .brief-toggle {
+    display: inline-flex;
+    align-items: center;
+  }
+  .wrap thead th .sort {
+    min-height: 44px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

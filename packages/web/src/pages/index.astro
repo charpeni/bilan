@@ -19,6 +19,8 @@ const primaryHref = user ? '/repositories' : signInReady ? loginHref('/repositor
 const primaryLabel = user ? 'Your repositories' : 'Sign in with GitHub';
 /** Parameter names of the examples' comparison, from the first example's tiles. */
 const exampleKeys = firstExample ? previewTiles(firstExample.preview).map((t) => t.k) : [];
+/** The cover's four readings: the first example's last 30 days, as its dashboard shows them. */
+const readings = firstExample ? previewTiles(firstExample.preview) : [];
 /** The timeline is drawn from the first example's last-30-days medians. */
 const figure = firstExample ? timelineFigure(firstExample.preview) : null;
 /** "What you see", each line backed by a real figure from the first example's last 30 days. */
@@ -128,11 +130,6 @@ const ANCHORS: { metric: string; anchor: string; ready?: boolean; measures: stri
     <section class="lp-hero" aria-labelledby="hero-title">
       <div class="lp-rail">
         <p class="lp-num" aria-hidden="true">00<span class="of"> / 05</span></p>
-        <p class="gloss">
-          <span class="gloss-word"><BrandMark size={14} />bilan</span>
-          <span class="gloss-pos">noun, French</span>
-          <span>a balance sheet; an honest account of where things stand.</span>
-        </p>
         <nav class="contents" aria-label="On this page">
           <p class="label">Contents</p>
           <ol>
@@ -170,6 +167,32 @@ const ANCHORS: { metric: string; anchor: string; ready?: boolean; measures: stri
         </div>
         <p class="lp-fine">Read-only on your own GitHub token. Open source. No sign-in needed for the examples.</p>
       </div>
+      {
+        firstExample && (
+          <figure class="readings" aria-labelledby="readings-title">
+            <p class="readings-head" id="readings-title">
+              <a href={exampleHref}>{firstExample.repo}</a>
+              Last 30 days of the snapshot of{' '}
+              <time datetime={firstExample.snapshotAt}>{fmtDay(firstExample.snapshotAt)}</time>
+            </p>
+            <dl class="readings-list">
+              {readings.map((t) => (
+                <div>
+                  <dt>{t.k}</dt>
+                  <dd>
+                    <FigureValue value={t.v} />
+                    <span class="figure-d">{t.d}</span>
+                  </dd>
+                </div>
+              ))}
+            </dl>
+            <figcaption>
+              Each figure counts its own set of pull requests, so together they describe the
+              repository, not one pull request’s journey.
+            </figcaption>
+          </figure>
+        )
+      }
     </section>
 
     <section class="lp-section" id="see" aria-labelledby="see-title">

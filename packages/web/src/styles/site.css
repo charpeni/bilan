@@ -5,10 +5,12 @@
  * the pages around it read the same variables in light and dark.
  *
  * The layout is one sheet: a twelve-column grid (six under 1000px, four under
- * 640px) whose gutters are drawn as hairline guides on the landing and state
- * pages. Sections open with an ink rule broken at the gutter, a numbered rail
- * on the left (three columns) and the body on the right (nine). Spacing stays
- * on the 4 · 8 · 12 · 16 · 24 · 32 · 48 · 64 · 96 scale.
+ * 640px). On the landing only, the gutters no content crosses (the sheet's two
+ * margins and the gutter between rail and body) are drawn as hairline guides.
+ * Sections open with an ink rule broken at the gutter, a numbered rail on the
+ * left (three columns) and the body on the right (nine). Spacing stays on the
+ * 4 · 8 · 12 · 16 · 24 · 32 · 48 · 64 · 96 scale. Text is never below 12px,
+ * and labels are sentence case in the grotesk.
  */
 :root {
   --sheet-max: 1296px;
@@ -78,9 +80,7 @@ code {
 .eyebrow,
 .label {
   margin: 0 0 8px;
-  font: 500 11px/1.3 var(--font-mono);
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  font: 500 13px/1.3 var(--font-sans);
   color: var(--muted);
 }
 .muted {
@@ -111,17 +111,39 @@ svg.icon {
   padding-inline: var(--pad);
 }
 /*
- * Guides sit in the middle of each gutter (and of each margin), never under a
- * line of text: one 1px line per column, repeated from the content box.
+ * Guides, on the landing only, and only where no content ever crosses: the
+ * middle of each margin, and the middle of the gutter between the rail (three
+ * columns) and the body. Below 1000px the rail sits above the body, so only
+ * the margins keep theirs.
  */
-.lp,
-.state {
-  background-image: linear-gradient(to right, var(--guide) 1px, transparent 1px);
-  background-size: calc((100% + var(--gutter)) / var(--cols)) 100%;
-  background-position: calc(var(--gutter) / -2) 0;
-  background-origin: content-box;
-  background-clip: padding-box;
-  background-repeat: repeat;
+.lp {
+  position: relative;
+}
+.lp::before,
+.lp::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+.lp::before {
+  left: calc(var(--pad) / 2);
+  right: calc(var(--pad) / 2);
+  border-inline: 1px solid var(--guide);
+}
+.lp::after {
+  left: calc(
+    var(--pad) + (100% - 2 * var(--pad) - 11 * var(--gutter)) / 12 * 3 + 2.5 * var(--gutter) - 0.5px
+  );
+  width: 1px;
+  background: var(--guide);
+}
+@media (max-width: 1000px) {
+  .lp::after {
+    display: none;
+  }
 }
 
 /* ---- header: one structure, one height, on every page ---- */
@@ -249,17 +271,16 @@ svg.icon {
   flex: none;
   height: var(--hdr-h);
 }
+/* The theme control says what it does: Auto / Light / Dark, the pressed one in the accent. */
 .theme-seg {
   border-color: var(--line-strong);
   background: var(--page);
 }
 .theme-seg button {
-  display: inline-grid;
-  place-items: center;
-  width: 32px;
-  min-height: 30px;
-  padding: 0;
-  color: var(--muted);
+  min-height: 32px;
+  padding: 0 9px;
+  font-size: 13px;
+  color: var(--ink-2);
 }
 .chip {
   display: inline-flex;
@@ -271,7 +292,7 @@ svg.icon {
   border: 1px solid var(--line-strong);
   background: var(--page);
   color: var(--ink-2);
-  font: 400 11.5px/1 var(--font-mono);
+  font: 400 12px/1 var(--font-mono);
   white-space: nowrap;
 }
 .chip .dot {
@@ -356,7 +377,7 @@ svg.icon {
 .btn-sm {
   height: 32px;
   padding: 0 12px;
-  font-size: 12.5px;
+  font-size: 13px;
 }
 .btn:disabled,
 .btn[aria-disabled='true'] {
@@ -441,7 +462,7 @@ svg.icon {
 .pop-who {
   margin: 0;
   padding: 10px 12px;
-  font: 400 11.5px/1.4 var(--font-mono);
+  font: 400 12px/1.4 var(--font-mono);
   color: var(--muted);
   border-bottom: 1px solid var(--line);
 }
@@ -524,7 +545,7 @@ form + .pop-item,
   margin-right: 8px;
   background: var(--critical);
   color: var(--crit-bg);
-  font: 700 11px/1 var(--font-mono);
+  font: 700 12px/1 var(--font-mono);
   vertical-align: 1px;
 }
 /* The dashboard page: the ui module's own top padding gives way to the site's offset. */
@@ -537,7 +558,11 @@ form + .pop-item,
   max-width: calc(var(--sheet-max) + 2 * var(--pad));
   margin: 0 auto;
 }
-/* A state is a sheet, not a floating card: the text sits on the grid, flush left. */
+/*
+ * A state is a section of the sheet, not a floating card: its status in the
+ * rail (three columns), the repository and what is happening in the body, each
+ * under its own ink rule. No guides, no large numerals.
+ */
 .state {
   min-height: calc(100vh - var(--hdr-h));
   max-width: calc(var(--sheet-max) + 2 * var(--pad));
@@ -549,17 +574,30 @@ form + .pop-item,
   padding: var(--content-top) var(--pad) 96px;
 }
 .state-card {
-  grid-column: 4 / span 6;
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: start;
   min-width: 0;
-  padding: 12px 0 0;
+}
+.state-rail,
+.state-body {
+  min-width: 0;
+  padding-top: 12px;
   border-top: 1px solid var(--rule);
 }
+.state-rail {
+  grid-column: 1 / span 3;
+}
+.state-body {
+  grid-column: 4 / span 6;
+}
 .state-card h1 {
-  font: 600 40px/1.05 var(--font-sans);
+  font: 650 34px/1.05 var(--font-sans);
   font-stretch: 90%;
   letter-spacing: -0.025em;
   word-spacing: 0.05em;
-  margin: 0 0 20px;
+  margin: 0 0 16px;
   overflow-wrap: anywhere;
 }
 .state-card h2 {
@@ -578,8 +616,10 @@ form + .pop-item,
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 32px;
-  color: var(--muted);
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
 }
 .state-card p.muted {
   color: var(--muted);
@@ -596,7 +636,7 @@ form + .pop-item,
 .progress {
   position: relative;
   height: 4px;
-  margin: 32px 0 12px;
+  margin: 12px 0 12px;
   background: var(--surface-2);
   overflow: hidden;
 }
@@ -622,14 +662,14 @@ form + .pop-item,
 }
 .state-card .progress-text {
   margin: 0 0 4px;
-  font: 500 14px/1.5 var(--font-mono);
+  font: 500 16px/1.5 var(--font-mono);
   color: var(--ink);
   min-height: 1.5em;
 }
 .state-card .progress-sub {
-  margin: 0 0 12px;
+  margin: 0 0 20px;
   min-height: 1.5em;
-  font: 400 12.5px/1.5 var(--font-mono);
+  font: 400 13px/1.5 var(--font-mono);
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
@@ -638,7 +678,7 @@ form + .pop-item,
   align-items: center;
   gap: 8px;
   margin: 0 0 16px;
-  font: 400 12.5px/1.5 var(--font-mono);
+  font: 400 13px/1.5 var(--font-mono);
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
 }
@@ -703,7 +743,10 @@ form + .pop-item,
   color: var(--muted);
 }
 
-/* The cover. */
+/*
+ * The cover: the rail (number and contents), the claim and its actions in
+ * four columns, and four real readings from the first example in five.
+ */
 .lp-hero {
   padding-bottom: 96px;
 }
@@ -711,30 +754,6 @@ form + .pop-item,
   display: flex;
   flex-direction: column;
   align-self: stretch;
-}
-.gloss {
-  margin: 0 0 48px;
-  font-size: 14px;
-  line-height: 1.5;
-  color: var(--ink-2);
-  max-width: 30ch;
-}
-.gloss > span {
-  display: block;
-}
-.gloss-word {
-  display: inline-flex !important;
-  align-items: center;
-  gap: 0.3em;
-  font-weight: 650;
-  font-size: 16px;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-}
-.gloss-pos {
-  margin-bottom: 8px;
-  font: 400 11.5px/1.5 var(--font-mono);
-  color: var(--muted);
 }
 /* The contents of the sheet: section numbers in the monospace, one hairline per line. */
 .contents {
@@ -763,23 +782,100 @@ form + .pop-item,
 .contents .n {
   flex: none;
   width: 20px;
-  font: 500 11.5px/1 var(--font-mono);
+  font: 500 12px/1 var(--font-mono);
   color: var(--muted);
 }
+.lp-cover {
+  grid-column: 4 / span 4;
+}
 .lp-hero h1 {
-  font: 650 92px/0.94 var(--font-sans);
+  font: 650 44px/1.02 var(--font-sans);
   font-stretch: 88%;
-  letter-spacing: -0.035em;
-  word-spacing: 0.06em;
-  max-width: 11ch;
-  margin: 48px 0 48px;
+  letter-spacing: -0.03em;
+  word-spacing: 0.05em;
+  margin: 36px 0 24px;
 }
 .lp-lede {
-  font-size: 19px;
-  line-height: 1.5;
+  font-size: 16.5px;
+  line-height: 1.55;
   color: var(--ink-2);
   max-width: 54ch;
-  margin: 0 0 40px;
+  margin: 0 0 32px;
+}
+/* Four readings: a parameter table, each row's rule broken at the gutter. */
+.readings {
+  grid-column: 8 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-content: start;
+  min-width: 0;
+  margin: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--rule);
+}
+.readings > * {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+.readings-head {
+  margin: 0 0 24px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.readings-head a {
+  margin-right: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+}
+.readings-head a:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.readings-list {
+  display: grid;
+  grid-template-columns: subgrid;
+  margin: 0;
+}
+.readings-list > div {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+}
+.readings-list dt,
+.readings-list dd {
+  margin: 0;
+  padding: 12px 0 16px;
+  border-top: 1px solid var(--line);
+}
+.readings-list dt {
+  grid-column: 1 / span 2;
+  padding-top: 14px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.readings-list dd {
+  grid-column: 3 / -1;
+}
+.readings-list .figure-v {
+  display: block;
+  font-size: 36px;
+  line-height: 1;
+}
+.readings-list .figure-d {
+  display: block;
+  margin-top: 8px;
+}
+.readings figcaption {
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--rule);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-2);
 }
 .lp-hero .btn {
   height: 44px;
@@ -817,9 +913,7 @@ form + .pop-item,
   margin: 0 0 8px;
 }
 .lp .n {
-  font: 500 11px/1.3 var(--font-mono);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font: 500 13px/1.3 var(--font-sans);
   color: var(--muted);
 }
 /* Large figures: monospace, with their unit and description underneath. */
@@ -957,9 +1051,7 @@ form + .pop-item,
   min-width: 0;
 }
 .ex-key > span {
-  font: 500 11px/1.4 var(--font-mono);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font: 500 13px/1.4 var(--font-sans);
   color: var(--muted);
 }
 .ex-key > span:first-child,
@@ -1076,7 +1168,7 @@ form + .pop-item,
 }
 .figure figcaption {
   margin-top: 16px;
-  font: 400 11.5px/1.55 var(--font-mono);
+  font: 400 12px/1.55 var(--font-mono);
   color: var(--muted);
   max-width: 96ch;
 }
@@ -1178,7 +1270,7 @@ form + .pop-item,
   top: 0;
   padding-top: 7px;
   transform: translateX(-50%);
-  font: 400 10.5px/1 var(--font-mono);
+  font: 400 12px/1 var(--font-mono);
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
@@ -1223,9 +1315,7 @@ table.flags {
 .ledger thead th,
 .flags thead th {
   padding-top: 0;
-  font: 500 11px/1.3 var(--font-mono);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font: 500 13px/1.3 var(--font-sans);
   color: var(--muted);
   background-image: linear-gradient(var(--rule), var(--rule));
 }
@@ -1246,7 +1336,7 @@ table.flags {
   display: inline-flex;
   align-items: baseline;
   gap: 2px;
-  font: 400 12.5px/1.4 var(--font-mono);
+  font: 400 13px/1.4 var(--font-mono);
   color: var(--ink);
   white-space: nowrap;
 }
@@ -1375,9 +1465,7 @@ table.flags {
   border-left: 1px solid var(--rule);
   background: var(--field);
   color: var(--ink);
-  font: 500 12px/1 var(--font-mono);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font: 500 13px/1 var(--font-sans);
   cursor: pointer;
 }
 .copy:hover {
@@ -1403,7 +1491,7 @@ table.flags {
   width: 40%;
 }
 .flags tbody th {
-  font: 400 12.5px/1.5 var(--font-mono);
+  font: 400 13px/1.5 var(--font-mono);
   color: var(--ink);
   white-space: nowrap;
 }
@@ -1454,7 +1542,7 @@ table.flags {
 .footer .footer-made {
   grid-column: 10 / -1;
   margin: 2px 0 0;
-  font: 400 11.5px/1.5 var(--font-mono);
+  font: 400 12px/1.5 var(--font-mono);
 }
 
 /* ---- /repositories ---- */
@@ -1533,9 +1621,7 @@ table.flags {
   padding: 10px 0;
 }
 .rows-head {
-  font: 500 11px/1.3 var(--font-mono);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  font: 500 13px/1.3 var(--font-sans);
   color: var(--muted);
   padding-block: 8px;
   border-top: 1px solid var(--rule);
@@ -1544,7 +1630,7 @@ table.flags {
 .repo-row {
   position: relative;
   border-top: 1px solid var(--line);
-  font: 400 12.5px/1.4 var(--font-mono);
+  font: 400 13px/1.4 var(--font-mono);
   color: var(--ink-2);
 }
 .rows-head + .repo-row {
@@ -1634,15 +1720,65 @@ table.flags {
   .lp-head,
   .lp-cover,
   .lp-body,
-  .state-card {
+  .readings,
+  .state-rail,
+  .state-body {
     grid-column: 1 / -1;
   }
-  .lp-rail {
-    padding-bottom: 0;
+  /*
+   * The cover reads top to bottom: number, claim, actions, the four readings,
+   * then the contents of the sheet.
+   */
+  .lp-hero .lp-rail {
+    display: contents;
+  }
+  .lp-hero .lp-num {
+    grid-column: 1 / -1;
+    order: 0;
+    padding-top: 12px;
+    border-top: 1px solid var(--rule);
   }
   .lp-cover {
+    order: 1;
     border-top: 0;
     padding-top: 0;
+  }
+  .readings {
+    order: 2;
+    display: block;
+    margin-top: 48px;
+  }
+  .readings-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: var(--gutter);
+  }
+  .readings-list > div {
+    grid-column: auto;
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid var(--line);
+  }
+  .readings-list dt,
+  .readings-list dd {
+    border-top: 0;
+    padding: 0;
+  }
+  .readings-list dt {
+    padding-top: 12px;
+    margin-bottom: 10px;
+    font-size: 13px;
+  }
+  .readings-list dd {
+    padding-bottom: 20px;
+  }
+  .lp-hero .contents {
+    grid-column: 1 / -1;
+    order: 3;
+    margin-top: 48px;
+  }
+  .state-body {
+    border-top: 0;
+    padding-top: 24px;
   }
   .lp-head {
     margin-bottom: 32px;
@@ -1658,15 +1794,10 @@ table.flags {
     border-top: 0;
     padding-top: 0;
   }
-  .contents {
-    display: none;
-  }
-  .gloss {
-    margin-bottom: 0;
-  }
   .lp-hero h1 {
-    font-size: 72px;
-    margin: 40px 0 32px;
+    font-size: 44px;
+    max-width: 16ch;
+    margin: 32px 0 20px;
   }
   /* Six columns: names and text share a line, the figure sits under them. */
   .pulse-k,
@@ -1748,11 +1879,15 @@ table.flags {
   .hdr-status:not(:empty) {
     display: flex;
     position: absolute;
-    top: calc(100% + 10px);
+    top: calc(100% + 8px);
     left: var(--pad);
   }
   .crumb {
     flex: 1 1 0;
+  }
+  /* The page heading carries the full repository name; the header keeps only the lock. */
+  .crumb-link {
+    display: none;
   }
   .long,
   .menu-login,
@@ -1770,13 +1905,19 @@ table.flags {
     padding-bottom: 64px;
   }
   .lp-hero h1 {
-    font-size: 48px;
-    line-height: 0.98;
-    margin: 32px 0 24px;
+    font-size: 36px;
+    line-height: 1.02;
+    margin: 24px 0 16px;
   }
   .lp-lede {
-    font-size: 16.5px;
-    margin-bottom: 32px;
+    font-size: 16px;
+    margin-bottom: 24px;
+  }
+  .readings {
+    margin-top: 40px;
+  }
+  .readings-list .figure-v {
+    font-size: 30px;
   }
   .lp-section {
     padding-bottom: 64px;
@@ -1856,9 +1997,7 @@ table.flags {
     white-space: normal;
     flex: 1;
     margin-bottom: 8px;
-    font: 500 10.5px/1.35 var(--font-mono);
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
+    font: 500 13px/1.35 var(--font-sans);
     color: var(--muted);
   }
   .ex-card > .ex-open {
@@ -1931,6 +2070,18 @@ table.flags {
   .page-head {
     margin: 0 0 24px;
   }
+  /* Less chrome before the first chart: tighter offsets on the dashboard. */
+  :root {
+    --content-top: 40px;
+  }
+  .dash .banner,
+  .dash .notice {
+    margin-bottom: 12px;
+    padding: 6px 0 8px;
+  }
+  .dash .banner p {
+    font-size: 13px;
+  }
 }
 /* ---- phones: repositories list as labelled lines ---- */
 @media (max-width: 760px) {
@@ -1939,7 +2090,7 @@ table.flags {
     display: flex;
     flex-wrap: wrap;
     gap: 2px 12px;
-    font-size: 12px;
+    font-size: 13px;
   }
   .repo-row .name-cell {
     flex-basis: 100%;
@@ -1956,14 +2107,22 @@ table.flags {
     border-top: 1px solid var(--rule);
   }
 }
-@media (pointer: coarse) {
+/* Touch: buttons, the theme control, the menu, and the contents links are at least 44px tall. */
+@media (hover: none), (pointer: coarse) {
   .btn,
-  .menu > summary {
-    min-height: 40px;
+  .btn-sm,
+  .menu > summary,
+  .pop-item,
+  .copy {
+    min-height: 44px;
   }
   .theme-seg button {
-    min-height: 36px;
-    width: 36px;
+    min-height: 42px;
+  }
+  .contents a {
+    min-height: 44px;
+    align-items: center;
+    padding-block: 0;
   }
 }
 @media (prefers-reduced-motion: reduce) {

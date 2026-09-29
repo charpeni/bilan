@@ -22,11 +22,29 @@ export interface Col<T> {
 const render = <T>(c: Col<T>, v: SortValue, r: T): string =>
   c.fmt ? c.fmt(v, r) : num(typeof v === 'number' ? v : null);
 
-/** Sortable table. cols: {key,label,fmt,val,bar?} — `val` returns the sort number. */
+/**
+ * Sortable table. cols: {key,label,fmt,val,bar?} — `val` returns the sort number.
+ * It scrolls inside its own box (header row and first column sticky). When the
+ * columns do not fit, the box carries `data-scroll`: `more` while columns sit
+ * off to the right, `end` once scrolled to the last one; the stylesheet turns
+ * it into a one-line cue above the table.
+ */
 export function table<T>(host: HTMLElement, cols: Col<T>[], rows: T[], initial: string): void {
   let sortKey = initial;
   let asc = false;
+  const box = el('div', { class: 'tablebox' });
   const wrap = el('div', { class: 'tablewrap' });
+  box.append(wrap);
+  const cue = (): void => {
+    if (wrap.scrollWidth <= wrap.clientWidth + 1) {
+      delete box.dataset.scroll;
+      return;
+    }
+    const more = wrap.scrollLeft + wrap.clientWidth < wrap.scrollWidth - 1;
+    box.dataset.scroll = more ? 'more' : 'end';
+  };
+
+  wrap.addEventListener('scroll', cue, { passive: true });
   const tbl = el('table');
   const thead = el('thead');
   const tr = el('tr');
@@ -52,7 +70,7 @@ export function table<T>(host: HTMLElement, cols: Col<T>[], rows: T[], initial: 
   const tbody = el('tbody');
   tbl.append(tbody);
   wrap.append(tbl);
-  host.append(wrap);
+  host.append(box);
 
   function draw(): void {
     for (const [i, c] of cols.entries()) {
@@ -100,4 +118,7 @@ export function table<T>(host: HTMLElement, cols: Col<T>[], rows: T[], initial: 
     }
   }
   draw();
+  cue();
+  // Fonts and the grid settle after the first frame; measure again then.
+  requestAnimationFrame(cue);
 }
