@@ -102,13 +102,26 @@ const ogImage = new URL('/brand/og.png', Astro.url).href;
         }
         <div class="hdr-right">
           <slot name="actions" />
-          <div class="seg theme-seg" role="group" aria-label="Theme" id="theme-seg">
-            <button type="button" data-theme-pick="auto" aria-pressed="true" title="Follow the system theme">
-              Auto
-            </button>
-            <button type="button" data-theme-pick="light" aria-pressed="false">Light</button>
-            <button type="button" data-theme-pick="dark" aria-pressed="false">Dark</button>
-          </div>
+          <button
+            type="button"
+            class="theme-cycle"
+            id="theme-cycle"
+            data-theme-cycle
+            aria-label="Theme: follows the system. Switch to light."
+            title="Theme: follows the system. Switch to light."
+          >
+            <svg class="i i-auto" viewBox="0 0 16 16" aria-hidden="true">
+              <rect x="1.5" y="2.5" width="13" height="9" rx="1" fill="none" stroke="currentColor" stroke-width="1.5" />
+              <path d="M5.5 14h5M8 11.5V14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+            </svg>
+            <svg class="i i-light" viewBox="0 0 16 16" aria-hidden="true">
+              <circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.5" />
+              <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+            </svg>
+            <svg class="i i-dark" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M13.5 10.2A6 6 0 0 1 5.8 2.5a6 6 0 1 0 7.7 7.7Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+            </svg>
+          </button>
           <UserMenu user={user} {...(next === undefined ? {} : { next })} />
         </div>
       </div>
@@ -129,16 +142,25 @@ const ogImage = new URL('/brand/og.png', Astro.url).href;
           meta.content = t === 'light' || t === 'dark' ? PAGE[t] : own;
         }
       };
-      const buttons = document.querySelectorAll<HTMLButtonElement>('[data-theme-pick]');
+      // One button cycles auto → light → dark; the visible icon is the current
+      // state (CSS on `data-theme`), the label says what a click does next.
+      const ORDER = ['auto', 'light', 'dark'] as const;
+      type Theme = (typeof ORDER)[number];
+      const NAME: Record<Theme, string> = { auto: 'follows the system', light: 'light', dark: 'dark' };
+      const isTheme = (v: string | undefined): v is Theme => (ORDER as readonly string[]).includes(v ?? '');
+      const cycle = document.querySelector<HTMLButtonElement>('[data-theme-cycle]');
+      const nextOf = (t: Theme): Theme => ORDER[(ORDER.indexOf(t) + 1) % ORDER.length] as Theme;
       const press = (): void => {
-        const current = html.dataset.theme ?? 'auto';
-        for (const b of buttons) b.setAttribute('aria-pressed', String(b.dataset.themePick === current));
+        const t = html.dataset.theme;
+        const current: Theme = isTheme(t) ? t : 'auto';
+        const label = `Theme: ${NAME[current]}. Switch to ${NAME[nextOf(current)]}.`;
+        cycle?.setAttribute('aria-label', label);
+        cycle?.setAttribute('title', label);
       };
-      for (const b of buttons) {
-        b.addEventListener('click', () => {
-          html.dataset.theme = b.dataset.themePick ?? 'auto';
-        });
-      }
+      cycle?.addEventListener('click', () => {
+        const t = html.dataset.theme;
+        html.dataset.theme = nextOf(isTheme(t) ? t : 'auto');
+      });
       new MutationObserver(() => {
         press();
         paintChrome();

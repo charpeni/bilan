@@ -272,15 +272,30 @@ svg.icon {
   height: var(--hdr-h);
 }
 /* The theme control says what it does: Auto / Light / Dark, the pressed one in the accent. */
-.theme-seg {
-  border-color: var(--line-strong);
+/* One icon button cycling auto → light → dark; the icon shown is the current state. */
+.theme-cycle {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
   background: var(--page);
-}
-.theme-seg button {
-  min-height: 32px;
-  padding: 0 9px;
-  font-size: 13px;
   color: var(--ink-2);
+  cursor: pointer;
+}
+.theme-cycle:hover {
+  color: var(--ink);
+}
+.theme-cycle .i {
+  display: none;
+  width: 16px;
+  height: 16px;
+}
+html[data-theme='auto'] .theme-cycle .i-auto,
+html[data-theme='light'] .theme-cycle .i-light,
+html[data-theme='dark'] .theme-cycle .i-dark {
+  display: block;
 }
 .chip {
   display: inline-flex;
@@ -399,7 +414,7 @@ svg.icon {
 .input:focus-visible,
 .menu > summary:focus-visible,
 .pop-item:focus-visible,
-.theme-seg button:focus-visible,
+.theme-cycle:focus-visible,
 .copy:focus-visible {
   outline: none;
   box-shadow: var(--focus);
@@ -2069,8 +2084,9 @@ table.flags {
   .copy {
     min-height: 44px;
   }
-  .theme-seg button {
-    min-height: 42px;
+  .theme-cycle {
+    width: 44px;
+    height: 44px;
   }
   .contents a {
     min-height: 44px;
