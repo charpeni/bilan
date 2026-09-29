@@ -8,6 +8,7 @@ allowBuilds:
 # Security patches while upstream development tools still pin affected copies.
 # Drizzle Kit's legacy loader only uses esbuild's transform API.
 overrides:
+  sharp@0.35.2: 0.35.4
   '@esbuild-kit/core-utils>esbuild': 0.25.12
 
 minimumReleaseAgeExclude:
