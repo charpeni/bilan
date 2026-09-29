@@ -89,7 +89,7 @@ install page. Public repositories need no install.
    npx wrangler secret put GITHUB_CLIENT_SECRET
    openssl rand -base64 32 | npx wrangler secret put TOKEN_ENCRYPTION_KEY
    npx wrangler d1 migrations apply bilan --remote
-   pnpm deploy
+   pnpm run deploy
    ```
 
    `GITHUB_TOKEN`, a classic token with no scopes, is optional: it is only used
