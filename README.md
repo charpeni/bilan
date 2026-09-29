@@ -45,7 +45,9 @@ incremental.
 By default a sync covers the last 30 days of activity plus every open pull
 request; later runs only widen that coverage. A 25-PR page costs one GitHub
 rate-limit point, so even a full history of a large repository fits in one
-hour's budget. The cache lives in `~/.cache/bilan`.
+hour's budget. The cache lives in `~/.cache/bilan`. On Unix, cache directories
+are owner-only (`0700`), and cache files and HTML exports are written with
+owner-only permissions (`0600`), including when replacing older files.
 
 ## Web app
 

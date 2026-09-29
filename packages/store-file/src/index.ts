@@ -1,7 +1,11 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
+import { writePrivateFile } from './private-file.ts';
+
 import type { RawPr, RepoMeta, SyncStore } from '@bilan/core';
+
+export { writePrivateFile } from './private-file.ts';
 
 interface FileShape {
   repo: string;
@@ -112,8 +116,10 @@ export class FileStore implements SyncStore {
   }
 
   private flush(): void {
-    mkdirSync(dirname(this.path), { recursive: true });
-    writeFileSync(`${this.path}.tmp`, JSON.stringify(this.data));
-    renameSync(`${this.path}.tmp`, this.path);
+    const directory = dirname(this.path);
+    mkdirSync(directory, { recursive: true, mode: 0o700 });
+    // mkdir's mode does not tighten a cache directory created by an older CLI.
+    chmodSync(directory, 0o700);
+    writePrivateFile(this.path, JSON.stringify(this.data));
   }
 }

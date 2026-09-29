@@ -1,4 +1,12 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -39,6 +47,25 @@ const pr = (number: number, updatedAt: string): RawPr => ({
 describe('FileStore', () => {
   const dir = mkdtempSync(join(tmpdir(), 'bilan-'));
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  it.skipIf(process.platform === 'win32')(
+    'keeps fresh and replaced private caches owner-only',
+    async () => {
+      const path = join(dir, 'acme', 'private.json');
+      const store = new FileStore(path, 'acme/private');
+      await store.upsert([pr(1, 'a')]);
+      expect(statSync(path).mode & 0o777).toBe(0o600);
+      expect(statSync(dirname(path)).mode & 0o777).toBe(0o700);
+
+      // Simulate a cache written by an older release under umask 022.
+      chmodSync(path, 0o644);
+      chmodSync(dirname(path), 0o755);
+      await store.upsert([pr(2, 'b')]);
+      expect(statSync(path).mode & 0o777).toBe(0o600);
+      expect(statSync(dirname(path)).mode & 0o777).toBe(0o700);
+      expect(new FileStore(path, 'acme/private').size).toBe(2);
+    },
+  );
 
   it('persists upserts and syncedAt across instances', async () => {
     const path = join(dir, 'acme', 'widgets.json');

@@ -1,3 +1,4 @@
+import { chmodSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -10,4 +11,11 @@ export function cacheDir(env: NodeJS.ProcessEnv = process.env): string {
 
 export function storePath(repo: RepoRef, env?: NodeJS.ProcessEnv): string {
   return join(cacheDir(env), repo.owner, `${repo.name}.json`);
+}
+
+/** Tighten an existing cache root too, without changing shared ancestors. */
+export function secureCacheDirectory(env?: NodeJS.ProcessEnv): void {
+  const directory = cacheDir(env);
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  chmodSync(directory, 0o700);
 }

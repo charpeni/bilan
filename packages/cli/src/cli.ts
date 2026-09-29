@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { readFileSync, rmSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 
 import {
@@ -10,9 +10,9 @@ import {
   parseRepo,
   sync,
 } from '@bilan/core';
-import { FileStore } from '@bilan/store-file';
+import { FileStore, writePrivateFile } from '@bilan/store-file';
 
-import { storePath } from './paths.ts';
+import { secureCacheDirectory, storePath } from './paths.ts';
 import { renderReport } from './report.ts';
 import { resolveToken } from './token.ts';
 
@@ -111,6 +111,7 @@ async function runSync(repo: RepoRef, options: SyncOptions): Promise<SyncResult>
     onRetry: (attempt, wait, error) =>
       log(`  retry ${attempt} in ${wait}ms: ${String(error).slice(0, 160)}`),
   });
+  secureCacheDirectory();
   const path = storePath(repo);
   if (options.fresh) rmSync(path, { force: true });
   const store = new FileStore(path, `${repo.owner}/${repo.name}`);
@@ -174,6 +175,7 @@ interface ReportOptions {
 }
 
 async function runReport(repo: RepoRef, options: ReportOptions): Promise<string> {
+  secureCacheDirectory();
   const path = storePath(repo);
   const store = new FileStore(path, `${repo.owner}/${repo.name}`);
   if (store.size === 0) {
@@ -189,7 +191,7 @@ async function runReport(repo: RepoRef, options: ReportOptions): Promise<string>
   const payload = buildPayload(meta, prs, areas === undefined ? {} : { areas });
   const html = renderReport(payload);
   const target = options.out ?? `${repo.name}.report.html`;
-  writeFileSync(target, html);
+  writePrivateFile(target, html);
   log(`wrote ${target} (${(html.length / 1e6).toFixed(2)} MB, ${payload.prs.length} PRs)`);
   return target;
 }
