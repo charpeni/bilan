@@ -23,6 +23,7 @@ import {
   SyncRateLimitedError,
 } from '../../lib/jobs.ts';
 import { isOauthConfigured, loginHref as loginHrefFor } from '../../lib/oauth.ts';
+import { repoPageState } from '../../lib/repo-page.ts';
 import { isStale, needsRefresh } from '../../lib/stale.ts';
 
 import type { Repo } from '@bilan/store-d1';
@@ -60,25 +61,20 @@ if (example) {
   Astro.response.status = 401;
 } else {
   const db = getDb(env);
-  repo = await getRepoByName(db, owner, name);
+  const cached = await getRepoByName(db, owner, name);
   // An unknown name takes the same GitHub round trip as a private row the viewer
   // cannot see, so a login redirect, a 503, or the 404 page never tells them
   // apart. A viewer whose token is gone throws `ReauthRequiredError`; the
   // middleware sends them to login.
-  const access = await checkRepoAccess(accessDeps(env), user, repo ?? { owner, name });
+  const access = await checkRepoAccess(accessDeps(env), user, cached ?? { owner, name });
   if (access.kind === 'login-required') return Astro.redirect(loginHref, 302);
-  if (access.kind === 'unavailable') {
-    view = 'unavailable';
-  } else if (access.kind === 'not-found') {
-    view = 'not-found';
-  } else if (access.kind === 'ok') {
-    if (!repo) throw new Error('an access decision of ok needs a cached row');
-    if (user) await touchRepoView(db, { repoId: repo.id, userId: user.id, now });
+  ({ view, repo } = repoPageState(access, cached));
+  if (repo) {
+    await touchRepoView(db, { repoId: repo.id, userId: user.id, now });
     const active = await findActiveJob(db, repo.id);
     syncActive = active !== undefined;
     ownJobId = active && user && active.requestedBy === user.id ? active.id : null;
-    view = repo.lastSyncedAt !== null ? 'ready' : 'syncing';
-  } else {
+  } else if (access.kind === 'unknown' || access.kind === 'replaced') {
     // First view of a repo bilan has no row for (`unknown`), or of a name another
     // repo took over (`replaced`: the old row is parked by the sync, never
     // served): start its first sync on the token GitHub just answered on.
