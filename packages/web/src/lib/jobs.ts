@@ -1,11 +1,11 @@
 import { RepoNotFoundError, catchUpSince } from '@bilan/core';
-import { schema, upsertRepo } from '@bilan/store-d1';
-import { and, count, desc, eq, inArray } from 'drizzle-orm';
+import { admitSyncJob, schema, touchRepoView, upsertRepo } from '@bilan/store-d1';
+import { and, count, desc, eq, inArray, lte, sql } from 'drizzle-orm';
 
 import { getDb } from './db.ts';
 import { DEFAULT_DEPTH, depthToSince } from './depth.ts';
-import { reconcileJobStatus } from './job-reconcile.ts';
-import { readSyncLimit, recordSyncLimit, syncLimitDecision } from './sync-policy.ts';
+import { DISPATCH_GRACE_MS, reconcileJobStatus } from './job-reconcile.ts';
+import { isDeeperThanCoverage, SYNC_LIMIT_TTL_S } from './sync-policy.ts';
 import { resolveTokenSource, tokenSourceDeps } from './token-source.ts';
 
 import type { SyncRepoParams } from '../workflows/sync-repo.ts';
@@ -30,7 +30,7 @@ export class SyncRateLimitedError extends Error {
   /** Seconds until the same requester may sync this repo again. */
   readonly retryAfter: number;
   constructor(retryAfter: number) {
-    super(`This repository was synced recently; try again in ${retryAfter}s`);
+    super(`Sync capacity or quota reached; try again in ${retryAfter}s`);
     this.name = 'SyncRateLimitedError';
     this.retryAfter = retryAfter;
   }
@@ -60,8 +60,12 @@ export async function instanceStatus(
     return (INSTANCE_STATUSES as readonly string[]).includes(status)
       ? (status as InstanceStatus)
       : 'unknown';
-  } catch {
-    return 'missing';
+  } catch (error) {
+    // Only the engine's explicit absence error proves there is no instance.
+    // Network/transport failures must not release an active reservation.
+    return error instanceof Error && error.message.includes('instance.not_found')
+      ? 'missing'
+      : 'unknown';
   }
 }
 
@@ -84,13 +88,40 @@ export async function reconcileJob(
   job: SyncJob,
 ): Promise<SyncJob | undefined> {
   if (job.status !== 'queued' && job.status !== 'running') return undefined;
-  const verdict = reconcileJobStatus({ job, instance: await instanceStatus(env, job.id) });
+  const instance = await instanceStatus(env, job.id);
+  const verdict = reconcileJobStatus({ job, instance });
   if (verdict.action === 'keep') return job;
+  if (!['missing', 'errored', 'terminated', 'complete'].includes(instance)) {
+    // Stop a stalled live instance before freeing its slot: it must not resume
+    // writes after a replacement job starts. Failed termination keeps the lease.
+    try {
+      await (await env.SYNC_REPO.get(job.id)).terminate();
+    } catch {
+      return job;
+    }
+  }
   await db
     .update(schema.syncJobs)
     .set({ status: 'errored', error: verdict.error, finishedAt: new Date().toISOString() })
     .where(and(eq(schema.syncJobs.id, job.id), inArray(schema.syncJobs.status, ACTIVE_STATUSES)));
   return undefined;
+}
+
+/** Recover abandoned reservations across repos before applying aggregate caps. */
+async function reconcileStaleJobs(env: Pick<Env, 'SYNC_REPO'>, db: Db): Promise<void> {
+  const cutoff = new Date(Date.now() - DISPATCH_GRACE_MS).toISOString();
+  const candidates = await db
+    .select()
+    .from(schema.syncJobs)
+    .where(
+      and(
+        inArray(schema.syncJobs.status, ACTIVE_STATUSES),
+        lte(sql`coalesce(${schema.syncJobs.progressAt}, ${schema.syncJobs.createdAt})`, cutoff),
+      ),
+    )
+    .limit(100)
+    .all();
+  await Promise.all(candidates.map((job) => reconcileJob(env, db, job)));
 }
 
 export function findActiveJob(db: Db, repoId: string): Promise<SyncJob | undefined> {
@@ -140,10 +171,9 @@ export interface StartSyncOptions {
   /**
    * The signed-in user asking for the sync: the job runs on their token when
    * it sees the repo (else on the server token for a public one, see
-   * `resolveTokenSource`) and counts against their per-repo limit. Omit for
-   * the cron: server token, never rate limited.
+   * `resolveTokenSource`) and consumes both repository and aggregate capacity.
    */
-  requestedBy?: number | null;
+  requestedBy: number;
   /**
    * The token source `checkRepoAccess` already resolved for this request
    * (`unknown` or `replaced`), so GitHub is not asked twice. Omit to resolve
@@ -172,12 +202,11 @@ export interface StartedSync {
 export async function startSync(
   env: Env,
   ref: RepoRef,
-  options: StartSyncOptions = {},
+  options: StartSyncOptions,
 ): Promise<StartedSync> {
-  const userId = options.requestedBy ?? null;
+  const userId = options.requestedBy;
   const source =
-    options.source ??
-    (await resolveTokenSource(tokenSourceDeps(env), userId === null ? null : { id: userId }, ref));
+    options.source ?? (await resolveTokenSource(tokenSourceDeps(env), { id: userId }, ref));
   if (source.source === 'not-found') throw new RepoNotFoundError(ref);
   if (source.source === 'login-required') {
     throw new Error('A sync needs a signed-in user');
@@ -185,6 +214,7 @@ export async function startSync(
   const { meta } = source;
 
   const db = getDb(env);
+  await reconcileStaleJobs(env, db);
   const repo = await upsertRepo(db, {
     id: meta.id,
     owner: ref.owner,
@@ -198,14 +228,6 @@ export async function startSync(
 
   const mode = options.mode ?? 'incremental';
   const depth = options.depth ?? DEFAULT_DEPTH;
-  if (userId !== null) {
-    const decision = syncLimitDecision({
-      limitedUntil: await readSyncLimit(env.CACHE, userId, repo.id),
-      depth,
-      coverage: { syncedAt: repo.lastSyncedAt, coverageSince: repo.coverageSince },
-    });
-    if (decision.limited) throw new SyncRateLimitedError(decision.retryAfter);
-  }
 
   // Walk back at least to the start of the last complete run so nothing
   // updated since it (including during a partial run cut by the budget) is
@@ -221,15 +243,33 @@ export async function startSync(
     coverageSince: repo.coverageSince,
   })?.toISOString();
   const jobId = crypto.randomUUID();
-  await db.insert(schema.syncJobs).values({
+  const now = Date.now();
+  const admitted = await admitSyncJob(db, {
     id: jobId,
     repoId: repo.id,
     requestedBy: userId,
     mode,
     maxPrs: options.maxPrs ?? null,
-    status: 'queued',
-    createdAt: new Date().toISOString(),
+    createdAt: new Date(now).toISOString(),
+    cooldownAfter: isDeeperThanCoverage(
+      depth,
+      {
+        syncedAt: repo.lastSyncedAt,
+        coverageSince: repo.coverageSince,
+      },
+      now,
+    )
+      ? null
+      : new Date(now - SYNC_LIMIT_TTL_S * 1000).toISOString(),
   });
+  if (!admitted) {
+    const existing = await findActiveJob(db, repo.id);
+    if (existing) throw new SyncAlreadyRunningError(existing.id);
+    throw new SyncRateLimitedError(60);
+  }
+  // Preserve the explicit import intent even if dispatch fails. Otherwise a
+  // never-viewed private repo can be swept with its recent quota history.
+  await touchRepoView(db, { repoId: repo.id, userId, now: new Date(now).toISOString() });
 
   const params: SyncRepoParams = {
     owner: ref.owner,
@@ -242,15 +282,8 @@ export async function startSync(
     ...(since === undefined ? {} : { since }),
     ...(options.maxPrs === undefined ? {} : { maxPrs: options.maxPrs }),
   };
-  try {
-    await env.SYNC_REPO.create({ id: jobId, params });
-  } catch (error) {
-    await db
-      .update(schema.syncJobs)
-      .set({ status: 'errored', error: String(error), finishedAt: new Date().toISOString() })
-      .where(eq(schema.syncJobs.id, jobId));
-    throw error;
-  }
-  if (userId !== null) await recordSyncLimit(env.CACHE, userId, repo.id);
+  // A failed response does not prove the engine rejected creation. Keep the
+  // reservation until reconciliation can establish the instance's state.
+  await env.SYNC_REPO.create({ id: jobId, params });
   return { jobId, repoId: repo.id, depth, ...(since === undefined ? {} : { since }) };
 }

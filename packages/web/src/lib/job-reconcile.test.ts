@@ -1,11 +1,44 @@
 import { describe, expect, it } from 'vitest';
 
-import { LOST_AFTER_MS, reconcileJobStatus, STALL_AFTER_MS } from './job-reconcile.ts';
+import {
+  DISPATCH_GRACE_MS,
+  LOST_AFTER_MS,
+  reconcileJobStatus,
+  STALL_AFTER_MS,
+} from './job-reconcile.ts';
 
 const createdAt = '2026-09-29T00:00:00.000Z';
 const t0 = Date.parse(createdAt);
 
 describe('reconcileJobStatus', () => {
+  it('keeps a queued reservation while dispatch may still be in flight', () => {
+    for (const instance of ['missing'] as const) {
+      expect(
+        reconcileJobStatus({
+          job: { status: 'queued', createdAt, progressAt: null },
+          instance,
+          now: t0 + DISPATCH_GRACE_MS - 1,
+        }),
+      ).toEqual({ action: 'keep' });
+      expect(
+        reconcileJobStatus({
+          job: { status: 'queued', createdAt, progressAt: null },
+          instance,
+          now: t0 + DISPATCH_GRACE_MS,
+        }).action,
+      ).toBe('lost');
+    }
+  });
+
+  it('keeps reservations when the engine cannot establish an instance status', () => {
+    expect(
+      reconcileJobStatus({
+        job: { status: 'queued', createdAt, progressAt: null },
+        instance: 'unknown',
+        now: t0 + LOST_AFTER_MS * 2,
+      }),
+    ).toEqual({ action: 'keep' });
+  });
   it('keeps a running job whose instance is live', () => {
     for (const instance of ['queued', 'running', 'paused', 'waiting'] as const) {
       expect(
@@ -29,7 +62,7 @@ describe('reconcileJobStatus', () => {
   });
 
   it('marks a running job lost when the instance errored, was terminated, or completed without a verdict', () => {
-    for (const instance of ['errored', 'terminated', 'complete', 'unknown'] as const) {
+    for (const instance of ['errored', 'terminated', 'complete'] as const) {
       expect(
         reconcileJobStatus({
           job: { status: 'queued', createdAt, progressAt: null },

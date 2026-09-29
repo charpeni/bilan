@@ -1,8 +1,8 @@
 import { buildPayload, GithubClient, RepoNotFoundError, syncPage } from '@bilan/core';
-import { D1Store, schema, upsertRepo } from '@bilan/store-d1';
+import { beginSyncJob, D1Store, schema, upsertRepo } from '@bilan/store-d1';
 import { WorkflowEntrypoint } from 'cloudflare:workers';
 import { NonRetryableError } from 'cloudflare:workflows';
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 
 import { getDb } from '../lib/db.ts';
 import {
@@ -87,7 +87,14 @@ export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
         'resolve-repo',
         PAGE_RETRIES,
         async () => {
+          const reservation = await beginSyncJob(db, jobId, new Date().toISOString());
+          if (!reservation) {
+            throw new NonRetryableError('This sync reservation is no longer active');
+          }
           const { meta } = await withClient((client) => client.repoMeta({ owner, name }));
+          if (meta.id !== reservation.repoId) {
+            throw new NonRetryableError('The repository changed; start a new sync');
+          }
           const repo = await upsertRepo(db, {
             id: meta.id,
             owner,
@@ -95,10 +102,6 @@ export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
             isPrivate: meta.isPrivate,
             totalPrs: meta.pullRequests.totalCount,
           });
-          await db
-            .update(schema.syncJobs)
-            .set({ status: 'running', progressAt: new Date().toISOString() })
-            .where(eq(schema.syncJobs.id, jobId));
           // Read the prior state before stamping this run as started: `interrupted`
           // must reflect the previous run, not this one. The marker keeps the
           // earliest unfinished start (`markStarted` only sets it when null), so
@@ -374,7 +377,12 @@ export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
           error: error instanceof Error ? error.message : String(error),
           finishedAt: new Date().toISOString(),
         })
-        .where(eq(schema.syncJobs.id, jobId));
+        .where(
+          and(
+            eq(schema.syncJobs.id, jobId),
+            inArray(schema.syncJobs.status, ['queued', 'running']),
+          ),
+        );
       throw error;
     }
   }

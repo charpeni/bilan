@@ -1,4 +1,4 @@
-import { integer, primaryKey, sqliteTable, text, unique } from 'drizzle-orm/sqlite-core';
+import { index, integer, primaryKey, sqliteTable, text, unique } from 'drizzle-orm/sqlite-core';
 
 /** GitHub users who signed in. `id` is GitHub's numeric user id. */
 export const users = sqliteTable('users', {
@@ -72,23 +72,32 @@ export const pullRequests = sqliteTable(
   (t) => [primaryKey({ columns: [t.repoId, t.number] })],
 );
 
-export const syncJobs = sqliteTable('sync_jobs', {
-  /** The workflow instance id. */
-  id: text('id').primaryKey(),
-  repoId: text('repo_id')
-    .notNull()
-    .references(() => repos.id, { onDelete: 'cascade' }),
-  requestedBy: integer('requested_by').references(() => users.id, { onDelete: 'set null' }),
-  mode: text('mode').notNull(),
-  maxPrs: integer('max_prs'),
-  status: text('status').notNull(),
-  pointsSpent: integer('points_spent').notNull().default(0),
-  error: text('error'),
-  createdAt: text('created_at').notNull(),
-  finishedAt: text('finished_at'),
-  /** Heartbeat: set when the run starts and after every page step. */
-  progressAt: text('progress_at'),
-});
+export const syncJobs = sqliteTable(
+  'sync_jobs',
+  {
+    /** The workflow instance id. */
+    id: text('id').primaryKey(),
+    repoId: text('repo_id')
+      .notNull()
+      .references(() => repos.id, { onDelete: 'cascade' }),
+    requestedBy: integer('requested_by').references(() => users.id, { onDelete: 'set null' }),
+    mode: text('mode').notNull(),
+    maxPrs: integer('max_prs'),
+    status: text('status').notNull(),
+    pointsSpent: integer('points_spent').notNull().default(0),
+    error: text('error'),
+    createdAt: text('created_at').notNull(),
+    finishedAt: text('finished_at'),
+    /** Heartbeat: set when the run starts and after every page step. */
+    progressAt: text('progress_at'),
+  },
+  (t) => [
+    index('sync_jobs_repo_created').on(t.repoId, t.createdAt),
+    index('sync_jobs_user_created').on(t.requestedBy, t.createdAt),
+    index('sync_jobs_status_user').on(t.status, t.requestedBy),
+    index('sync_jobs_created').on(t.createdAt),
+  ],
+);
 
 export const repoViews = sqliteTable(
   'repo_views',

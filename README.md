@@ -73,6 +73,15 @@ install page. Public repositories need no install.
 Installation callbacks without browser-bound OAuth state restart normal
 sign-in; their supplied authorization code is never used to create a session.
 
+Sync admission is atomic in D1: one active job per repository, at most two
+active jobs and 20 starts per account in a rolling 24 hours, and at most 20
+active jobs and 200 starts globally. Deepening history still consumes these
+budgets; failed attempts count toward the daily budget. A repeated sync of the
+same depth has a 10-minute cooldown. The limits live in
+`packages/store-d1/src/jobs.ts`. Abandoned reservations are reconciled before
+admission, and a stalled live workflow must be terminated before its capacity
+is released. If the engine cannot report its status, the reservation is kept.
+
 ### Running it yourself
 
 1. Create a GitHub App with permissions Pull requests: Read-only and Metadata:

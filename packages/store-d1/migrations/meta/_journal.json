@@ -50,6 +50,13 @@
       "when": 1790641577325,
       "tag": "0006_job_progress_at",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1790722615541,
+      "tag": "0007_sync_admission_indexes",
+      "breakpoints": true
     }
   ]
 }

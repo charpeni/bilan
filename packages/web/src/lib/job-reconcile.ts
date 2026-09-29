@@ -17,6 +17,8 @@ export type InstanceStatus =
 export const LOST_AFTER_MS = 6 * 3600e3;
 /** A running (not sleeping) job whose heartbeat is older than this is treated as lost. */
 export const STALL_AFTER_MS = 10 * 60e3;
+/** A queued reservation may not have reached Workflows yet. */
+export const DISPATCH_GRACE_MS = 2 * 60e3;
 
 const SLEEPING: ReadonlySet<InstanceStatus> = new Set(['paused', 'waiting', 'waitingForPause']);
 
@@ -46,8 +48,12 @@ export function reconcileJobStatus(input: {
 }): Reconciliation {
   const { job, instance } = input;
   if (job.status !== 'queued' && job.status !== 'running') return { action: 'keep' };
+  if (instance === 'unknown') return { action: 'keep' };
   const now = input.now ?? Date.now();
   const age = now - Date.parse(job.createdAt);
+  if (job.status === 'queued' && age < DISPATCH_GRACE_MS && instance === 'missing') {
+    return { action: 'keep' };
+  }
   if (LIVE.has(instance)) {
     if (age > LOST_AFTER_MS) {
       return {
