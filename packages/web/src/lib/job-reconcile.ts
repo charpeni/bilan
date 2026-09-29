@@ -15,6 +15,10 @@ export type InstanceStatus =
 
 /** A job that has been "running" this long with no verdict is treated as lost. */
 export const LOST_AFTER_MS = 6 * 3600e3;
+/** A running (not sleeping) job whose heartbeat is older than this is treated as lost. */
+export const STALL_AFTER_MS = 10 * 60e3;
+
+const SLEEPING: ReadonlySet<InstanceStatus> = new Set(['paused', 'waiting', 'waitingForPause']);
 
 const LIVE: ReadonlySet<InstanceStatus> = new Set([
   'queued',
@@ -36,17 +40,34 @@ export type Reconciliation = { action: 'keep' } | { action: 'lost'; error: strin
  * that run reconcile conservatively).
  */
 export function reconcileJobStatus(input: {
-  job: Pick<SyncJob, 'status' | 'createdAt'>;
+  job: Pick<SyncJob, 'status' | 'createdAt' | 'progressAt'>;
   instance: InstanceStatus;
   now?: number;
 }): Reconciliation {
   const { job, instance } = input;
   if (job.status !== 'queued' && job.status !== 'running') return { action: 'keep' };
-  const age = (input.now ?? Date.now()) - Date.parse(job.createdAt);
+  const now = input.now ?? Date.now();
+  const age = now - Date.parse(job.createdAt);
   if (LIVE.has(instance)) {
-    return age > LOST_AFTER_MS
-      ? { action: 'lost', error: `still ${instance} after ${Math.round(age / 3600e3)}h; given up` }
-      : { action: 'keep' };
+    if (age > LOST_AFTER_MS) {
+      return {
+        action: 'lost',
+        error: `still ${instance} after ${Math.round(age / 3600e3)}h; given up`,
+      };
+    }
+    // The engine can keep calling an instance "running" that no longer executes
+    // (a local restart, a wedged isolate). Each page step beats the heartbeat;
+    // a sleeping instance (rate-limit wait) legitimately does not, so only a
+    // supposedly running one is held to it.
+    const lastBeat = Date.parse(job.progressAt ?? job.createdAt);
+    const quiet = now - lastBeat;
+    if (!SLEEPING.has(instance) && quiet > STALL_AFTER_MS) {
+      return {
+        action: 'lost',
+        error: `lost: no progress for ${Math.round(quiet / 60e3)} min while the engine reported it ${instance}`,
+      };
+    }
+    return { action: 'keep' };
   }
   const why =
     instance === 'missing'

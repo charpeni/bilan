@@ -86,6 +86,8 @@ export const syncJobs = sqliteTable('sync_jobs', {
   error: text('error'),
   createdAt: text('created_at').notNull(),
   finishedAt: text('finished_at'),
+  /** Heartbeat: set when the run starts and after every page step. */
+  progressAt: text('progress_at'),
 });
 
 export const repoViews = sqliteTable(

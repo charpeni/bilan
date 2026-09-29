@@ -43,6 +43,13 @@
       "when": 1790207031324,
       "tag": "0005_reconciled_at",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1790641577325,
+      "tag": "0006_job_progress_at",
+      "breakpoints": true
     }
   ]
 }

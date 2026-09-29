@@ -87,7 +87,7 @@ export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
         });
         await db
           .update(schema.syncJobs)
-          .set({ status: 'running' })
+          .set({ status: 'running', progressAt: new Date().toISOString() })
           .where(eq(schema.syncJobs.id, jobId));
         // Read the prior state before stamping this run as started: `interrupted`
         // must reflect the previous run, not this one. The marker keeps the
@@ -158,6 +158,12 @@ export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
         pagesUsed++;
         fetched += result.fetched;
         pointsSpent += result.cost;
+        // Heartbeat for the status endpoint and the lost-job check: a run that
+        // stops beating while the engine still calls it "running" is treated as lost.
+        await db
+          .update(schema.syncJobs)
+          .set({ progressAt: new Date().toISOString(), pointsSpent })
+          .where(eq(schema.syncJobs.id, jobId));
         return result;
       };
       /** GitHub's window resets on the hour; park the instance until then before the next page. */
