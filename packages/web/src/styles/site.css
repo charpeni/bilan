@@ -287,15 +287,35 @@ svg.icon {
 .theme-cycle:hover {
   color: var(--ink);
 }
+/* The three icons share one cell; the current one turns in as the previous one turns out. */
 .theme-cycle .i {
-  display: none;
+  grid-area: 1 / 1;
   width: 16px;
   height: 16px;
+  opacity: 0;
+  transform: scale(0.6) rotate(-60deg);
+  transition:
+    opacity 160ms ease-out,
+    transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 html[data-theme='auto'] .theme-cycle .i-auto,
 html[data-theme='light'] .theme-cycle .i-light,
 html[data-theme='dark'] .theme-cycle .i-dark {
-  display: block;
+  opacity: 1;
+  transform: none;
+}
+.theme-cycle:active .i {
+  transform: scale(0.85);
+  transition-duration: 80ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  .theme-cycle .i {
+    transition: none;
+    transform: none;
+  }
+  .theme-cycle:active .i {
+    transform: none;
+  }
 }
 .chip {
   display: inline-flex;
