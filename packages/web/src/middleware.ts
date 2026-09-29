@@ -1,10 +1,11 @@
 import { getSessionUser } from '@bilan/store-d1';
-import { defineMiddleware } from 'astro:middleware';
+import { defineMiddleware, sequence } from 'astro:middleware';
 import { env } from 'cloudflare:workers';
 
 import { getDb } from './lib/db.ts';
 import { githubUnavailable, json } from './lib/http.ts';
 import { loginHref } from './lib/oauth.ts';
+import { secureResponse } from './lib/response-security.ts';
 import { SESSION_COOKIE } from './lib/session.ts';
 import { GithubUnavailableError, ReauthRequiredError } from './lib/tokens.ts';
 
@@ -15,7 +16,7 @@ import { GithubUnavailableError, ReauthRequiredError } from './lib/tokens.ts';
  * When GitHub could not say whether it still is (refresh failed on a network
  * error or 5xx), answer 503 and keep the stored grant.
  */
-export const onRequest = defineMiddleware(async (context, next) => {
+const session = defineMiddleware(async (context, next) => {
   context.locals.user = null;
   const sessionId = context.cookies.get(SESSION_COOKIE)?.value;
   if (sessionId) {
@@ -47,3 +48,11 @@ export const onRequest = defineMiddleware(async (context, next) => {
     return context.redirect(loginHref(url.pathname + url.search), 302);
   }
 });
+
+export const onRequest = sequence(
+  defineMiddleware(async (context, next) => {
+    const response = await next();
+    return secureResponse(response, context.url, context.locals.user !== null);
+  }),
+  session,
+);

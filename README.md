@@ -74,6 +74,8 @@ install page. Public repositories need no install.
 
 Installation callbacks without browser-bound OAuth state restart normal
 sign-in; their supplied authorization code is never used to create a session.
+Authenticated responses are not browser-cacheable, and dynamic responses
+disallow framing.
 
 Sync admission is atomic in D1: one active job per repository, at most two
 active jobs and 20 starts per account in a rolling 24 hours, and at most 20

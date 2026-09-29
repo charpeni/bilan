@@ -95,7 +95,7 @@ async function respond(
     headers: {
       'content-type': 'application/json',
       'content-encoding': 'gzip',
-      'cache-control': 'private, max-age=60',
+      'cache-control': 'no-store',
       etag: object.httpEtag,
       [SYNCED_AT_HEADER]: repo.lastSyncedAt,
       'x-bilan-stale': isStale(repo.lastSyncedAt) ? '1' : '0',
