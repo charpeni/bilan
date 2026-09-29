@@ -754,6 +754,10 @@ label.check:hover {
   padding: 8px 0 8px 16px;
   white-space: nowrap;
 }
+.wrap th:last-child,
+.wrap td:last-child {
+  padding-right: 16px;
+}
 .wrap th:first-child,
 .wrap td:first-child {
   text-align: left;
