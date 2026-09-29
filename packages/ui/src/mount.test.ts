@@ -237,9 +237,9 @@ describe('mount', () => {
       click('90');
       const btn = root.querySelector('[data-range="90"]');
       expect(btn?.getAttribute('aria-busy')).toBe('true');
-      expect(note?.hidden).toBe(false);
-      expect(note?.dataset.kind).toBe('busy');
-      expect(note?.textContent).toBe('Syncing the last 90 days…');
+      // Progress is the host page's job (a notice under the header); the
+      // inline note stays hidden while the button shows it is busy.
+      expect(note?.hidden).toBe(true);
       // A second click while busy does not start another load.
       click('180');
       expect(onLoadMore).toHaveBeenCalledTimes(1);

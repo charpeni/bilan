@@ -209,7 +209,9 @@ export function mount(root: HTMLElement, payload: Payload, options: MountOptions
       const pending = options.onLoadMore(range);
       if (!(pending instanceof Promise)) return;
       setBusy(range);
-      note(loadingText(range), 'busy');
+      // Progress is reported by the host page (a notice pinned under the
+      // header); here only the pressed button shows it is busy.
+      loadNote.hidden = true;
       pending.then(
         () => {
           if (destroyed) return;

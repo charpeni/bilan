@@ -554,6 +554,34 @@ form + .pop-item,
   color: var(--ink-2);
   font-size: 13.5px;
 }
+/* The sync notice stays pinned under the header while a sync runs. */
+#status {
+  position: sticky;
+  top: var(--hdr-h);
+  z-index: 5;
+  background: var(--page);
+}
+#status[data-state='busy'] > span::before {
+  content: '';
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 8px;
+  border: 1.5px solid var(--accent);
+  border-right-color: transparent;
+  vertical-align: -1px;
+  animation: status-spin 0.9s linear infinite;
+}
+@keyframes status-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #status[data-state='busy'] > span::before {
+    animation: none;
+  }
+}
 .notice > span,
 .banner > p {
   flex: 1 1 240px;

@@ -292,7 +292,11 @@ const chipTitle =
           statusAction.addEventListener('click', () => statusRun?.());
 
           /** The notice under the header, with an optional action button. */
-          const show = (text: string, state?: 'error', action?: { label: string; run: () => void }): void => {
+          const show = (
+            text: string,
+            state?: 'error' | 'busy',
+            action?: { label: string; run: () => void },
+          ): void => {
             status.hidden = false;
             statusText.textContent = text;
             if (state) status.dataset.state = state;
@@ -383,14 +387,17 @@ const chipTitle =
            * between probes rather than jumping (the whole note is tabular-figured).
            */
           const noteParts = { prefix: '', before: '', after: '' };
+          // The progress line lives in the sticky notice under the header, so it
+          // stays in view wherever the reader has scrolled; the range button
+          // keeps only its spinner.
           const noteCount = liveCount((v) => {
-            mounted?.status(`${noteParts.prefix} ${noteParts.before}${fmtCount(v)}${noteParts.after}`);
+            show(`${noteParts.prefix} ${noteParts.before}${fmtCount(v)}${noteParts.after}`, 'busy');
           });
           const progressNote = (prefix: string, view: SyncView): void => {
             const text = syncLine(view);
             const split = view.count === null ? null : splitAtCount(text, fmtCount(view.count));
             if (split === null || view.count === null) {
-              mounted?.status(`${prefix} ${text}`);
+              show(`${prefix} ${text}`, 'busy');
               return;
             }
             Object.assign(noteParts, { prefix, ...split });
