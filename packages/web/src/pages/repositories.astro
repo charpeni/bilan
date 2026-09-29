@@ -99,7 +99,7 @@ const rows = await Promise.all(
             </p>
           ) : (
             <p class="field-msg muted" id="repo-help">
-              Any repository your GitHub account can read. The first visit syncs its last 30 days.
+                Any repository your GitHub account can read. Open it, then choose Start sync.
             </p>
           )
         }
@@ -157,7 +157,7 @@ const rows = await Promise.all(
                 <span class="cell sync-cell" data-kind={status.kind}>
                   {status.kind === 'syncing' && <span class="dot busy" aria-hidden="true" />}
                   {status.kind === 'synced' && status.stale && (
-                    <span class="stale-dot" title="Older than an hour; refreshed on your next visit">
+                <span class="stale-dot" title="Older than an hour; open the dashboard to refresh">
                       <span class="sr-only">(out of date)</span>
                     </span>
                   )}

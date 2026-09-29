@@ -7,7 +7,7 @@ export interface RepoPageState {
   repo: Repo | undefined;
 }
 
-/** Only authorized cached metadata may enter the page presentation model. */
+/** Opening a page decides what to display; importing a repo requires a POST. */
 export function repoPageState(access: AccessDecision, cached: Repo | undefined): RepoPageState {
   switch (access.kind) {
     case 'ok':
@@ -21,4 +21,9 @@ export function repoPageState(access: AccessDecision, cached: Repo | undefined):
     default:
       return { view: access.kind, repo: undefined };
   }
+}
+
+/** A cross-site landing must not turn into an automatic, same-origin sync POST. */
+export function allowAutoRefresh(request: Request): boolean {
+  return request.headers.get('sec-fetch-site') === 'same-origin';
 }

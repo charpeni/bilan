@@ -1,5 +1,4 @@
 ---
-import { GithubError, RepoNotFoundError } from '@bilan/core';
 import { getRepoByName, touchRepoView } from '@bilan/store-d1';
 import { env } from 'cloudflare:workers';
 
@@ -16,14 +15,9 @@ import {
   fmtHistory,
   fmtInstant,
 } from '../../lib/format.ts';
-import {
-  findActiveJob,
-  startSync,
-  SyncAlreadyRunningError,
-  SyncRateLimitedError,
-} from '../../lib/jobs.ts';
+import { findActiveJob } from '../../lib/jobs.ts';
 import { isOauthConfigured, loginHref as loginHrefFor } from '../../lib/oauth.ts';
-import { repoPageState } from '../../lib/repo-page.ts';
+import { allowAutoRefresh, repoPageState } from '../../lib/repo-page.ts';
 import { isStale, needsRefresh } from '../../lib/stale.ts';
 
 import type { Repo } from '@bilan/store-d1';
@@ -47,8 +41,6 @@ let view: 'ready' | 'syncing' | 'not-found' | 'unavailable' | 'sign-in';
 let ownJobId: string | null = null;
 /** Whether some job is queued or running, whoever started it. */
 let syncActive = false;
-/** Why a sync could not be started right now, shown on the syncing page. */
-let syncError: string | null = null;
 
 if (example) {
   // Nothing to decide: no row, no access check, no sync, whoever is looking.
@@ -74,37 +66,6 @@ if (example) {
     const active = await findActiveJob(db, repo.id);
     syncActive = active !== undefined;
     ownJobId = active && user && active.requestedBy === user.id ? active.id : null;
-  } else if (access.kind === 'unknown' || access.kind === 'replaced') {
-    // First view of a repo bilan has no row for (`unknown`), or of a name another
-    // repo took over (`replaced`: the old row is parked by the sync, never
-    // served): start its first sync on the token GitHub just answered on.
-    try {
-      const started = await startSync(
-        env,
-        { owner, name },
-        { mode: 'incremental', depth: '30d', requestedBy: user?.id ?? null, source: access.source },
-      );
-      ownJobId = started.jobId;
-      syncActive = true;
-      view = 'syncing';
-    } catch (error) {
-      if (error instanceof SyncAlreadyRunningError) {
-        // Someone else's job (or a cron's): watched through the payload endpoint.
-        syncActive = true;
-        view = 'syncing';
-      } else if (error instanceof SyncRateLimitedError) {
-        syncError = error.message;
-        view = 'syncing';
-      } else if (error instanceof RepoNotFoundError) {
-        view = 'not-found';
-      } else if (error instanceof GithubError) {
-        view = 'unavailable';
-      } else {
-        throw error;
-      }
-    }
-    repo = view === 'syncing' ? await getRepoByName(db, owner, name) : undefined;
-    if (repo && user) await touchRepoView(db, { repoId: repo.id, userId: user.id, now });
   }
   if (view === 'unavailable') {
     Astro.response.status = 503;
@@ -122,7 +83,7 @@ const canSync = user !== null && !example;
  * budget) so the rest gets reconciled without waiting for the payload to age.
  */
 const autoRefresh =
-  canSync && view === 'ready' && !syncActive && repo !== undefined && needsRefresh(repo);
+  allowAutoRefresh(Astro.request) && canSync && view === 'ready' && !syncActive && repo !== undefined && needsRefresh(repo);
 const oauthReady = isOauthConfigured(env);
 /** The chip's tooltip: the absolute instant and exactly what the payload holds. */
 const chipTitle =
@@ -599,9 +560,9 @@ const chipTitle =
           <div class="state-body">
             <h1>{label}</h1>
             <p class="progress-text" id="detail" role="status" aria-live="polite">
-              {syncError === null ? 'Starting…' : ''}
+              {syncActive ? 'Starting…' : 'Ready to sync'}
             </p>
-            <div class="progress" id="progress" hidden={syncError !== null} aria-hidden="true" />
+            <div class="progress" id="progress" hidden={!syncActive} aria-hidden="true" />
             <p class="progress-sub" id="detail-2" />
             <p class="progress-warn" id="stall" hidden>
               <svg class="icon" viewBox="0 0 16 16" aria-hidden="true">
@@ -611,9 +572,11 @@ const chipTitle =
               <span id="stall-text" />
             </p>
             <p id="message">
-              {syncError ?? 'bilan is reading the last 30 days of activity, plus every open pull request, on your GitHub token.'}
+              {syncActive
+                ? 'bilan is reading the last 30 days of activity, plus every open pull request, on your GitHub token.'
+                : 'Start a sync to read the last 30 days of activity, plus every open pull request, on your GitHub token.'}
             </p>
-            <div id="expect" hidden={syncError !== null}>
+            <div id="expect" hidden={!syncActive}>
               <h2>What happens next</h2>
               <p class="muted small">
                 This usually takes under a minute; very busy repositories take a few. You can leave
@@ -621,11 +584,11 @@ const chipTitle =
                 <a href="/repositories">your repositories</a>) when it is done.
               </p>
             </div>
-            <div class="actions" id="retry" hidden={syncError === null}>
+            <div class="actions" id="retry" hidden={syncActive}>
               {canSync ? (
                 <>
                   <button class="btn btn-primary" type="button" id="restart">
-                    Start again
+                    {syncActive ? 'Start again' : 'Start sync'}
                   </button>
                   <a class="btn btn-primary" id="sign-in-again" href={loginHref} hidden>
                     Sign in again
@@ -645,7 +608,6 @@ const chipTitle =
               data-api-base={apiBase}
               data-own-job-id={ownJobId ?? ''}
               data-sync-active={syncActive ? '1' : '0'}
-              data-auto-start={canSync && syncError === null ? '1' : '0'}
             />
           </div>
         </div>
@@ -669,11 +631,10 @@ const chipTitle =
           const retry = document.getElementById('retry') as HTMLElement;
           const restart = document.getElementById('restart') as HTMLButtonElement | null;
           const signInAgain = document.getElementById('sign-in-again');
-          const intro = message.textContent ?? '';
+          const intro = 'bilan is reading the last 30 days of activity, plus every open pull request, on your GitHub token.';
           const apiBase = sync.dataset.apiBase as string;
           const ownJobId = sync.dataset.ownJobId || null;
           const syncActive = sync.dataset.syncActive === '1';
-          const autoStart = sync.dataset.autoStart === '1';
 
           /** The figure in the headline, in its own tabular-figure span so it can count up in place. */
           const figure = document.createElement('span');
@@ -763,18 +724,22 @@ const chipTitle =
           }
 
           async function start(): Promise<void> {
-            const response = await fetch(`${apiBase}/sync`, { method: 'POST' });
-            const body = (await response.json().catch(() => ({}))) as {
-              jobId?: string;
-              message?: string;
-            };
-            const watch = watchAfterSyncResponse(response.status, body, null);
-            if (watch === null) {
-              if (response.status === 401) fail('Your GitHub session has expired. Sign in again to sync.', true);
-              else fail(body.message ?? `The sync could not start (${response.status}).`);
-              return;
+            try {
+              const response = await fetch(`${apiBase}/sync`, { method: 'POST' });
+              const body = (await response.json().catch(() => ({}))) as {
+                jobId?: string;
+                message?: string;
+              };
+              const watch = watchAfterSyncResponse(response.status, body, null);
+              if (watch === null) {
+                if (response.status === 401) fail('Your GitHub session has expired. Sign in again to sync.', true);
+                else fail(body.message ?? `The sync could not start (${response.status}).`);
+                return;
+              }
+              await follow(watch);
+            } catch (error) {
+              fail(error instanceof Error ? error.message : String(error));
             }
-            await follow(watch);
           }
 
           restart?.addEventListener('click', () => {
@@ -784,7 +749,6 @@ const chipTitle =
 
           if (ownJobId) void follow({ kind: 'job', jobId: ownJobId });
           else if (syncActive) void follow({ kind: 'payload', baseline: null });
-          else if (autoStart) void start();
         </script>
       </main>
     )

@@ -53,7 +53,10 @@ The web app runs on Cloudflare Workers with D1, R2, KV, and Workflows. Signed
 out, it shows two built-in example dashboards (`withastro/astro` and
 `cloudflare/workers-sdk`) shipped as static snapshots. Signed in, it syncs any
 repository you can read on your own token into a shared cache, so a coworker
-who opens the same link sees the dashboard instantly.
+who opens the same link sees the dashboard instantly. A new repository shows
+a **Start sync** button; following a link alone does not import its data.
+Existing dashboards can refresh during navigation within the app. External
+links and bookmarks use the **Refresh** button for stale data.
 
 Access is checked per viewer against GitHub with the viewer's own token;
 allowed access and public visibility are cached for up to 15 minutes. Job

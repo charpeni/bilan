@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { repoPageState } from './repo-page.ts';
+import { allowAutoRefresh, repoPageState } from './repo-page.ts';
 
 import type { AccessDecision } from './access.ts';
 import type { Repo } from '@bilan/store-d1';
@@ -25,7 +25,7 @@ describe('repository presentation boundary', () => {
   );
 
   it.each(['unknown', 'replaced'] as const)(
-    'keeps an old row out of the page when access is %s',
+    'offers an explicit first sync for %s without exposing an old row',
     (kind) => {
       const decision = { kind, source: { source: 'user', userId: 7, meta: {} } } as AccessDecision;
       expect(repoPageState(decision, privateRepo)).toEqual({ view: 'syncing', repo: undefined });
@@ -37,5 +37,27 @@ describe('repository presentation boundary', () => {
       view: 'ready',
       repo: privateRepo,
     });
+  });
+});
+
+describe('automatic refresh intent', () => {
+  it.each([null, 'cross-site', 'same-site', 'none'])(
+    'does not turn a %s landing into a sync POST',
+    (site) => {
+      const headers = site === null ? {} : { 'sec-fetch-site': site };
+      expect(allowAutoRefresh(new Request('https://bilan.test/acme/repo', { headers }))).toBe(
+        false,
+      );
+    },
+  );
+
+  it('keeps refreshes for navigation within the app', () => {
+    expect(
+      allowAutoRefresh(
+        new Request('https://bilan.test/acme/repo', {
+          headers: { 'sec-fetch-site': 'same-origin' },
+        }),
+      ),
+    ).toBe(true);
   });
 });
