@@ -1,21 +1,24 @@
 # bilan
 
-The pulse of a GitHub repository. bilan turns pull request history into a
-picture of what is actually happening: who is contributing, which parts of
-the codebase are moving, how reviews flow and who carries them, and where
-work gets stuck. It is also a way to see what AI-assisted coding is doing
-to a codebase and a team over time: how much gets opened, how big changes
-are, how fast they merge, how many carry a real review, and how review load
-lands on the humans. Latencies are measured from the moment a PR became
-ready for review, so time spent in draft is never charged to reviewers.
+The pulse of a GitHub repository.
+
+bilan turns pull request history into a picture of what is actually happening
+in a repository: who is contributing, which parts of the codebase are moving,
+how reviews flow and who carries them, and where work gets stuck. It is also a
+way to see what AI-assisted coding does to a codebase and a team over time:
+how much gets opened, how large the changes are, how fast they merge, how many
+carry a real review, and how review load lands on the humans.
+
+Every latency is measured from the moment a pull request became ready for
+review, so time spent in draft is never charged to reviewers. bilan reads
+pull request metadata only, never code, and never writes to GitHub.
 
 Two ways to use it:
 
-- **CLI** (`github-bilan`): sync a repository with your own token and get a
-  self-contained HTML report you can open or share as a file.
-- **Web app** (`packages/web`, Cloudflare Workers): log in with GitHub, sync
-  repos on your token into a shared cache, and share report links with
-  coworkers who have access to the same repo.
+- **CLI**: sync a repository with your own token and get a self-contained
+  HTML report you can open or share as a file.
+- **Web app**: sign in with GitHub, open any repository you can read, and
+  share the dashboard link with coworkers who can read it too.
 
 ## CLI
 
@@ -23,144 +26,119 @@ Two ways to use it:
 npx github-bilan owner/name --open
 ```
 
-One command: it syncs the repository into a local cache, writes
-`<name>.report.html` (or `--out`), and with `--open` opens it in the browser.
-Re-running is cheap because the sync is incremental. `--no-cache` ignores the
-local cache and fetches everything again; `--offline` renders from the cache
-without touching GitHub.
+The command syncs the repository into a local cache, writes
+`<name>.report.html`, and opens it. Re-running is cheap: the sync is
+incremental.
 
-The token comes from `--token`, then `GITHUB_TOKEN`, then `gh auth token`.
-Public repos need any token; private repos need one that can read them.
+| Flag           | Effect                                                       |
+| -------------- | ------------------------------------------------------------ |
+| `--open`       | Open the report in the browser when done                     |
+| `--out FILE`   | Report path (default `<name>.report.html`)                   |
+| `--since DATE` | Reach further back than the default 30 days                  |
+| `--full`       | Walk the entire history                                      |
+| `--max-prs N`  | Stop after N pull requests                                   |
+| `--no-cache`   | Ignore the local cache and fetch everything again            |
+| `--offline`    | Render from the cache without contacting GitHub              |
+| `--token T`    | GitHub token; otherwise `GITHUB_TOKEN`, then `gh auth token` |
+| `--areas FILE` | Override how changed paths map to areas                      |
 
-By default `sync` fetches the last 30 days of activity plus every open PR, and
-later runs only widen that: `--since YYYY-MM-DD` reaches further back and
-`--full` walks the entire history. `--max-prs N` bounds a run. A full sync
-costs roughly one GitHub rate-limit point per PR, out of 5,000 per hour.
+By default a sync covers the last 30 days of activity plus every open pull
+request; later runs only widen that coverage. A 25-PR page costs one GitHub
+rate-limit point, so even a full history of a large repository fits in one
+hour's budget. The cache lives in `~/.cache/bilan`.
 
 ## Web app
 
-Sign in with GitHub, open any `owner/name`, and bilan syncs it into a shared
-D1/R2 cache. Signed-out visitors only see the built-in examples.
+The web app runs on Cloudflare Workers with D1, R2, KV, and Workflows. Signed
+out, it shows two built-in example dashboards (`withastro/astro` and
+`cloudflare/workers-sdk`) shipped as static snapshots. Signed in, it syncs any
+repository you can read on your own token into a shared cache, so a coworker
+who opens the same link sees the dashboard instantly.
 
-### Built-in examples
+Access is checked per viewer against GitHub with the viewer's own token. A
+private repository the viewer cannot read is indistinguishable from one that
+does not exist. Private data nobody has opened in 90 days is deleted.
 
-Two dashboards ship with the app as static data: `withastro/astro` and
-`cloudflare/workers-sdk`, each a full-history snapshot under
-`packages/web/public/examples/` (about 1.4 MB gzipped in total, plus an
-`index.json` the landing page reads at build time). They work with no GitHub
-token, no database row, no cron, and no login, and they are never synced live:
-`POST /api/repos/<owner>/<name>/sync` answers 405 for them. Regenerate the
-snapshots occasionally (a token is needed for the sync; `GITHUB_TOKEN`, else
-`gh auth token`):
+Login is a GitHub App with read-only permissions (Pull requests, Metadata).
+User tokens expire after eight hours; bilan stores them encrypted and refreshes
+them, including mid-sync. Private repositories require the app to be installed
+on the organization, once, by an owner; members can request it from the app's
+install page. Public repositories need no install.
 
-```sh
-pnpm examples:build
-```
+### Running it yourself
 
-Access rules: public repos are open to any signed-in viewer; a private repo
-is checked against GitHub with the viewer's own token (cached 15 minutes) and
-a repo the viewer cannot read is indistinguishable from one that does not
-exist. Private repos nobody has opened in 90 days are deleted nightly.
+1. Create a GitHub App with permissions Pull requests: Read-only and Metadata:
+   Read-only (and Members: Read-only under organization permissions, to resolve
+   team reviewers), "Request user authorization during installation" enabled,
+   expiring user tokens enabled, no webhook, and the callback URL of your
+   deployment plus `http://localhost:8788/auth/github/callback` for local use.
+2. Put the app's slug in `GITHUB_APP_SLUG` in `packages/web/wrangler.jsonc`.
+3. Create the Cloudflare resources and record their ids in `wrangler.jsonc`:
 
-### Auth model
+   ```sh
+   cd packages/web
+   npx wrangler d1 create bilan
+   npx wrangler r2 bucket create bilan-payloads
+   npx wrangler kv namespace create CACHE
+   ```
 
-Login is a **GitHub App** (user-to-server OAuth), not an OAuth App:
+4. Set the secrets and deploy:
 
-- Permissions are fixed on the app and read-only (Pull requests: read,
-  Metadata: read). There is no `repo` scope to ask for, and nothing bilan
-  could write with.
-- User tokens expire after 8 hours and come with a 6-month refresh token.
-  bilan stores both encrypted, refreshes within five minutes of expiry (also
-  mid-sync, since a deep sync can outlast a token), and asks the viewer to sign
-  in again once a token can no longer be refreshed or GitHub rejects it.
-- A user token reaches only the repos the viewer can see **and** the app is
-  installed on. Org access is therefore an install, done once by an owner or
-  repo admin from `https://github.com/apps/<slug>/installations/new`; other
-  members can request it from that page. No per-user OAuth approval.
+   ```sh
+   npx wrangler secret put GITHUB_CLIENT_ID
+   npx wrangler secret put GITHUB_CLIENT_SECRET
+   openssl rand -base64 32 | npx wrangler secret put TOKEN_ENCRYPTION_KEY
+   npx wrangler d1 migrations apply bilan --remote
+   pnpm deploy
+   ```
 
-Should a user token not reach a public repo the app is not installed on, it
-is read with the optional **server token** (`GITHUB_TOKEN`, a classic PAT
-with no scopes; a 25-PR page costs one rate-limit point). Which token a sync
-or first read runs on (`packages/web/src/lib/token-source.ts`):
+   `GITHUB_TOKEN`, a classic token with no scopes, is optional: it is only used
+   as a fallback for public repositories a user token cannot reach.
 
-| viewer     | user token sees it | server token sees it | token used     |
-| ---------- | ------------------ | -------------------- | -------------- |
-| signed in  | yes                | —                    | user           |
-| signed in  | no                 | yes, and public      | server         |
-| signed in  | no                 | no, or private       | not found      |
-| signed out | —                  | —                    | login required |
+For local development, copy `packages/web/.dev.vars.example` to `.dev.vars`,
+fill in the values, run `npx wrangler d1 migrations apply bilan --local`, then
+`pnpm --filter @bilan/web dev`. Workflows require the Workers Paid plan.
 
-It was verified on 2026-09-28 that a GitHub App user token does read public
-repos without an install, so the server token is only a safety net: nothing
-reads it at startup, and a deployment without it works until that fallback is
-actually taken (then the request fails with `GITHUB_TOKEN is not configured`).
-The built-in examples never touch either token.
-
-### Local setup
-
-1. Create a GitHub App (Settings → Developer settings → GitHub Apps → New):
-   callback URL `http://localhost:8788/auth/github/callback`, "Request user
-   authorization (OAuth) during installation" on, "Expire user authorization
-   tokens" on, webhook off, repository permissions Pull requests: Read-only and
-   Metadata: Read-only, installable on any account. Generate a client secret.
-2. Put the app's URL slug (`https://github.com/apps/<slug>`) in
-   `GITHUB_APP_SLUG` in `packages/web/wrangler.jsonc`.
-3. `cp packages/web/.dev.vars.example packages/web/.dev.vars` and fill in the
-   client id and secret and a token encryption key from
-   `openssl rand -base64 32`; the no-scope server token is optional.
-4. Apply the migrations and start the worker:
-
-```sh
-cd packages/web
-wrangler d1 migrations apply bilan --local
-pnpm --filter @bilan/web dev     # astro dev with the Cloudflare runtime
-wrangler dev                     # or the built worker, after `pnpm build`
-```
-
-Routes: `/auth/github/start?next=/owner/name` starts the login (never with a
-scope), `/auth/github/callback` finishes it, `POST /auth/logout` ends the
-session, `/repositories` lists the repos you opened (`/me` redirects there), and `/api/me` reports the
-signed-in user. A page that needs a token the viewer no longer has redirects
-to the login; the corresponding API calls answer 401.
+The built-in examples are regenerated with `pnpm examples:build`, which needs
+a GitHub token.
 
 ## What the numbers mean
 
-Timings are anchored to **ready for review**, not to when the PR was opened,
-so time spent in draft is never charged to the reviewers. A PR that opened as
-a draft has a ready-for-review event as its earliest draft-state event;
-anything after the first transition is treated as a re-draft and ignored.
+| Metric                   | Window anchor   | Definition                                                                   |
+| ------------------------ | --------------- | ---------------------------------------------------------------------------- |
+| PRs opened               | created         |                                                                              |
+| Merged / closed unmerged | merged / closed |                                                                              |
+| Time in draft            | created         | opened → marked ready (draft-opened pull requests only)                      |
+| Time to first review     | ready           | ready → first review by someone other than the author                        |
+| Time to merge            | merged          | ready → merged                                                               |
+| Reviewer turnaround      | review          | review request (or ready, if never requested) → that reviewer's first review |
+| Reviews given            | review          | self-reviews excluded                                                        |
 
-| Metric                   | Window anchor   | Definition                                                                             |
-| ------------------------ | --------------- | -------------------------------------------------------------------------------------- |
-| PRs opened               | created         | —                                                                                      |
-| Merged / closed unmerged | merged / closed | —                                                                                      |
-| Time in draft            | created         | opened → marked ready (draft-opened PRs only)                                          |
-| Time to first review     | ready           | ready → first review by someone other than the author                                  |
-| Time to merge            | merged          | ready → merged                                                                         |
-| Reviewer turnaround      | review          | review request (or ready, if never requested) → that reviewer's first review on the PR |
-| Reviews given            | review          | self-reviews excluded                                                                  |
-
-The date filter scopes each metric by its own anchor, so "last 30 days" means
-_what happened_ in those 30 days rather than _PRs that were opened_ in them.
-
-Known limits: area attribution samples up to 30 changed files per PR, up to 40
-reviews are captured per PR, and review timestamps come from submitted reviews
-only.
+A pull request that opened as a draft becomes reviewable at its first
+ready-for-review event; later re-drafts are ignored. Each metric is scoped by
+its own anchor, so "last 30 days" means what happened in those 30 days rather
+than which pull requests were opened in them. Area attribution samples up to 30
+changed files per pull request, and up to 40 reviews are captured per pull
+request.
 
 ## Development
 
 ```sh
 pnpm install
 pnpm check          # oxfmt, oxlint, tsc, vitest across the workspace
-pnpm build          # bundles @bilan/ui and the CLI
+pnpm build          # bundles the dashboard, the CLI, and the web app
 node packages/cli/bin/bilan.mjs owner/name --open
 ```
 
-Layout:
+| Package               | Role                                                                        |
+| --------------------- | --------------------------------------------------------------------------- |
+| `packages/core`       | GitHub GraphQL client, sync engine, derive step, and metrics; Web APIs only |
+| `packages/ui`         | The dashboard as a framework-free module                                    |
+| `packages/store-file` | JSON-file sync store used by the CLI                                        |
+| `packages/store-d1`   | Drizzle schema, migrations, and D1 sync store for the web app               |
+| `packages/web`        | The Astro app on Cloudflare Workers: login, sync workflow, dashboards       |
+| `packages/cli`        | The `bilan` command, published as `github-bilan`                            |
 
-- `packages/core`: GitHub GraphQL client, sync engine, derive step, metrics. Web APIs only, so it runs in Node and in Cloudflare Workers.
-- `packages/ui`: the dashboard as a framework-free module, `mount(el, payload)`.
-- `packages/store-file`: JSON-file sync store used by the CLI.
-- `packages/store-d1`: Drizzle schema, migrations, and D1 sync store for the web app.
-- `packages/web`: the Astro + Cloudflare Workers app (login, sync workflow, dashboards). `scripts/build-examples.mjs` regenerates the built-in examples.
-- `packages/cli`: the `bilan` command, published as `github-bilan`.
+## License
+
+MIT.
