@@ -147,6 +147,14 @@ svg.icon {
 }
 
 /* ---- header: one structure, one height, on every page ---- */
+/* Reserve the scrollbar gutter on every page. A page that is briefly shorter than
+   the viewport (a dashboard before its payload mounts, a state card) would otherwise
+   have no scrollbar, be a few pixels wider, and its centred header would sit further
+   right until the content arrived. */
+html {
+  scrollbar-gutter: stable;
+}
+
 .hdr {
   position: relative;
   height: var(--hdr-h);
