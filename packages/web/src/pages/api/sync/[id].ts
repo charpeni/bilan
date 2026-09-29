@@ -1,9 +1,12 @@
+import { schema } from '@bilan/store-d1';
 import { env } from 'cloudflare:workers';
+import { eq } from 'drizzle-orm';
 
 import { getDb } from '../../../lib/db.ts';
 import { json, loginRequired } from '../../../lib/http.ts';
 import { isSettledJobStatus, jobVisibility } from '../../../lib/job-visibility.ts';
 import { countStoredPrs, getJob, reconcileJob } from '../../../lib/jobs.ts';
+import { syncProgress } from '../../../lib/sync-progress.ts';
 
 import type { APIRoute } from 'astro';
 
@@ -44,7 +47,13 @@ export const GET: APIRoute = async ({ params, locals }) => {
   // `prsStored`: rows written for the repo so far, which the page shows as progress.
   const settled = isSettledJobStatus(job.status);
   const prsStored = await countStoredPrs(db, job.repoId);
-  return json({ ...job, settled, prsStored, workflow }, 200, {
+  const repo = await db
+    .select({ totalPrs: schema.repos.totalPrs })
+    .from(schema.repos)
+    .where(eq(schema.repos.id, job.repoId))
+    .get();
+  const progress = syncProgress({ mode: job.mode, prsStored, totalPrs: repo?.totalPrs ?? null });
+  return json({ ...job, settled, prsStored, progress, workflow }, 200, {
     'cache-control': 'no-store',
   });
 };
