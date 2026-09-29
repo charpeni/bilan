@@ -1827,6 +1827,10 @@ table.flags {
     padding-top: 12px;
     border-top: 1px solid var(--rule);
   }
+  .lp-hero .gloss {
+    grid-column: 1 / -1;
+    max-width: none;
+  }
   .lp-cover {
     order: 1;
     border-top: 0;
@@ -2149,6 +2153,9 @@ table.flags {
   .footer ul,
   .footer .footer-made {
     grid-column: 1 / -1;
+  }
+  .footer p {
+    max-width: none;
   }
   .state-card h1 {
     font-size: 30px;
