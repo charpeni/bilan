@@ -268,3 +268,55 @@ describe('GithubClient', () => {
     });
   });
 });
+
+describe('field-level FORBIDDEN', () => {
+  it('keeps the page when only some fields were refused, and records them', async () => {
+    const client = new GithubClient({
+      token: 't',
+      fetch: async () =>
+        json({
+          data: {
+            repository: {
+              pullRequests: {
+                nodes: [{ number: 1, timelineItems: { nodes: [{ requestedReviewer: null }] } }],
+              },
+            },
+          },
+          errors: [
+            {
+              type: 'FORBIDDEN',
+              message: 'Resource not accessible by integration',
+              path: [
+                'repository',
+                'pullRequests',
+                'nodes',
+                0,
+                'timelineItems',
+                'nodes',
+                0,
+                'requestedReviewer',
+              ],
+            },
+          ],
+        }),
+      sleep: async () => {},
+    });
+    const data = await client.graphql<{ repository: { pullRequests: { nodes: unknown[] } } }>(
+      'q',
+      {},
+    );
+    expect(data.repository.pullRequests.nodes).toHaveLength(1);
+    expect(client.forbiddenFields).toEqual([
+      'repository.pullRequests.nodes.timelineItems.nodes.requestedReviewer',
+    ]);
+  });
+
+  it('still fails when a FORBIDDEN error has no path (the whole query was refused)', async () => {
+    const client = new GithubClient({
+      token: 't',
+      fetch: async () => json({ data: null, errors: [{ type: 'FORBIDDEN', message: 'nope' }] }),
+      sleep: async () => {},
+    });
+    await expect(client.graphql('q', {})).rejects.toBeInstanceOf(GithubError);
+  });
+});

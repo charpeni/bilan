@@ -78,7 +78,7 @@ export interface PullRequestsPageOptions {
 
 interface GraphqlBody<T> {
   data?: T;
-  errors?: { message: string; type?: string }[];
+  errors?: { message: string; type?: string; path?: (string | number)[] }[];
 }
 
 /** GitHub's error bodies are JSON with a `message`; show that instead of the raw body. */
@@ -105,6 +105,8 @@ export class GithubClient {
   private readonly retries: number;
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly onRetry: GithubClientOptions['onRetry'];
+  /** Field paths GitHub refused on this token (see `request`); empty when every field was readable. */
+  forbiddenFields: string[] = [];
 
   constructor(options: GithubClientOptions) {
     this.token = options.token;
@@ -173,6 +175,27 @@ export class GithubClient {
       if (body.errors.every((e) => e.type === 'NOT_FOUND')) {
         if (body.data) return body.data;
         throw new GithubNotFoundError(message);
+      }
+      // A field the token may not read (a GitHub App without the org "Members"
+      // permission cannot resolve a team requested as reviewer, for instance)
+      // comes back as a FORBIDDEN error with a path, and GitHub nulls just that
+      // field. The rest of the page is good: keep it, and remember what was
+      // dropped so callers can surface it.
+      if (
+        body.data &&
+        body.errors.every(
+          (e) => e.type === 'FORBIDDEN' && Array.isArray(e.path) && e.path.length > 0,
+        )
+      ) {
+        this.forbiddenFields = [
+          ...new Set([
+            ...this.forbiddenFields,
+            ...body.errors.map((e) =>
+              (e.path ?? []).filter((x) => typeof x === 'string').join('.'),
+            ),
+          ]),
+        ];
+        return body.data;
       }
       throw new GithubError(
         message,
