@@ -344,7 +344,7 @@ export function render(ctx: DashboardContext): void {
   {
     const reviewers = reviewerRows(people, winReviews.length);
     const c = card(
-      'full',
+      'twothirds',
       'Reviewers',
       "Review volume, verdict mix, and turnaround. Turnaround runs from the review request (or ready-for-review) to that reviewer's first review on the PR.",
     );
@@ -373,7 +373,7 @@ export function render(ctx: DashboardContext): void {
       },
       { key: 'resp', label: 'Med. turnaround', val: (r) => r.medTurnaround, fmt: dur },
       { key: 'p90', label: 'p90 turnaround', val: (r) => r.p90Turnaround, fmt: dur, cls: 'dim' },
-      { key: 'authors', label: 'Authors helped', val: (r) => r.authorsHelped },
+      { key: 'authors', label: 'Authors helped', val: (r) => r.authorsHelped, cls: 'dim' },
     ];
     table(h, cols, reviewers, 'given');
     if (!reviewers.length) h.append(el('div', { class: 'empty', text: 'No reviews in range' }));
@@ -387,7 +387,7 @@ export function render(ctx: DashboardContext): void {
       value: r.reviews,
       rec: r,
     }));
-    const c = card('half', 'Top reviewers', 'Who carries the review load.');
+    const c = card('third', 'Top reviewers', 'Who carries the review load.');
     const h = chartHost(c);
     grid.append(c);
     queueMicrotask(() =>
@@ -543,7 +543,7 @@ export function render(ctx: DashboardContext): void {
   {
     const rows = oldestOpen(stillOpen);
     const c = card(
-      'full',
+      'half',
       'Oldest open PRs',
       'Sorted by age. These are where the backlog actually lives.',
     );
