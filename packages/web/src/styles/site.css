@@ -810,7 +810,10 @@ form + .pop-item,
   color: var(--muted);
 }
 .lp-cover {
-  grid-column: 4 / span 6;
+  grid-column: 4 / -1;
+}
+.lp-cover > :not(.actions) {
+  max-width: 62ch;
 }
 .lp-hero h1 {
   font: 650 44px/1.02 var(--font-sans);
