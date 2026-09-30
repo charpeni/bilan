@@ -149,6 +149,29 @@ describe('mount', () => {
     );
   });
 
+  it('measures recent activity and open-PR age at the snapshot time', () => {
+    const data = payload();
+    data.syncedAt = new Date(LAST).toISOString();
+    data.prs = [
+      {
+        ...data.prs[0]!,
+        c: LAST - 100 * DAY,
+        r: LAST - 100 * DAY,
+        m: null,
+        x: null,
+        s: 'OPEN',
+        dr: 0,
+        d: 0,
+        rv: [],
+        rq: [],
+      },
+    ];
+    setup(data);
+    expect(heroValue(root)).toBe('0');
+    expect(briefText()).toContain('1 ready PR');
+    expect(cardNamed(root, 'Oldest open PRs')?.textContent).toContain('3.3mo');
+  });
+
   it('labels interrupted snapshots without claiming all open PRs are current', () => {
     setup({ ...payload(), interrupted: true, reconciledAt: '2026-01-01T00:00:00Z' });
     const warning = root.querySelector<HTMLElement>('#sync-warning');

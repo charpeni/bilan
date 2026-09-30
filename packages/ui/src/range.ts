@@ -1,6 +1,6 @@
 import { DAY } from './utils.ts';
 
-/** The date-range buttons: days back from the last activity, or everything. */
+/** The date-range buttons: days back from the snapshot, or everything. */
 export type Range = '30' | '90' | '180' | 'all';
 
 export const RANGES: readonly Range[] = ['30', '90', '180', 'all'];
@@ -8,13 +8,7 @@ export const RANGES: readonly Range[] = ['30', '90', '180', 'all'];
 /** The product default: the depth every sync guarantees. */
 export const DEFAULT_RANGE: Range = '30';
 
-/**
- * A default sync computes `coverageSince` as "now − 30 days" at job start,
- * while the dashboard anchors its windows at the last activity, which is a
- * little earlier. The range buttons allow that gap so the default range is
- * never marked as needing a load right after a default sync. Statistical
- * comparisons do not: see `coversDays`.
- */
+/** Allow for the time between sync start and the completed snapshot when enabling ranges. */
 export const COVERAGE_SLACK = DAY;
 
 export const isRange = (value: unknown): value is Range =>

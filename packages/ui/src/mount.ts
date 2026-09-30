@@ -105,6 +105,7 @@ export function mount(root: HTMLElement, payload: Payload, options: MountOptions
   };
 
   const prs = derive(payload.prs);
+  const synced = Date.parse(payload.syncedAt ?? '');
   const warning = must<HTMLElement>('#sync-warning');
   warning.hidden = !payload.interrupted;
   warning.textContent = payload.interrupted
@@ -115,7 +116,7 @@ export function mount(root: HTMLElement, payload: Payload, options: MountOptions
     data: payload,
     prs,
     bots: new Set(payload.bots),
-    last: lastActivity(prs),
+    last: Number.isFinite(synced) ? synced : lastActivity(prs),
     state: createFilterState(),
     tip: createTooltip(must<HTMLElement>('#tt')),
   };
@@ -141,7 +142,11 @@ export function mount(root: HTMLElement, payload: Payload, options: MountOptions
       text: payload.repo,
     }),
   );
-  must('#repo-sub').textContent = activitySpan(payload.coverageSince, firstActivity(prs), last);
+  must('#repo-sub').textContent = activitySpan(
+    payload.coverageSince,
+    firstActivity(prs),
+    lastActivity(prs),
+  );
 
   // Populate the dimension filters from the data itself.
   const areaSel = must<HTMLSelectElement>('#area-filter');
