@@ -1,4 +1,12 @@
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -6,6 +14,7 @@ import { FileStore } from '@bilan/store-file';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { rawPr } from '../../core/src/testing/fixtures.ts';
+import { FakeGithub } from '../../core/src/testing/github.ts';
 import { timelineGithub } from '../../core/src/testing/timeline.ts';
 import { main } from './cli.ts';
 
@@ -28,6 +37,19 @@ const secondaryLimit = (call: number) =>
         headers: { 'retry-after': '1800' },
       })
     : undefined;
+
+/** A complete cache of PRs 1..60 as a full walk left it, one page still in the journal. */
+async function completeCache(path: string): Promise<void> {
+  const store = new FileStore(path, 'acme/widgets');
+  await store.markStarted('2026-01-01T00:00:00Z');
+  await store.upsert(Array.from({ length: 50 }, (_, i) => rawPr({ number: i + 1 })));
+  await store.markSynced('2026-01-02T00:00:00Z', null, true, true);
+  await store.markStarted('2026-01-03T00:00:00Z');
+  await store.upsert(Array.from({ length: 10 }, (_, i) => rawPr({ number: i + 51 })));
+  await store.markSynced('2026-01-04T00:00:00Z', null, true, true);
+  await store.markStarted('2026-01-05T00:00:00Z');
+  await store.upsert([rawPr({ number: 60, title: 'journaled' })]);
+}
 
 describe('CLI cache and report lifecycle', () => {
   let dir: string;
@@ -283,6 +305,54 @@ describe('CLI cache and report lifecycle', () => {
       expect(readdirSync(join(cache, 'acme'))).toHaveLength(2);
     },
   );
+
+  describe('a fresh sync that does not finish', () => {
+    it.each([
+      ['rate limited', [] as string[], /rate limit/],
+      ['cut by --max-prs', ['--max-prs', '10'], /--max-prs/],
+    ])('keeps the existing snapshot and journal when %s', async (_, flags, reason) => {
+      const path = join(cache, 'acme/widgets.json');
+      await completeCache(path);
+      const snapshot = readFileSync(path, 'utf8');
+      const journal = readFileSync(`${path}.journal`, 'utf8');
+      const github = FakeGithub.history(60);
+      github.fail = (call) =>
+        call === 2
+          ? new Response('{"message":"You have exceeded a secondary rate limit"}', {
+              status: 403,
+              headers: { 'retry-after': '600' },
+            })
+          : undefined;
+      vi.stubGlobal('fetch', github.fetch);
+      const args = ['acme/widgets', '--no-cache', '--full', '--token', 'test-token'];
+      expect(await main([...args, ...flags, '--out', out])).toBe(0);
+      expect(readFileSync(path, 'utf8')).toBe(snapshot);
+      expect(readFileSync(`${path}.journal`, 'utf8')).toBe(journal);
+      const report = JSON.parse(readFileSync(out, 'utf8'));
+      expect(report.prs).toHaveLength(60);
+      expect(process.stderr.write).toHaveBeenCalledWith(
+        expect.stringMatching(
+          new RegExp(
+            `fresh sync did not finish \\([^)]*${reason.source}.*kept the existing cache of 60 PRs`,
+          ),
+        ),
+      );
+    });
+
+    it('replaces a cache that cannot be read with what it fetched', async () => {
+      const path = join(cache, 'acme/widgets.json');
+      mkdirSync(join(cache, 'acme'), { recursive: true });
+      writeFileSync(join(cache, '.bilan-cache'), 'bilan\n');
+      writeFileSync(path, '{');
+      const github = FakeGithub.history(60);
+      github.fail = (call) => (call === 2 ? rateLimited() : undefined);
+      vi.stubGlobal('fetch', github.fetch);
+      expect(
+        await main(['acme/widgets', '--no-cache', '--full', '--token', 'test-token', '--out', out]),
+      ).toBe(0);
+      expect(new FileStore(path, 'acme/widgets').size).toBe(25);
+    });
+  });
 
   it('replaces the snapshot and discards the old journal after a successful fresh sync', async () => {
     const path = join(cache, 'acme/empty.json');

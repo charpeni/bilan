@@ -32,7 +32,8 @@ Syncs the repository into a local cache, then writes a self-contained HTML repor
 Options:
   --open             Open the report in the browser when done
   --out FILE         Where to write the report (default: <name>.report.html)
-  --no-cache         Ignore the local cache and fetch everything again
+  --no-cache         Ignore the local cache and fetch everything again; the old
+                     cache is kept until the fresh sync finishes
   --offline          Do not talk to GitHub; render whatever is already cached.
                      Sync options (--no-cache, --full, --since, --max-prs, --token) are rejected
   --full             Walk the entire history (every PR, no --since cutoff)
@@ -170,6 +171,8 @@ async function runSync(repo: RepoRef, options: SyncOptions): Promise<SyncResult>
   const store = new FileStore(staging, `${repo.owner}/${repo.name}`);
   // No run has ever been stamped here, so there is nothing worth keeping.
   const neverSynced = (await store.meta()).syncedAt === null;
+  // What a fresh sync must not throw away unless it finishes.
+  const kept = options.fresh ? await usableCache(path, `${repo.owner}/${repo.name}`) : null;
   log(`syncing ${repo.owner}/${repo.name} with token from ${source}`);
 
   const since = options.full ? undefined : (options.since ?? defaultSince());
@@ -195,9 +198,14 @@ async function runSync(repo: RepoRef, options: SyncOptions): Promise<SyncResult>
         `${options.fresh ? 'Fresh sync' : 'Sync'} stopped before fetching any pull requests; GitHub's rate limit resets at ${result.rateLimit?.resetAt ?? 'an unknown time'}.`,
       );
     }
-    if (options.fresh) {
+    if (options.fresh && (result.complete || kept === null)) {
       renameSync(staging, path);
       rmSync(`${path}.journal`, { force: true });
+    } else if (options.fresh) {
+      log(
+        `fresh sync did not finish (${[result.stoppedBecause, result.openPass?.stoppedBecause].includes('max-prs') ? 'stopped at --max-prs' : 'rate limit'}; ${store.size} PRs fetched): kept the existing cache of ${kept} PRs in ${path}; run with --no-cache again to replace it`,
+      );
+      return result;
     }
   } catch (error) {
     if (!options.fresh && neverSynced && store.size === 0) {
@@ -217,6 +225,21 @@ async function runSync(repo: RepoRef, options: SyncOptions): Promise<SyncResult>
 
   log(`done: ${store.size} PRs cached in ${path} · ${describeCoverage(result)}`);
   return result;
+}
+
+/**
+ * How many PRs the cache at `path` holds when it is worth keeping: it loads
+ * and a run has stamped it or stored something. `null` when it is missing,
+ * unreadable or empty junk, so an unfinished fresh sync can replace it.
+ */
+async function usableCache(path: string, repo: string): Promise<number | null> {
+  if (!existsSync(path)) return null;
+  try {
+    const store = new FileStore(path, repo);
+    return (await store.meta()).syncedAt === null && store.size === 0 ? null : store.size;
+  } catch {
+    return null;
+  }
 }
 
 /** Why each pass stopped, and what the run cost. */

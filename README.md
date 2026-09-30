@@ -42,6 +42,10 @@ incremental.
 | `--token T`    | GitHub token; otherwise `GITHUB_TOKEN`, `GH_TOKEN`, then `gh auth token` |
 | `--areas FILE` | Override how changed paths map to areas                                  |
 
+`--no-cache` builds a new cache beside the old one and only replaces it once the
+fresh sync finishes; a fresh sync stopped by the rate limit or `--max-prs`
+keeps the old cache, which the report then shows.
+
 `--offline` only renders what is cached, so it rejects the sync options
 `--no-cache`, `--full`, `--since`, `--max-prs` and `--token`; tokens in the
 environment are ignored.
