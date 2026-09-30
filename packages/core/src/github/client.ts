@@ -10,6 +10,8 @@ export interface GithubClientOptions {
   endpoint?: string;
   /** Retries on network errors, 5xx, and GraphQL errors. Defaults to 4. */
   retries?: number;
+  /** Deadline for each request, including its response body. Defaults to 30 seconds. */
+  timeoutMs?: number;
   /** Sleep between retries; injectable so tests do not wait. */
   sleep?: (ms: number) => Promise<void>;
   onRetry?: (attempt: number, waitMs: number, error: unknown) => void;
@@ -103,6 +105,7 @@ export class GithubClient {
   private readonly fetchImpl: typeof fetch;
   private readonly endpoint: string;
   private readonly retries: number;
+  private readonly timeoutMs: number;
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly onRetry: GithubClientOptions['onRetry'];
   /** Field paths GitHub refused on this token (see `request`); empty when every field was readable. */
@@ -113,6 +116,7 @@ export class GithubClient {
     this.fetchImpl = options.fetch ?? globalThis.fetch.bind(globalThis);
     this.endpoint = options.endpoint ?? 'https://api.github.com/graphql';
     this.retries = options.retries ?? 4;
+    this.timeoutMs = options.timeoutMs ?? 30_000;
     this.sleep = options.sleep ?? defaultSleep;
     this.onRetry = options.onRetry;
   }
@@ -139,6 +143,7 @@ export class GithubClient {
     try {
       response = await this.fetchImpl(this.endpoint, {
         method: 'POST',
+        signal: AbortSignal.timeout(this.timeoutMs),
         headers: {
           authorization: `Bearer ${this.token}`,
           'content-type': 'application/json',

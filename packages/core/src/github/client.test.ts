@@ -6,6 +6,26 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
 describe('GithubClient', () => {
+  it('aborts stalled requests and bounds every retry', async () => {
+    let calls = 0;
+    const client = new GithubClient({
+      token: 'test',
+      timeoutMs: 10,
+      retries: 1,
+      sleep: async () => {},
+      fetch: async (_url, init) => {
+        calls++;
+        const signal = init?.signal;
+        if (!signal) throw new Error('Missing request deadline');
+        return new Promise<Response>((_resolve, reject) =>
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true }),
+        );
+      },
+    });
+    await expect(client.graphql('query {}', {})).rejects.toThrow(/TimeoutError/);
+    expect(calls).toBe(2);
+  });
+
   it('sends the token and returns data', async () => {
     let seen: RequestInit | undefined;
     const client = new GithubClient({
