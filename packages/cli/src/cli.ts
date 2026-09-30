@@ -37,7 +37,7 @@ Options:
   --since DATE       Sync activity since DATE (by last update) plus every open PR;
                      default: the last ${DEFAULT_COVERAGE_DAYS} days. Coverage only ever widens
   --max-prs N        Stop after N pull requests in this run
-  --token T          GitHub token (default: GITHUB_TOKEN, then \`gh auth token\`)
+  --token T          GitHub token (default: GITHUB_TOKEN, GH_TOKEN, then \`gh auth token\`)
   --areas FILE       JSON file { "known": ["dir", ...] } overriding area attribution
   -h, --help         Show this help
 

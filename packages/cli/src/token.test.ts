@@ -3,6 +3,20 @@ import { describe, expect, it } from 'vitest';
 import { resolveToken } from './token.ts';
 
 describe('resolveToken', () => {
+  it.each(['', '   ', 'a b'])(
+    'rejects an invalid explicit token without falling back',
+    async (token) => {
+      await expect(resolveToken(token, { GITHUB_TOKEN: 'fallback' })).rejects.toThrow(/--token/);
+    },
+  );
+
+  it('trims token values and skips empty environment values', async () => {
+    await expect(resolveToken(' abc ', {})).resolves.toEqual({ token: 'abc', source: '--token' });
+    await expect(
+      resolveToken(undefined, { GITHUB_TOKEN: '  ', GH_TOKEN: ' abc\n' }),
+    ).resolves.toEqual({ token: 'abc', source: 'GH_TOKEN' });
+  });
+
   it('prefers the explicit token', async () => {
     await expect(resolveToken('abc', { GITHUB_TOKEN: 'env' })).resolves.toEqual({
       token: 'abc',

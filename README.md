@@ -30,17 +30,17 @@ The command syncs the repository into a local cache, writes
 `<name>.report.html`, and opens it. Re-running is cheap: the sync is
 incremental.
 
-| Flag           | Effect                                                       |
-| -------------- | ------------------------------------------------------------ |
-| `--open`       | Open the report in the browser when done                     |
-| `--out FILE`   | Report path (default `<name>.report.html`)                   |
-| `--since DATE` | Reach further back than the default 30 days                  |
-| `--full`       | Walk the entire history                                      |
-| `--max-prs N`  | Stop after N pull requests                                   |
-| `--no-cache`   | Ignore the local cache and fetch everything again            |
-| `--offline`    | Render from the cache without contacting GitHub              |
-| `--token T`    | GitHub token; otherwise `GITHUB_TOKEN`, then `gh auth token` |
-| `--areas FILE` | Override how changed paths map to areas                      |
+| Flag           | Effect                                                                   |
+| -------------- | ------------------------------------------------------------------------ |
+| `--open`       | Open the report in the browser when done                                 |
+| `--out FILE`   | Report path (default `<name>.report.html`)                               |
+| `--since DATE` | Reach further back than the default 30 days                              |
+| `--full`       | Walk the entire history                                                  |
+| `--max-prs N`  | Stop after N pull requests                                               |
+| `--no-cache`   | Ignore the local cache and fetch everything again                        |
+| `--offline`    | Render from the cache without contacting GitHub                          |
+| `--token T`    | GitHub token; otherwise `GITHUB_TOKEN`, `GH_TOKEN`, then `gh auth token` |
+| `--areas FILE` | Override how changed paths map to areas                                  |
 
 By default a sync covers the last 30 days of activity plus every open pull
 request; later runs only widen that coverage. A 25-PR page costs one GitHub
