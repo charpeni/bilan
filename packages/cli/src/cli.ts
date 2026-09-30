@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { existsSync, readdirSync, renameSync, rmdirSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, renameSync, rmdirSync, rmSync } from 'node:fs';
 import { dirname, posix, win32 } from 'node:path';
 import { parseArgs } from 'node:util';
 
@@ -40,11 +40,15 @@ Options:
   --token T          GitHub token (default: GITHUB_TOKEN, GH_TOKEN, then \`gh auth token\`)
   --areas FILE       JSON file { "known": ["dir", ...] } overriding area attribution
   -h, --help         Show this help
+  -v, --version      Show the installed version
 
 The cache lives in $BILAN_CACHE_DIR or ~/.cache/bilan.
 `;
 
 const log = (line: string) => process.stderr.write(`${line}\n`);
+const { version } = JSON.parse(
+  readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
+) as { version: string };
 
 export async function main(argv: string[]): Promise<number> {
   const { values, positionals } = parseArgs({
@@ -61,12 +65,17 @@ export async function main(argv: string[]): Promise<number> {
       token: { type: 'string' },
       areas: { type: 'string' },
       help: { type: 'boolean', short: 'h', default: false },
+      version: { type: 'boolean', short: 'v', default: false },
     },
   });
 
   const [repoArg, extra] = positionals;
+  if (values.version) {
+    process.stdout.write(`${version}\n`);
+    return 0;
+  }
   if (values.help || repoArg === undefined) {
-    process.stdout.write(USAGE);
+    (values.help ? process.stdout : process.stderr).write(USAGE);
     return values.help ? 0 : 1;
   }
   if (['sync', 'report', 'open'].includes(repoArg)) {

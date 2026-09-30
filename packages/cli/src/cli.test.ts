@@ -113,6 +113,20 @@ describe('package manifest', () => {
 });
 
 describe('main', () => {
+  it('reports the installed package version', async () => {
+    const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+    const version = await capture(process.stdout, async () => {
+      expect(await main(['--version'])).toBe(0);
+    });
+    expect(version).toBe(`${manifest.version}\n`);
+  });
+
+  it('sends missing-argument usage to stderr', async () => {
+    const usage = await capture(process.stderr, async () => {
+      expect(await main([])).toBe(1);
+    });
+    expect(usage).toContain('Usage:');
+  });
   it.each(['0', '-1', '0.5', 'Infinity', '0x10', '9007199254740992'])(
     'rejects invalid PR budget %s even offline',
     async (value) => {

@@ -5,6 +5,8 @@ dist/
 .astro/
 .wrangler/
 .turbo/
+/packages/cli/README.md
+/packages/cli/LICENSE
 
 # dependencies
 node_modules/

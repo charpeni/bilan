@@ -3,6 +3,13 @@
   "version": "0.0.1",
   "description": "The pulse of a GitHub repository: contributors, moving areas, review flow, and bottlenecks, as a self-contained HTML report.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/charpeni/bilan.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/charpeni/bilan#cli",
+  "bugs": "https://github.com/charpeni/bilan/issues",
   "type": "module",
   "bin": {
     "bilan": "./bin/bilan.mjs"
@@ -12,6 +19,7 @@
     "dist"
   ],
   "scripts": {
+    "prepack": "node scripts/prepare-package.mjs",
     "build": "node scripts/build.mjs",
     "type-check": "tsc -p tsconfig.json",
     "test": "vitest run"
