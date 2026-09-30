@@ -17,8 +17,9 @@ Two ways to use it:
 
 - **CLI**: sync a repository with your own token and get a self-contained
   HTML report you can open or share as a file.
-- **Web app**: sign in with GitHub, open any repository you can read, and
-  share the dashboard link with coworkers who can read it too.
+- **Web app**: sign in with GitHub on [bilan.dev](https://bilan.dev), open any
+  repository you can read, and share the dashboard link with coworkers who can
+  read it too.
 
 ## CLI
 
@@ -68,14 +69,16 @@ owner-only permissions (`0600`), including when replacing older files.
 
 ## Web app
 
-The web app runs on Cloudflare Workers with D1, R2, KV, and Workflows. Signed
-out, it shows two built-in example dashboards (`withastro/astro` and
-`cloudflare/workers-sdk`) shipped as static snapshots. Signed in, it syncs any
-repository you can read on your own token into a shared cache, so a coworker
-who opens the same link sees the dashboard instantly. A new repository shows
-a **Start sync** button; following a link alone does not import its data.
-Existing dashboards can refresh during navigation within the app. External
-links and bookmarks use the **Refresh** button for stale data.
+The web app, at [bilan.dev](https://bilan.dev), runs on Cloudflare Workers
+with D1, R2, KV, and Workflows. Signed out, it shows two built-in example
+dashboards ([`withastro/astro`](https://bilan.dev/withastro/astro) and
+[`cloudflare/workers-sdk`](https://bilan.dev/cloudflare/workers-sdk)) shipped as
+static snapshots. Signed in, it syncs any repository you can read on your own
+token into a shared cache, so a coworker who opens the same link sees the
+dashboard instantly. A new repository shows a **Start sync** button; following
+a link alone does not import its data. Existing dashboards can refresh during
+navigation within the app. External links and bookmarks use the **Refresh**
+button for stale data.
 
 Access is checked per viewer against GitHub with the viewer's own token;
 allowed access and public visibility are cached for up to 15 minutes. Job
