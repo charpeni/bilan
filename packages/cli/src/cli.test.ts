@@ -99,6 +99,15 @@ describe('package manifest', () => {
 });
 
 describe('main', () => {
+  it.each(['0', '-1', '0.5', 'Infinity', '0x10', '9007199254740992'])(
+    'rejects invalid PR budget %s even offline',
+    async (value) => {
+      await expect(main(['acme/widgets', '--offline', `--max-prs=${value}`])).rejects.toThrow(
+        /positive integer/,
+      );
+    },
+  );
+
   it('documents the 30-day default in --help', async () => {
     const usage = await capture(process.stdout, async () => {
       expect(await main(['--help'])).toBe(0);

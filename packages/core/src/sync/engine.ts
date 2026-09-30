@@ -157,6 +157,9 @@ export interface SyncResult {
  * that happened in between still sitting below them.
  */
 export async function sync(input: SyncInput): Promise<SyncResult> {
+  if (input.maxPrs !== undefined && (!Number.isSafeInteger(input.maxPrs) || input.maxPrs <= 0)) {
+    throw new Error('--max-prs must be a positive integer');
+  }
   const mode = input.mode ?? 'incremental';
   const reserve = input.rateLimitReserve ?? 200;
   const unchangedToStop = input.unchangedPagesToStop ?? 2;
@@ -223,12 +226,17 @@ export async function sync(input: SyncInput): Promise<SyncResult> {
     let stoppedBecause: StopReason = 'exhausted';
 
     for (;;) {
+      const remaining = input.maxPrs === undefined ? Infinity : input.maxPrs - totals.fetched;
+      if (remaining <= 0) {
+        stoppedBecause = 'max-prs';
+        break;
+      }
       const result = await syncPage({
         client: input.client,
         store: input.store,
         repo: input.repo,
         cursor,
-        ...(input.pageSize === undefined ? {} : { pageSize: input.pageSize }),
+        pageSize: Math.min(input.pageSize ?? 25, remaining),
         ...(states === undefined ? {} : { states }),
       });
       pages++;

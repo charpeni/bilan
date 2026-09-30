@@ -74,11 +74,18 @@ export async function main(argv: string[]): Promise<number> {
     throw new Error('--no-cache and --offline contradict each other.');
   }
   const repo = parseRepo(repoArg);
+  const maxPrs = values['max-prs'] === undefined ? undefined : Number(values['max-prs']);
+  if (
+    maxPrs !== undefined &&
+    (!/^\d+$/.test(values['max-prs']!) || !Number.isSafeInteger(maxPrs) || maxPrs <= 0)
+  ) {
+    throw new Error('--max-prs must be a positive integer');
+  }
 
   if (!values.offline) {
     await runSync(repo, {
       full: values.full,
-      maxPrs: values['max-prs'] === undefined ? undefined : Number(values['max-prs']),
+      maxPrs,
       since: values.since === undefined ? undefined : new Date(values.since),
       token: values.token,
       fresh: values['no-cache'],
@@ -99,9 +106,6 @@ interface SyncOptions {
 }
 
 async function runSync(repo: RepoRef, options: SyncOptions): Promise<SyncResult> {
-  if (options.maxPrs !== undefined && !(options.maxPrs > 0)) {
-    throw new Error('--max-prs must be a positive number');
-  }
   if (options.since !== undefined && Number.isNaN(options.since.getTime())) {
     throw new Error('--since must be a date like 2025-01-01');
   }

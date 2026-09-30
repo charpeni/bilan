@@ -194,6 +194,57 @@ describe('defaultSince', () => {
 });
 
 describe('sync', () => {
+  it.each([1, 30])('requests at most %i PRs across real-sized pages', async (maxPrs) => {
+    const requests: number[] = [];
+    const rows = Array.from({ length: 60 }, (_, i) => node(i + 1, '2026-01-01T00:00:00Z', 'OPEN'));
+    const client = new GithubClient({
+      token: 'test',
+      fetch: async (_url, init) => {
+        const { variables } = JSON.parse(String(init?.body));
+        const start = Number(variables.cursor ?? 0);
+        requests.push(variables.page);
+        const end = Math.min(start + variables.page, rows.length);
+        return new Response(
+          JSON.stringify({
+            data: {
+              repository: {
+                pullRequests: {
+                  nodes: rows.slice(start, end),
+                  pageInfo: { hasNextPage: end < rows.length, endCursor: String(end) },
+                },
+              },
+              rateLimit: { cost: 1, remaining: 5000, resetAt: '2026-01-01T01:00:00Z' },
+            },
+          }),
+        );
+      },
+    });
+    const result = await sync({ client, repo, store: new MemoryStore(), maxPrs, mode: 'full' });
+    expect(result.fetched).toBe(maxPrs);
+    expect(requests).toEqual(maxPrs === 1 ? [1] : [25, 5]);
+    requests.length = 0;
+    const bounded = await sync({
+      client,
+      repo,
+      store: new MemoryStore(),
+      maxPrs,
+      since: new Date('2026-02-01'),
+    });
+    expect(bounded.fetched).toBe(maxPrs);
+    expect(requests).toEqual(maxPrs === 1 ? [1] : [25, 5]);
+  });
+
+  it.each([0, -1, 0.5, Infinity, NaN])(
+    'rejects invalid PR budget %s before touching the store',
+    async (maxPrs) => {
+      const { client, calls } = fakeGithub(threePages());
+      const store = new MemoryStore();
+      await expect(sync({ client, repo, store, maxPrs })).rejects.toThrow(/positive integer/);
+      expect(calls).toEqual([]);
+      expect(store.startedAt).toBeNull();
+    },
+  );
+
   it('walks every page on a cold store and stamps syncedAt', async () => {
     const { client, calls } = fakeGithub([
       [node(3, '2026-01-03T00:00:00Z'), node(2, '2026-01-02T00:00:00Z')],
@@ -434,8 +485,8 @@ describe('sync', () => {
         openPass: { stoppedBecause: 'max-prs' },
         openPrsComplete: false,
         complete: false,
-        // The open pass stopped after #10 and #8 with pages left: strictly after #8.
-        coverageSince: '2026-01-08T00:00:00.001Z',
+        // Only one PR remains in the budget: strictly after #10.
+        coverageSince: '2026-01-10T00:00:00.001Z',
       });
       expect(store.syncedAt).not.toBeNull();
       expect(store.openPrsSyncedAt).toBeNull();
@@ -468,8 +519,8 @@ describe('sync', () => {
         since,
         onPage: (p) => seen.push(`${p.pass}:${p.pages}:${p.fetched}`),
       });
-      expect(result).toMatchObject({ fetched: 8, openPass: { stoppedBecause: 'max-prs' } });
-      expect(seen).toEqual(['all:1:2', 'all:2:4', 'all:3:6', 'open:4:8']);
+      expect(result).toMatchObject({ fetched: 7, openPass: { stoppedBecause: 'max-prs' } });
+      expect(seen).toEqual(['all:1:2', 'all:2:4', 'all:3:6', 'open:4:7']);
     });
   });
 
