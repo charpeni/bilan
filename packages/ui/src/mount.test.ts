@@ -149,6 +149,15 @@ describe('mount', () => {
     );
   });
 
+  it('renders an empty snapshot with valid dates and zero counts', () => {
+    setup({ ...payload(), prs: [] });
+    expect(root.querySelector('#repo-sub')?.textContent).toBe('No pull requests in this snapshot');
+    expect(heroValue(root)).toBe('0');
+    click('all');
+    expect(heroValue(root)).toBe('0');
+    expect(root.textContent).not.toMatch(/Invalid Date|NaN|Infinity/);
+  });
+
   it('measures recent activity and open-PR age at the snapshot time', () => {
     const data = payload();
     data.syncedAt = new Date(LAST).toISOString();

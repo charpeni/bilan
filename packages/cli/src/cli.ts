@@ -182,7 +182,8 @@ async function runReport(repo: RepoRef, options: ReportOptions): Promise<string>
   secureCacheDirectory();
   const path = storePath(repo);
   const store = new FileStore(path, `${repo.owner}/${repo.name}`);
-  if (store.size === 0) {
+  const [meta, prs] = await Promise.all([store.meta(), store.all()]);
+  if (store.size === 0 && meta.syncedAt === null) {
     throw new Error(
       `Nothing cached for ${repo.owner}/${repo.name}. Run without --offline to sync it first.`,
     );
@@ -191,7 +192,6 @@ async function runReport(repo: RepoRef, options: ReportOptions): Promise<string>
     options.areas === undefined
       ? undefined
       : (JSON.parse(readFileSync(options.areas, 'utf8')) as AreaRules);
-  const [meta, prs] = await Promise.all([store.meta(), store.all()]);
   if (meta.interrupted) {
     log(
       'Partial sync: some cached pull requests may be missing or stale. Run without --offline to finish syncing.',

@@ -337,6 +337,7 @@ export function mount(root: HTMLElement, payload: Payload, options: MountOptions
  * bound rather than at the oldest PR, and says the older open ones are in.
  */
 export function activitySpan(coverageSince: string | null, first: number, last: number): string {
+  if (!Number.isFinite(first) || !Number.isFinite(last)) return 'No pull requests in this snapshot';
   const since = coverageSince === null ? Number.NaN : Date.parse(coverageSince);
   if (Number.isNaN(since) || since <= first) {
     return `Pull request activity from ${fmtDate(first)} to ${fmtDate(last)}`;

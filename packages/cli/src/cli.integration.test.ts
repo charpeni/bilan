@@ -44,4 +44,26 @@ describe('CLI cache and report lifecycle', () => {
       reconciledAt: '2026-01-01T00:00:00Z',
     });
   });
+
+  it('exports a successfully synced empty repository, including offline', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              data: {
+                repository: {
+                  pullRequests: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } },
+                },
+                rateLimit: { cost: 1, remaining: 5000, resetAt: '2026-09-30T00:00:00Z' },
+              },
+            }),
+          ),
+      ),
+    );
+    expect(await main(['acme/empty', '--token', 'test-token', '--out', out])).toBe(0);
+    expect(JSON.parse(readFileSync(out, 'utf8')).prs).toEqual([]);
+    expect(await main(['acme/empty', '--offline', '--out', out])).toBe(0);
+  });
 });
