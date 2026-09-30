@@ -49,7 +49,9 @@ environment are ignored.
 By default a sync covers the last 30 days of activity plus every open pull
 request; later runs only widen that coverage. GitHub reports each request's rate-limit cost. Long review-request histories can need extra requests; the CLI reports points spent and stops near the rate limit. The cache lives in `~/.cache/bilan`, or `$XDG_CACHE_HOME/bilan` when set.
 `BILAN_CACHE_DIR` can select a dedicated cache directory; empty values use the default.
-Existing directories with unrelated files are rejected before changing permissions. On Unix, cache directories
+An existing directory is only adopted when it is empty or holds a bilan cache
+(older ones are recognized by their snapshots); anything else is rejected before
+its permissions change. On Unix, cache directories
 are owner-only (`0700`), and cache files and HTML exports are written with
 owner-only permissions (`0600`), including when replacing older files.
 

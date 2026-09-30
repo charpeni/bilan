@@ -80,11 +80,72 @@ describe('paths', () => {
   );
 
   describe('caches written before the ownership marker', () => {
+    it.skipIf(process.platform === 'win32')(
+      'adopts the default cache with leftovers from interrupted older releases',
+      () => {
+        const parent = mkdtempSync(join(tmpdir(), 'bilan-xdg-'));
+        const directory = join(parent, 'bilan');
+        const files = {
+          '.DS_Store': '',
+          'acme/.DS_Store': '',
+          'acme/widgets.json': legacy(),
+          'acme/.widgets.json.8f14e45f-ceea-467a-9575-7a2a3c7f0b1e.tmp': '{"repo":',
+          'acme/widgets.json.tmp': '',
+          'acme/widgets.json.8f14e45f-ceea-467a-9575-7a2a3c7f0b1e.fresh': legacy(),
+          'acme/widgets.json.8f14e45f-ceea-467a-9575-7a2a3c7f0b1e.fresh.journal': '',
+          'first/.sync.json.0d2c5b4e-1a7f-4c55-9b0e-38b0d0a4c1f2.tmp': '',
+        };
+        try {
+          for (const [path, contents] of Object.entries(files)) {
+            mkdirSync(join(directory, path, '..'), { recursive: true });
+            writeFileSync(join(directory, path), contents);
+          }
+          secureCacheDirectory({ XDG_CACHE_HOME: parent });
+          expect(statSync(directory).mode & 0o777).toBe(0o700);
+          expect(existsSync(join(directory, '.bilan-cache'))).toBe(true);
+          expect(existsSync(join(directory, 'acme/widgets.json.tmp'))).toBe(true);
+        } finally {
+          rmSync(parent, { recursive: true, force: true });
+        }
+      },
+    );
+
+    it.skipIf(process.platform === 'win32')(
+      'names the unrelated file and the default location when refusing it',
+      () => {
+        const parent = mkdtempSync(join(tmpdir(), 'bilan-xdg-'));
+        const directory = join(parent, 'bilan');
+        try {
+          mkdirSync(join(directory, 'acme'), { recursive: true });
+          chmodSync(directory, 0o755);
+          writeFileSync(join(directory, 'acme/notes.txt'), 'keep');
+          expect(() => secureCacheDirectory({ XDG_CACHE_HOME: parent })).toThrow(
+            `The cache directory "${directory}" contains "acme/notes.txt", which bilan did not write. Move that out of the way or set BILAN_CACHE_DIR`,
+          );
+          expect(statSync(directory).mode & 0o777).toBe(0o755);
+        } finally {
+          rmSync(parent, { recursive: true, force: true });
+        }
+      },
+    );
+
+    it.skipIf(process.platform === 'win32')('adopts an empty directory', () => {
+      const parent = setup({});
+      try {
+        secureCacheDirectory({ BILAN_CACHE_DIR: parent });
+        expect(existsSync(join(parent, '.bilan-cache'))).toBe(true);
+      } finally {
+        rmSync(parent, { recursive: true, force: true });
+      }
+    });
+
     it.skipIf(process.platform === 'win32')('adopts a directory of bilan snapshots', () => {
       const parent = setup({
         'acme/widgets.json': legacy(),
         'acme/widgets.json.journal': '',
         'Other/Thing.json': legacy('other/thing'),
+        '.DS_Store': '',
+        'acme/.widgets.json.8f14e45f-ceea-467a-9575-7a2a3c7f0b1e.tmp': '',
       });
       try {
         secureCacheDirectory({ BILAN_CACHE_DIR: parent });
@@ -104,6 +165,8 @@ describe('paths', () => {
         { 'acme/widgets.json': 'not json' },
         { 'acme/widgets.json.journal': '' },
         { 'acme/empty/.keep': '' },
+        { '.DS_Store': '', 'acme/widgets.json.tmp': '' },
+        { 'acme/widgets.json.bak': legacy() },
       ])('refuses unrelated JSON before changing permissions: %j', (files) => {
       const parent = setup(files);
       try {
