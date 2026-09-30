@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { renameSync, rmSync } from 'node:fs';
-import { posix, win32 } from 'node:path';
+import { existsSync, readdirSync, renameSync, rmdirSync, rmSync } from 'node:fs';
+import { dirname, posix, win32 } from 'node:path';
 import { parseArgs } from 'node:util';
 
 import {
@@ -142,6 +142,9 @@ async function runSync(repo: RepoRef, options: SyncOptions): Promise<SyncResult>
   secureCacheDirectory();
   const path = storePath(repo);
   const staging = options.fresh ? `${path}.${randomUUID()}.fresh` : path;
+  const existed = existsSync(path);
+  const ownerDirectory = dirname(path);
+  const ownerExisted = existsSync(ownerDirectory);
   const store = new FileStore(staging, `${repo.owner}/${repo.name}`);
   log(`syncing ${repo.owner}/${repo.name} with token from ${source}`);
 
@@ -169,10 +172,19 @@ async function runSync(repo: RepoRef, options: SyncOptions): Promise<SyncResult>
       renameSync(staging, path);
       rmSync(`${path}.journal`, { force: true });
     }
+  } catch (error) {
+    if (!options.fresh && !existed && store.size === 0) {
+      rmSync(path, { force: true });
+      rmSync(`${path}.journal`, { force: true });
+    }
+    throw error;
   } finally {
     if (options.fresh) {
       rmSync(staging, { force: true });
       rmSync(`${staging}.journal`, { force: true });
+    }
+    if (!ownerExisted && existsSync(ownerDirectory) && readdirSync(ownerDirectory).length === 0) {
+      rmdirSync(ownerDirectory);
     }
   }
 

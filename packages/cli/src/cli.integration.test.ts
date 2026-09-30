@@ -62,6 +62,26 @@ describe('CLI cache and report lifecycle', () => {
     expect(existsSync(cache)).toBe(false);
   });
 
+  it('removes an empty newly created cache when the repository is missing', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              data: { repository: null },
+              errors: [{ type: 'NOT_FOUND', message: 'Not found' }],
+            }),
+          ),
+      ),
+    );
+    await expect(main(['acme/missing', '--token', 'test-token', '--out', out])).rejects.toThrow(
+      /not found/i,
+    );
+    expect(existsSync(join(cache, 'acme/missing.json'))).toBe(false);
+    expect(existsSync(join(cache, 'acme'))).toBe(false);
+  });
+
   it.each([null, {}, { known: 'src' }, { known: [42] }, { known: ['src/lib'] }, { known: [''] }])(
     'rejects malformed area rules before syncing: %j',
     async (rules) => {
