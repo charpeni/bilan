@@ -11,6 +11,24 @@ import { main } from './cli.ts';
 
 vi.mock('./report.ts', () => ({ renderReport: (payload: unknown) => JSON.stringify(payload) }));
 
+/** GitHub's GraphQL rate-limit answer, with a reset half an hour away. */
+const rateLimited = () =>
+  new Response(
+    JSON.stringify({ errors: [{ type: 'RATE_LIMITED', message: 'API rate limit exceeded' }] }),
+    {
+      headers: { 'x-ratelimit-reset': String(Math.floor(Date.now() / 1000) + 1800) },
+    },
+  );
+
+/** A secondary rate limit on the second request: the first review-request follow-up. */
+const secondaryLimit = (call: number) =>
+  call === 2
+    ? new Response('{"message":"You have exceeded a secondary rate limit"}', {
+        status: 403,
+        headers: { 'retry-after': '1800' },
+      })
+    : undefined;
+
 describe('CLI cache and report lifecycle', () => {
   let dir: string;
   let cache: string;
@@ -123,6 +141,52 @@ describe('CLI cache and report lifecycle', () => {
       expect.stringMatching(/^rate limit low, resets at .* · 2 points spent\n$/),
     );
     expect(new FileStore(path, 'acme/widgets').size).toBe(1);
+  });
+
+  describe('a first sync that stores nothing', () => {
+    it.each([
+      ['on the first page', vi.fn(async () => rateLimited())],
+      [
+        "while following the first page's review requests",
+        timelineGithub({ events: 205, fail: secondaryLimit }).fetch,
+      ],
+    ])('fails with the reset time and leaves no cache when limited %s', async (_, fetch) => {
+      vi.stubGlobal('fetch', fetch);
+      await expect(main(['acme/widgets', '--token', 'test-token', '--out', out])).rejects.toThrow(
+        /^Sync stopped before fetching any pull requests; GitHub's rate limit resets at \d{4}-/,
+      );
+      expect(existsSync(join(cache, 'acme'))).toBe(false);
+      expect(existsSync(out)).toBe(false);
+    });
+
+    it('also removes a cache an earlier run created without ever finishing', async () => {
+      const path = join(cache, 'acme/widgets.json');
+      await new FileStore(path, 'acme/widgets').markStarted('2026-01-01T00:00:00Z');
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => rateLimited()),
+      );
+      await expect(main(['acme/widgets', '--token', 'test-token', '--out', out])).rejects.toThrow(
+        /stopped before fetching any pull requests/,
+      );
+      expect(existsSync(path)).toBe(false);
+    });
+
+    it('keeps and reports an existing cache instead', async () => {
+      const path = join(cache, 'acme/widgets.json');
+      const store = new FileStore(path, 'acme/widgets');
+      await store.markStarted('2026-01-01T00:00:00Z');
+      await store.markSynced('2026-01-02T00:00:00Z', null, true, true);
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => rateLimited()),
+      );
+      expect(await main(['acme/widgets', '--token', 'test-token', '--out', out])).toBe(0);
+      expect(JSON.parse(readFileSync(out, 'utf8'))).toMatchObject({ interrupted: true, prs: [] });
+      expect(process.stderr.write).toHaveBeenCalledWith(
+        expect.stringMatching(/partial run; run again to finish/),
+      );
+    });
   });
 
   it.each(['missing', 'directory', 'empty'])(

@@ -165,10 +165,11 @@ async function runSync(repo: RepoRef, options: SyncOptions): Promise<SyncResult>
   secureCacheDirectory();
   const path = storePath(repo);
   const staging = options.fresh ? `${path}.${randomUUID()}.fresh` : path;
-  const existed = existsSync(path);
   const ownerDirectory = dirname(path);
   const ownerExisted = existsSync(ownerDirectory);
   const store = new FileStore(staging, `${repo.owner}/${repo.name}`);
+  // No run has ever been stamped here, so there is nothing worth keeping.
+  const neverSynced = (await store.meta()).syncedAt === null;
   log(`syncing ${repo.owner}/${repo.name} with token from ${source}`);
 
   const since = options.full ? undefined : (options.since ?? defaultSince());
@@ -186,17 +187,20 @@ async function runSync(repo: RepoRef, options: SyncOptions): Promise<SyncResult>
           `${p.pass === 'open' ? 'open page' : 'page'} ${p.pages} (${p.fetched} prs, ${p.changedOnPage} changed) · rate remaining ${p.rateLimit.remaining}`,
         ),
     });
+    log(describeStop(result));
+    // A first sync that stored nothing proves nothing, not even an empty
+    // repository: fail instead of reporting it, and leave no cache behind.
+    if (!result.complete && neverSynced && store.size === 0) {
+      throw new Error(
+        `${options.fresh ? 'Fresh sync' : 'Sync'} stopped before fetching any pull requests; GitHub's rate limit resets at ${result.rateLimit?.resetAt ?? 'an unknown time'}.`,
+      );
+    }
     if (options.fresh) {
-      if (!result.complete && result.fetched === 0) {
-        throw new Error(
-          `Fresh sync stopped before fetching data; GitHub's rate limit resets at ${result.rateLimit?.resetAt ?? 'an unknown time'}.`,
-        );
-      }
       renameSync(staging, path);
       rmSync(`${path}.journal`, { force: true });
     }
   } catch (error) {
-    if (!options.fresh && !existed && store.size === 0) {
+    if (!options.fresh && neverSynced && store.size === 0) {
       rmSync(path, { force: true });
       rmSync(`${path}.journal`, { force: true });
     }
@@ -211,6 +215,12 @@ async function runSync(repo: RepoRef, options: SyncOptions): Promise<SyncResult>
     }
   }
 
+  log(`done: ${store.size} PRs cached in ${path} · ${describeCoverage(result)}`);
+  return result;
+}
+
+/** Why each pass stopped, and what the run cost. */
+function describeStop(result: SyncResult): string {
   const why: Record<SyncResult['stoppedBecause'], string> = {
     exhausted: 'reached the end of history',
     'already-synced': 'reached already-synced history (use --full to force)',
@@ -219,11 +229,7 @@ async function runSync(repo: RepoRef, options: SyncOptions): Promise<SyncResult>
     'rate-limit': `rate limit low, resets at ${result.rateLimit?.resetAt ?? 'unknown'}`,
   };
   const open = result.openPass;
-  log(
-    `${why[result.stoppedBecause]}${open === null ? '' : ` · open PRs: ${open.fetched} on ${open.pages} pages (${why[open.stoppedBecause]})`} · ${result.pointsSpent} points spent`,
-  );
-  log(`done: ${store.size} PRs cached in ${path} · ${describeCoverage(result)}`);
-  return result;
+  return `${why[result.stoppedBecause]}${open === null ? '' : ` · open PRs: ${open.fetched} on ${open.pages} pages (${why[open.stoppedBecause]})`} · ${result.pointsSpent} points spent`;
 }
 
 /**
