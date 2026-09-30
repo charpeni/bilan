@@ -38,9 +38,13 @@ incremental.
 | `--full`       | Walk the entire history                                                  |
 | `--max-prs N`  | Stop after N pull requests                                               |
 | `--no-cache`   | Ignore the local cache and fetch everything again                        |
-| `--offline`    | Render from the cache without contacting GitHub                          |
+| `--offline`    | Render from the cache without contacting GitHub; rejects sync options    |
 | `--token T`    | GitHub token; otherwise `GITHUB_TOKEN`, `GH_TOKEN`, then `gh auth token` |
 | `--areas FILE` | Override how changed paths map to areas                                  |
+
+`--offline` only renders what is cached, so it rejects the sync options
+`--no-cache`, `--full`, `--since`, `--max-prs` and `--token`; tokens in the
+environment are ignored.
 
 By default a sync covers the last 30 days of activity plus every open pull
 request; later runs only widen that coverage. GitHub reports each request's rate-limit cost. Long review-request histories can need extra requests; the CLI reports points spent and stops near the rate limit. The cache lives in `~/.cache/bilan`, or `$XDG_CACHE_HOME/bilan` when set.

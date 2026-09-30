@@ -33,7 +33,8 @@ Options:
   --open             Open the report in the browser when done
   --out FILE         Where to write the report (default: <name>.report.html)
   --no-cache         Ignore the local cache and fetch everything again
-  --offline          Do not talk to GitHub; render whatever is already cached
+  --offline          Do not talk to GitHub; render whatever is already cached.
+                     Sync options (--no-cache, --full, --since, --max-prs, --token) are rejected
   --full             Walk the entire history (every PR, no --since cutoff)
   --since DATE       Sync activity since DATE (by last update) plus every open PR;
                      default: the last ${DEFAULT_COVERAGE_DAYS} days. Coverage only ever widens
@@ -85,6 +86,16 @@ export async function main(argv: string[]): Promise<number> {
   if (extra !== undefined) throw new Error(`Unexpected argument "${extra}".\n\n${USAGE}`);
   if (values['no-cache'] && values.offline) {
     throw new Error('--no-cache and --offline contradict each other.');
+  }
+  if (values.offline) {
+    const syncOnly = (['full', 'since', 'max-prs', 'token'] as const).filter(
+      (option) => values[option] !== undefined && values[option] !== false,
+    );
+    if (syncOnly.length > 0) {
+      throw new Error(
+        `--offline does not sync, so it cannot be combined with ${syncOnly.map((option) => `--${option}`).join(', ')}.`,
+      );
+    }
   }
   const repo = parseRepo(repoArg);
   if (values.full && values.since !== undefined)

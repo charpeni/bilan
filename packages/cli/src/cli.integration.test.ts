@@ -62,6 +62,30 @@ describe('CLI cache and report lifecycle', () => {
     expect(existsSync(cache)).toBe(false);
   });
 
+  it.each([['--full'], ['--since', '2025-01-01'], ['--max-prs', '5'], ['--token', 'test-token']])(
+    'rejects the sync option %s offline before touching the cache',
+    async (...option) => {
+      const fetch = vi.fn();
+      vi.stubGlobal('fetch', fetch);
+      await expect(main(['acme/widgets', '--offline', ...option, '--out', out])).rejects.toThrow(
+        `--offline does not sync, so it cannot be combined with ${option[0]}.`,
+      );
+      expect(fetch).not.toHaveBeenCalled();
+      expect(existsSync(cache)).toBe(false);
+      expect(existsSync(out)).toBe(false);
+    },
+  );
+
+  it('ignores environment tokens offline', async () => {
+    vi.stubEnv('GITHUB_TOKEN', 'env-token');
+    const store = new FileStore(join(cache, 'acme/widgets.json'), 'acme/widgets');
+    await store.markStarted('2026-01-01T00:00:00Z');
+    await store.upsert([rawPr()]);
+    await store.markSynced('2026-01-02T00:00:00Z', null, true, true);
+    expect(await main(['acme/widgets', '--offline', '--out', out])).toBe(0);
+    expect(JSON.parse(readFileSync(out, 'utf8')).prs).toHaveLength(1);
+  });
+
   it.each(['missing', 'directory', 'empty'])(
     'rejects an invalid output path before syncing: %s',
     async (kind) => {

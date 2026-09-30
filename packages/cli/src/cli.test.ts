@@ -128,9 +128,9 @@ describe('main', () => {
     expect(usage).toContain('Usage:');
   });
   it.each(['0', '-1', '0.5', 'Infinity', '0x10', '9007199254740992'])(
-    'rejects invalid PR budget %s even offline',
+    'rejects invalid PR budget %s before syncing',
     async (value) => {
-      await expect(main(['acme/widgets', '--offline', `--max-prs=${value}`])).rejects.toThrow(
+      await expect(main(['acme/widgets', `--max-prs=${value}`])).rejects.toThrow(
         /positive integer/,
       );
     },
