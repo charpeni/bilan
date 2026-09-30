@@ -12,9 +12,10 @@ import {
   parseRepo,
   sync,
 } from '@bilan/core';
-import { FileStore, writePrivateFile } from '@bilan/store-file';
+import { FileStore } from '@bilan/store-file';
 
 import { readAreaRules } from './areas.ts';
+import { validateReportPath, writeReport } from './output.ts';
 import { secureCacheDirectory, storePath } from './paths.ts';
 import { renderReport } from './report.ts';
 import { resolveToken } from './token.ts';
@@ -98,6 +99,8 @@ export async function main(argv: string[]): Promise<number> {
     throw new Error('--max-prs must be a positive integer');
   }
 
+  const target = values.out ?? `${repo.name}.report.html`;
+  validateReportPath(target);
   if (!values.offline) {
     await runSync(repo, {
       full: values.full,
@@ -107,7 +110,7 @@ export async function main(argv: string[]): Promise<number> {
       fresh: values['no-cache'],
     });
   }
-  const out = await runReport(repo, { out: values.out, areas });
+  const out = await runReport(repo, { out: target, areas });
   if (values.open) await openInBrowser(out);
   return 0;
 }
@@ -259,7 +262,7 @@ async function runReport(repo: RepoRef, options: ReportOptions): Promise<string>
   const payload = buildPayload(meta, prs, areas === undefined ? {} : { areas });
   const html = renderReport(payload);
   const target = options.out ?? `${repo.name}.report.html`;
-  writePrivateFile(target, html);
+  writeReport(target, html);
   log(`wrote ${target} (${(html.length / 1e6).toFixed(2)} MB, ${payload.prs.length} PRs)`);
   return target;
 }

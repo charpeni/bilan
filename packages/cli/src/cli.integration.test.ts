@@ -62,6 +62,21 @@ describe('CLI cache and report lifecycle', () => {
     expect(existsSync(cache)).toBe(false);
   });
 
+  it.each(['missing', 'directory', 'empty'])(
+    'rejects an invalid output path before syncing: %s',
+    async (kind) => {
+      const target =
+        kind === 'missing' ? join(dir, 'missing/report.html') : kind === 'directory' ? dir : '';
+      const fetch = vi.fn(async () => new Response('Unauthorized', { status: 401 }));
+      vi.stubGlobal('fetch', fetch);
+      await expect(
+        main(['acme/widgets', '--token', 'test-token', '--out', target]),
+      ).rejects.toThrow(/--out/);
+      expect(fetch).not.toHaveBeenCalled();
+      expect(existsSync(cache)).toBe(false);
+    },
+  );
+
   it('removes an empty newly created cache when the repository is missing', async () => {
     vi.stubGlobal(
       'fetch',
