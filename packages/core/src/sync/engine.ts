@@ -149,12 +149,14 @@ export interface SyncResult {
  * PR. The coverage this run guarantees is `since` when the first walk reached it
  * (`null`, full history, when it ran out of pages); if it stopped earlier for
  * `maxPrs` or the rate limit, only what lies strictly after the oldest
- * `updatedAt` it reached, since the next page may share that instant. The store
- * keeps the earliest bound it has ever been given, so a shallow run never
- * shrinks coverage, and a run that wants to go deeper than the store already
- * covers never stops on unchanged pages at all: inside the old bound those
- * pages may be nothing but open PRs the earlier open pass cached, so they
- * prove nothing about the closed PRs between them.
+ * `updatedAt` it reached, since the next page may share that instant. The open
+ * walk never changes that bound; when it is cut short, the run is incomplete
+ * and the open set is not claimed. The store keeps the earliest bound it has
+ * ever been given, so a shallow run never shrinks coverage, and a run that
+ * wants to go deeper than the store already covers never stops on unchanged
+ * pages at all: inside the old bound those pages may be nothing but open PRs
+ * the earlier open pass cached, so they prove nothing about the closed PRs
+ * between them.
  *
  * Unchanged pages only count toward the incremental stop once the page's
  * oldest `updatedAt` is strictly older than `RepoMeta.reconciledAt`, the start
@@ -307,6 +309,10 @@ export async function sync(input: SyncInput): Promise<SyncResult> {
       ? await walk('open')
       : null;
 
+  // Coverage is what the main pass proved. The open pass only completes the
+  // set of older open PRs, which `openPrsComplete` and `complete` track; a
+  // cut-short open pass, even one that fetched nothing, takes nothing away
+  // from the activity the main pass already reconciled.
   let bound: number;
   switch (main.stoppedBecause) {
     case 'exhausted':
@@ -317,12 +323,6 @@ export async function sync(input: SyncInput): Promise<SyncResult> {
       break;
     default:
       bound = afterOldest(main);
-  }
-  if (
-    open !== null &&
-    (open.stoppedBecause === 'max-prs' || open.stoppedBecause === 'rate-limit')
-  ) {
-    bound = Math.max(bound, afterOldest(open));
   }
 
   // Every open PR is in the store when the whole history is, or when the open

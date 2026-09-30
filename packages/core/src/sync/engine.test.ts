@@ -107,15 +107,29 @@ interface FakeCall {
  * A fake GitHub that serves `pages` in order and reports a fixed cost per page.
  * With `states` it serves the matching nodes re-paged by the requested size.
  * `dieAfter` makes every request past that many fail at the transport level,
- * the way a dropped connection would.
+ * the way a dropped connection would; `limitAfter` makes them fail with
+ * GitHub's GraphQL rate-limit error, with a distant reset.
  */
-function fakeGithub(pages: PullRequestNode[][], remaining = 5000, dieAfter = Infinity) {
+function fakeGithub(
+  pages: PullRequestNode[][],
+  remaining = 5000,
+  dieAfter = Infinity,
+  limitAfter = Infinity,
+) {
   const calls: FakeCall[] = [];
   const fetchImpl: typeof fetch = async (_url, init) => {
     const { variables } = JSON.parse(String(init?.body)) as {
       variables: { cursor: string | null; page: number; states: PrState[] | null };
     };
     if (calls.length >= dieAfter) throw new TypeError('fetch failed');
+    if (calls.length >= limitAfter) {
+      return new Response(
+        JSON.stringify({
+          errors: [{ type: 'RATE_LIMITED', message: 'API rate limit exceeded' }],
+          data: { rateLimit: { resetAt: '2999-01-01T00:00:00Z' } },
+        }),
+      );
+    }
     calls.push({ cursor: variables.cursor, states: variables.states });
     const served =
       variables.states === null
@@ -521,10 +535,29 @@ describe('sync', () => {
         openPass: { stoppedBecause: 'max-prs' },
         openPrsComplete: false,
         complete: false,
-        // Only one PR remains in the budget: strictly after #10.
-        coverageSince: '2026-01-10T00:00:00.001Z',
+        // The main pass reached --since; the cut open pass does not narrow that.
+        coverageSince: '2026-01-06T12:00:00.000Z',
       });
       expect(store.syncedAt).not.toBeNull();
+      expect(store.openPrsSyncedAt).toBeNull();
+      expect(store.reconciledAt).toBeNull();
+      expect((await store.meta()).interrupted).toBe(true);
+    });
+
+    it('keeps the main pass coverage when the open pass is rate limited before its first page', async () => {
+      const store = new MemoryStore();
+      const { client, calls } = fakeGithub(pages(), 5000, Infinity, 3);
+      const result = await sync({ client, store, repo, pageSize: 2, since });
+      expect(calls.map((c) => c.states)).toEqual([null, null, null]);
+      expect(result).toMatchObject({
+        stoppedBecause: 'since',
+        openPass: { pages: 0, fetched: 0, stoppedBecause: 'rate-limit' },
+        rateLimit: { resetAt: '2999-01-01T00:00:00.000Z' },
+        coverageSince: '2026-01-06T12:00:00.000Z',
+        openPrsComplete: false,
+        complete: false,
+      });
+      expect(store.coverageSince).toBe('2026-01-06T12:00:00.000Z');
       expect(store.openPrsSyncedAt).toBeNull();
       expect(store.reconciledAt).toBeNull();
       expect((await store.meta()).interrupted).toBe(true);
