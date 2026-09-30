@@ -46,7 +46,7 @@ export class GithubRateLimitError extends GithubError {
 
   constructor(
     message: string,
-    status: number,
+    status: number | null,
     resetAt: string | null,
     retryAfterMs: number | null,
   ) {
@@ -134,6 +134,12 @@ export interface Viewer {
 export interface PullRequestsPageOptions {
   /** Only PRs in these states; omit for all states. */
   states?: PrState[];
+  /**
+   * Stop before a review-request follow-up once GitHub reports fewer points
+   * than this, throwing `GithubRateLimitError`: the page is incomplete and
+   * must not be stored. Omit to follow every page whatever the budget.
+   */
+  rateLimitReserve?: number;
 }
 
 interface GraphqlBody<T> {
@@ -325,6 +331,15 @@ export class GithubClient {
       while (info?.hasNextPage) {
         if (info.endCursor === null)
           throw new GithubError('GitHub omitted the review-request cursor', null, false);
+        const reserve = options.rateLimitReserve;
+        if (reserve !== undefined && rateLimit.remaining < reserve) {
+          throw new GithubRateLimitError(
+            `GitHub rate limit is down to ${rateLimit.remaining} points, under the ${reserve}-point reserve`,
+            null,
+            rateLimit.resetAt,
+            null,
+          );
+        }
         const next = await this.repoQuery<PullRequestTimelinePage>(
           repo,
           PULL_REQUEST_TIMELINE_QUERY,

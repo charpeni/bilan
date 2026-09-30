@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { GithubClient } from '../github/client.ts';
 import { DAY } from '../metrics/time.ts';
+import { timelineGithub } from '../testing/timeline.ts';
 import { catchUpSince, defaultSince, effectiveSince, sync } from './engine.ts';
 
 import type { PullRequestNode } from '../github/query.ts';
@@ -800,6 +801,21 @@ describe('sync', () => {
       openPrsComplete: false,
       complete: false,
     });
+  });
+
+  it('keeps the reserve while following review requests and stores no truncated page', async () => {
+    const { client, cursors: requested } = timelineGithub({ events: 205, remaining: () => 100 });
+    const store = new MemoryStore();
+    const result = await sync({ client, store, repo, mode: 'full' });
+    expect(requested).toEqual([null]);
+    expect(result).toMatchObject({
+      pages: 0,
+      fetched: 0,
+      stoppedBecause: 'rate-limit',
+      rateLimit: { resetAt: '2026-10-01T00:00:00Z' },
+      complete: false,
+    });
+    expect(store.prs.size).toBe(0);
   });
 
   describe('budget-cut run', () => {

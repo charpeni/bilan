@@ -24,6 +24,8 @@ export interface SyncPageInput {
   pageSize?: number;
   /** Only PRs in these states; omit for all states. */
   states?: PrState[];
+  /** See `PullRequestsPageOptions.rateLimitReserve`. */
+  rateLimitReserve?: number;
 }
 
 export interface SyncPageResult {
@@ -44,7 +46,10 @@ export async function syncPage(input: SyncPageInput): Promise<SyncPageResult> {
     input.repo,
     input.pageSize ?? 25,
     input.cursor,
-    input.states === undefined ? {} : { states: input.states },
+    {
+      ...(input.states === undefined ? {} : { states: input.states }),
+      ...(input.rateLimitReserve === undefined ? {} : { rateLimitReserve: input.rateLimitReserve }),
+    },
   );
   const prs = page.nodes.map(compact);
   const known = await input.store.updatedAtByNumber(prs.map((pr) => pr.number));
@@ -240,6 +245,7 @@ export async function sync(input: SyncInput): Promise<SyncResult> {
           repo: input.repo,
           cursor,
           pageSize: Math.min(input.pageSize ?? 25, remaining),
+          rateLimitReserve: reserve,
           ...(states === undefined ? {} : { states }),
         });
       } catch (error) {
