@@ -64,6 +64,20 @@ describe('FileStore', () => {
     expect(() => new FileStore(path, 'acme/widgets')).toThrow(/broken\.json.*--no-cache/);
   });
 
+  it('loads a cache written under another spelling of the same repository', async () => {
+    mkdirSync(dir, { recursive: true });
+    const path = join(dir, 'typescript.json');
+    const written = new FileStore(path, 'microsoft/TypeScript');
+    await written.markStarted('2026-01-01T00:00:00Z');
+    await written.upsert([pr(1, '2026-01-02T00:00:00Z')]);
+    await written.markSynced('2026-01-03T00:00:00Z', null, true, true);
+
+    const store = new FileStore(path, 'microsoft/typescript');
+    expect(store.size).toBe(1);
+    expect((await store.meta()).repo).toBe('microsoft/typescript');
+    expect(() => new FileStore(path, 'microsoft/vscode')).toThrow(/typescript\.json.*--no-cache/);
+  });
+
   it('loads caches written before unknown reviewer names were normalized', async () => {
     mkdirSync(dir, { recursive: true });
     const path = join(dir, 'legacy.json');

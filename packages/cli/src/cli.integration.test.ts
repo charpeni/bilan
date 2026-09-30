@@ -45,6 +45,20 @@ describe('CLI cache and report lifecycle', () => {
     });
   });
 
+  it('renders a cache written under another spelling of the repository', async () => {
+    // A case-insensitive filesystem opens `microsoft/typescript.json` for
+    // either spelling; emulate that by writing the other spelling there.
+    const store = new FileStore(join(cache, 'microsoft/typescript.json'), 'microsoft/TypeScript');
+    await store.markStarted('2026-01-01T00:00:00Z');
+    await store.upsert([rawPr()]);
+    await store.markSynced('2026-01-02T00:00:00Z', null, true, true);
+    expect(await main(['microsoft/typescript', '--offline', '--out', out])).toBe(0);
+    expect(JSON.parse(readFileSync(out, 'utf8'))).toMatchObject({
+      repo: 'microsoft/typescript',
+      prs: [expect.anything()],
+    });
+  });
+
   it.each(['1', '2026-02-30', '2999-01-01', 'not-a-date'])(
     'rejects invalid since date %s even offline',
     async (since) => {

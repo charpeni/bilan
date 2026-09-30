@@ -89,6 +89,15 @@ function validPr(value: unknown): value is RawPr {
   );
 }
 
+/**
+ * GitHub resolves `owner/name` case-insensitively, and so do the default
+ * filesystems on macOS and Windows: `microsoft/typescript` opens the cache
+ * written for `microsoft/TypeScript`.
+ */
+export function sameRepo(stored: unknown, repo: string): boolean {
+  return typeof stored === 'string' && stored.toLowerCase() === repo.toLowerCase();
+}
+
 function cacheError(path: string, cause: unknown): Error {
   return new Error(
     `Cannot read cache "${path}". Check the file or run with --no-cache to replace it.`,
@@ -101,7 +110,7 @@ function readSnapshot(path: string, repo: string): FileShape {
     const value: unknown = JSON.parse(readFileSync(path, 'utf8'));
     if (
       !record(value) ||
-      value.repo !== repo ||
+      !sameRepo(value.repo, repo) ||
       !nullableString(value.syncedAt) ||
       !record(value.prs) ||
       !Object.entries(value.prs).every(([key, pr]) => validPr(pr) && key === String(pr.number)) ||
