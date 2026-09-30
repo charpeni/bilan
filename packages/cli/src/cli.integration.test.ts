@@ -1,3 +1,5 @@
+import { spawnSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import {
   existsSync,
   mkdirSync,
@@ -5,9 +7,10 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  utimesSync,
   writeFileSync,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { hostname, tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { FileStore } from '@bilan/store-file';
@@ -383,6 +386,68 @@ describe('CLI cache and report lifecycle', () => {
       ).toBe(0);
       expect(new FileStore(path, 'acme/widgets').size).toBe(25);
     });
+  });
+
+  it('continues an interrupted fresh sync in later windows and cleans up after it', async () => {
+    const path = join(cache, 'acme/widgets.json');
+    await completeCache(path);
+    const snapshot = readFileSync(path, 'utf8');
+    // Staging an older release left behind an hour ago.
+    const leftover = `${path}.0f8fad5b-d9cb-469f-a165-70867728950e.fresh`;
+    writeFileSync(leftover, '{}');
+    utimesSync(leftover, new Date(Date.now() - 7_200_000), new Date(Date.now() - 7_200_000));
+    const github = FakeGithub.history(400);
+    vi.stubGlobal('fetch', github.fetch);
+    const fresh = ['acme/widgets', '--no-cache', '--full', '--token', 'test-token', '--out', out];
+
+    github.newWindow(206);
+    expect(await main(fresh)).toBe(0);
+    expect(readFileSync(path, 'utf8')).toBe(snapshot);
+    expect(readdirSync(join(cache, 'acme')).toSorted()).toEqual([
+      'widgets.json',
+      'widgets.json.fresh',
+      'widgets.json.journal',
+    ]);
+
+    // A later fresh run was killed and left its lock behind.
+    mkdirSync(`${path}.fresh.lock`);
+    writeFileSync(
+      join(
+        `${path}.fresh.lock`,
+        `${spawnSync(process.execPath, ['-e', '']).pid}.${randomUUID()}.${hostname()}`,
+      ),
+      '',
+    );
+    github.newWindow(206);
+    expect(await main(fresh)).toBe(0);
+    expect(process.stderr.write).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /^continuing the unfinished fresh sync in .*widgets\.json\.fresh \(175 PRs\)/,
+      ),
+    );
+    github.newWindow(206);
+    expect(await main(fresh)).toBe(0);
+    expect(new FileStore(path, 'acme/widgets').size).toBe(400);
+    expect((await new FileStore(path, 'acme/widgets').meta()).interrupted).toBe(false);
+    expect(readdirSync(join(cache, 'acme'))).toEqual(['widgets.json']);
+    // 16 pages, plus one page per later window to re-check what changed.
+    expect(github.calls).toHaveLength(18);
+  });
+
+  it('refuses a second fresh sync while one is running', async () => {
+    const path = join(cache, 'acme/widgets.json');
+    await completeCache(path);
+    writeFileSync(join(cache, '.bilan-cache'), 'bilan\n');
+    const holder = join(`${path}.fresh.lock`, `${process.pid}.${randomUUID()}.${hostname()}`);
+    mkdirSync(`${path}.fresh.lock`);
+    writeFileSync(holder, '');
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    await expect(
+      main(['acme/widgets', '--no-cache', '--token', 'test-token', '--out', out]),
+    ).rejects.toThrow(/Another fresh sync of this repository is running/);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(existsSync(holder)).toBe(true);
   });
 
   it('replaces the snapshot and discards the old journal after a successful fresh sync', async () => {

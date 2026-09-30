@@ -42,9 +42,11 @@ incremental.
 | `--token T`    | GitHub token; otherwise `GITHUB_TOKEN`, `GH_TOKEN`, then `gh auth token` |
 | `--areas FILE` | Override how changed paths map to areas                                  |
 
-`--no-cache` builds a new cache beside the old one and only replaces it once the
-fresh sync finishes; a fresh sync stopped by the rate limit or `--max-prs`
-keeps the old cache, which the report then shows.
+`--no-cache` builds a new cache beside the old one (`<name>.json.fresh`) and
+only replaces it once the fresh sync finishes; a fresh sync stopped by the rate
+limit, `--max-prs` or an interruption keeps the old cache, which the report then
+shows, and running `--no-cache` again continues it. One fresh sync of a
+repository runs at a time.
 
 `--offline` only renders what is cached, so it rejects the sync options
 `--no-cache`, `--full`, `--since`, `--max-prs` and `--token`; tokens in the

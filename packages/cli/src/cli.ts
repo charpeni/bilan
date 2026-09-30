@@ -1,5 +1,4 @@
 import { spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, renameSync, rmdirSync, rmSync } from 'node:fs';
 import { dirname, posix, win32 } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -18,6 +17,7 @@ import { readAreaRules } from './areas.ts';
 import { validateReportPath, writeReport } from './output.ts';
 import { secureCacheDirectory, storePath } from './paths.ts';
 import { renderReport } from './report.ts';
+import { lockStaging, openStaging, removeAbandonedStaging } from './staging.ts';
 import { resolveToken } from './token.ts';
 
 import type { AreaRules, RepoRef, SyncResult } from '@bilan/core';
@@ -165,66 +165,77 @@ async function runSync(repo: RepoRef, options: SyncOptions): Promise<SyncResult>
   });
   secureCacheDirectory();
   const path = storePath(repo);
-  const staging = options.fresh ? `${path}.${randomUUID()}.fresh` : path;
+  const label = `${repo.owner}/${repo.name}`;
+  // A fresh sync builds its cache here, across runs if it has to, and
+  // replaces the cache at `path` once it finishes.
+  const staging = `${path}.fresh`;
   const ownerDirectory = dirname(path);
   const ownerExisted = existsSync(ownerDirectory);
-  const store = new FileStore(staging, `${repo.owner}/${repo.name}`);
-  // No run has ever been stamped here, so there is nothing worth keeping.
-  const neverSynced = (await store.meta()).syncedAt === null;
-  // What a fresh sync must not throw away unless it finishes.
-  const kept = options.fresh ? await usableCache(path, `${repo.owner}/${repo.name}`) : null;
-  log(`syncing ${repo.owner}/${repo.name} with token from ${source}`);
-
-  const since = options.full ? undefined : (options.since ?? defaultSince());
-  let result: SyncResult;
+  removeAbandonedStaging(path);
+  const release = options.fresh ? lockStaging(staging) : undefined;
   try {
-    result = await sync({
-      client,
-      store,
-      repo,
-      mode: options.full ? 'full' : 'incremental',
-      ...(options.maxPrs === undefined ? {} : { maxPrs: options.maxPrs }),
-      ...(since === undefined ? {} : { since }),
-      onPage: (p) =>
-        log(
-          `${p.pass === 'open' ? 'open page' : 'page'} ${p.pages} (${p.fetched} prs, ${p.changedOnPage} changed) · rate remaining ${p.rateLimit.remaining}`,
-        ),
-    });
-    log(describeStop(result));
-    // A first sync that stored nothing proves nothing, not even an empty
-    // repository: fail instead of reporting it, and leave no cache behind.
-    if (!result.complete && neverSynced && store.size === 0) {
-      throw new Error(
-        `${options.fresh ? 'Fresh sync' : 'Sync'} stopped before fetching any pull requests; GitHub's rate limit resets at ${result.rateLimit?.resetAt ?? 'an unknown time'}.`,
-      );
+    const target = options.fresh ? staging : path;
+    const store = options.fresh ? openStaging(staging, label) : new FileStore(path, label);
+    // No run has ever been stamped here, so there is nothing worth keeping.
+    const neverSynced = (await store.meta()).syncedAt === null;
+    // What a fresh sync must not throw away unless it finishes.
+    const kept = options.fresh ? await usableCache(path, label) : null;
+    log(`syncing ${label} with token from ${source}`);
+    if (options.fresh && store.size > 0) {
+      log(`continuing the unfinished fresh sync in ${staging} (${store.size} PRs)`);
+    } else if (!options.fresh && existsSync(staging)) {
+      log(`an unfinished fresh sync is waiting in ${staging}; run with --no-cache to continue it`);
     }
-    if (options.fresh && (result.complete || kept === null)) {
-      renameSync(staging, path);
-      rmSync(`${path}.journal`, { force: true });
-    } else if (options.fresh) {
+
+    const since = options.full ? undefined : (options.since ?? defaultSince());
+    let result: SyncResult;
+    try {
+      result = await sync({
+        client,
+        store,
+        repo,
+        mode: options.full ? 'full' : 'incremental',
+        ...(options.maxPrs === undefined ? {} : { maxPrs: options.maxPrs }),
+        ...(since === undefined ? {} : { since }),
+        onPage: (p) =>
+          log(
+            `${p.pass === 'open' ? 'open page' : 'page'} ${p.pages} (${p.fetched} prs, ${p.changedOnPage} changed) · rate remaining ${p.rateLimit.remaining}`,
+          ),
+      });
+      log(describeStop(result));
+      // A first sync that stored nothing proves nothing, not even an empty
+      // repository: fail instead of reporting it, and leave no cache behind.
+      if (!result.complete && neverSynced && store.size === 0) {
+        throw new Error(
+          `${options.fresh ? 'Fresh sync' : 'Sync'} stopped before fetching any pull requests; GitHub's rate limit resets at ${result.rateLimit?.resetAt ?? 'an unknown time'}.`,
+        );
+      }
+    } catch (error) {
+      if (neverSynced && store.size === 0) {
+        rmSync(target, { force: true });
+        rmSync(`${target}.journal`, { force: true });
+      }
+      throw error;
+    }
+    if (options.fresh && !result.complete && kept !== null) {
       log(
-        `fresh sync did not finish (${[result.stoppedBecause, result.openPass?.stoppedBecause].includes('max-prs') ? 'stopped at --max-prs' : 'rate limit'}; ${store.size} PRs fetched): kept the existing cache of ${kept} PRs in ${path}; run with --no-cache again to replace it`,
+        `fresh sync did not finish (${[result.stoppedBecause, result.openPass?.stoppedBecause].includes('max-prs') ? 'stopped at --max-prs' : 'rate limit'}; ${store.size} PRs fetched so far): kept the existing cache of ${kept} PRs in ${path}; run with --no-cache again to continue`,
       );
       return result;
     }
-  } catch (error) {
-    if (!options.fresh && neverSynced && store.size === 0) {
-      rmSync(path, { force: true });
-      rmSync(`${path}.journal`, { force: true });
-    }
-    throw error;
-  } finally {
     if (options.fresh) {
-      rmSync(staging, { force: true });
+      renameSync(staging, path);
+      rmSync(`${path}.journal`, { force: true });
       rmSync(`${staging}.journal`, { force: true });
     }
+    log(`done: ${store.size} PRs cached in ${path} · ${describeCoverage(result)}`);
+    return result;
+  } finally {
+    release?.();
     if (!ownerExisted && existsSync(ownerDirectory) && readdirSync(ownerDirectory).length === 0) {
       rmdirSync(ownerDirectory);
     }
   }
-
-  log(`done: ${store.size} PRs cached in ${path} · ${describeCoverage(result)}`);
-  return result;
 }
 
 /**
