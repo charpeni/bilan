@@ -165,7 +165,7 @@ async function runSync(repo: RepoRef, options: SyncOptions): Promise<SyncResult>
   };
   const open = result.openPass;
   log(
-    `${why[result.stoppedBecause]}${open === null ? '' : ` · open PRs: ${open.fetched} on ${open.pages} pages`} · ${result.pointsSpent} points spent`,
+    `${why[result.stoppedBecause]}${open === null ? '' : ` · open PRs: ${open.fetched} on ${open.pages} pages (${why[open.stoppedBecause]})`} · ${result.pointsSpent} points spent`,
   );
   log(`done: ${store.size} PRs cached in ${path} · ${describeCoverage(result)}`);
   return result;
