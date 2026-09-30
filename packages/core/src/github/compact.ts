@@ -42,12 +42,7 @@ export function compact(pr: PullRequestNode): RawPr {
       .filter((t) => t.__typename === 'ReviewRequestedEvent')
       .map((t) => ({
         at: t.createdAt,
-        to:
-          t.requestedReviewer === null
-            ? null
-            : 'login' in t.requestedReviewer
-              ? t.requestedReviewer.login
-              : t.requestedReviewer.name,
+        to: t.requestedReviewer?.login ?? t.requestedReviewer?.name ?? null,
       })),
   };
 }

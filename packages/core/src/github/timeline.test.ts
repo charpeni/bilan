@@ -4,13 +4,25 @@ import { readyInfo } from '../derive/ready.ts';
 import { rawPr } from '../testing/fixtures.ts';
 import { GithubClient } from './client.ts';
 import { compact } from './compact.ts';
+import { PULL_REQUESTS_QUERY, PULL_REQUEST_TIMELINE_QUERY } from './query.ts';
 
 describe('pull request timelines', () => {
+  it('requests names for every reviewer type supported by GitHub', () => {
+    for (const query of [PULL_REQUESTS_QUERY, PULL_REQUEST_TIMELINE_QUERY]) {
+      for (const actor of ['Bot', 'Mannequin', 'User']) {
+        expect(query).toContain(`... on ${actor} { login }`);
+      }
+      for (const team of ['EnterpriseTeam', 'Team']) {
+        expect(query).toContain(`... on ${team} { name }`);
+      }
+    }
+  });
+
   it('keeps draft readiness independent of requests and follows every request page', async () => {
     const events = Array.from({ length: 125 }, (_, i) => ({
       __typename: 'ReviewRequestedEvent',
       createdAt: new Date(Date.UTC(2026, 0, 1, 10, i)).toISOString(),
-      requestedReviewer: { login: `reviewer${i}` },
+      requestedReviewer: i === 0 ? {} : { login: `reviewer${i}` },
     }));
     let calls = 0;
     const client = new GithubClient({
@@ -60,6 +72,7 @@ describe('pull request timelines', () => {
     const result = await client.pullRequestsPage({ owner: 'acme', name: 'widgets' }, 25, null);
     const pr = compact(result.page.nodes[0]!);
     expect(pr.reviewRequests).toHaveLength(125);
+    expect(pr.reviewRequests[0]?.to).toBeNull();
     expect(pr.reviewRequests.at(-1)?.to).toBe('reviewer124');
     expect(readyInfo(pr)).toEqual({
       openedAsDraft: true,

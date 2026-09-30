@@ -36,7 +36,7 @@ query($owner:String!, $name:String!, $page:Int!, $cursor:String, $states:[PullRe
             ... on ConvertToDraftEvent { createdAt }
             ... on ReviewRequestedEvent {
               createdAt
-              requestedReviewer { ... on User { login } ... on Team { name } }
+              requestedReviewer { ... on User { login } ... on Bot { login } ... on Mannequin { login } ... on Team { name } ... on EnterpriseTeam { name } }
             }
           }
         }
@@ -56,7 +56,7 @@ query($owner:String!, $name:String!, $number:Int!, $cursor:String) {
           __typename
           ... on ReviewRequestedEvent {
             createdAt
-            requestedReviewer { ... on User { login } ... on Team { name } }
+            requestedReviewer { ... on User { login } ... on Bot { login } ... on Mannequin { login } ... on Team { name } ... on EnterpriseTeam { name } }
           }
         }
       }
@@ -138,7 +138,7 @@ export interface PullRequestNode {
       | {
           __typename: 'ReviewRequestedEvent';
           createdAt: string;
-          requestedReviewer: { login: string } | { name: string } | null;
+          requestedReviewer: { login?: string; name?: string } | null;
         }
     )[];
   };

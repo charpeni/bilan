@@ -81,7 +81,10 @@ function validPr(value: unknown): value is RawPr {
     ) &&
     Array.isArray(value.reviewRequests) &&
     value.reviewRequests.every(
-      (request) => record(request) && typeof request.at === 'string' && nullableString(request.to),
+      (request) =>
+        record(request) &&
+        typeof request.at === 'string' &&
+        (request.to === undefined || nullableString(request.to)),
     )
   );
 }
@@ -136,6 +139,10 @@ export class FileStore implements SyncStore {
     this.journalPath = `${path}.journal`;
     this.data = existsSync(path) ? readSnapshot(path, repo) : { repo, syncedAt: null, prs: {} };
     this.data.repo = repo;
+    // Older clients omitted `to` for reviewer types they did not query.
+    for (const pr of Object.values(this.data.prs)) {
+      for (const request of pr.reviewRequests) request.to ??= null;
+    }
     if (existsSync(this.journalPath)) {
       try {
         const journal = readFileSync(this.journalPath);
@@ -155,7 +162,10 @@ export class FileStore implements SyncStore {
               throw new Error('Invalid cache journal');
             }
             if (entry.journalId === this.data.journalId) {
-              for (const pr of entry.prs) this.data.prs[pr.number] = pr;
+              for (const pr of entry.prs) {
+                for (const request of pr.reviewRequests) request.to ??= null;
+                this.data.prs[pr.number] = pr;
+              }
             }
           }
         }

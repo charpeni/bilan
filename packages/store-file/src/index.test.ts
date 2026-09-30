@@ -64,6 +64,21 @@ describe('FileStore', () => {
     expect(() => new FileStore(path, 'acme/widgets')).toThrow(/broken\.json.*--no-cache/);
   });
 
+  it('loads caches written before unknown reviewer names were normalized', async () => {
+    mkdirSync(dir, { recursive: true });
+    const path = join(dir, 'legacy.json');
+    const cached = {
+      ...pr(1, '2026-01-02T00:00:00Z'),
+      reviewRequests: [{ at: '2026-01-01T00:00:00Z' }],
+    };
+    writeFileSync(
+      path,
+      JSON.stringify({ repo: 'acme/widgets', syncedAt: null, prs: { 1: cached } }),
+    );
+    const store = new FileStore(path, 'acme/widgets');
+    expect((await store.all())[0]?.reviewRequests[0]?.to).toBeNull();
+  });
+
   it.skipIf(process.platform === 'win32')(
     'keeps fresh and replaced private caches owner-only',
     async () => {
