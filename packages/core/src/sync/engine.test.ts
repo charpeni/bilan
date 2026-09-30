@@ -194,6 +194,41 @@ describe('defaultSince', () => {
 });
 
 describe('sync', () => {
+  it('keeps fetched pages and reports a distant API rate limit as a partial run', async () => {
+    let calls = 0;
+    const store = new MemoryStore();
+    const client = new GithubClient({
+      token: 'test',
+      fetch: async () => {
+        if (++calls > 1)
+          return new Response('rate limit', { status: 429, headers: { 'retry-after': '3600' } });
+        return new Response(
+          JSON.stringify({
+            data: {
+              repository: {
+                pullRequests: {
+                  nodes: [node(1, '2026-01-01T00:00:00Z')],
+                  pageInfo: { hasNextPage: true, endCursor: 'next' },
+                },
+              },
+              rateLimit: { cost: 1, remaining: 5000, resetAt: '2026-09-30T00:00:00Z' },
+            },
+          }),
+        );
+      },
+    });
+    const result = await sync({ client, store, repo });
+    expect(result).toMatchObject({
+      fetched: 1,
+      stoppedBecause: 'rate-limit',
+      complete: false,
+      rateLimit: { remaining: 0 },
+    });
+    expect(store.prs.size).toBe(1);
+    expect((await store.meta()).interrupted).toBe(true);
+    expect(calls).toBe(2);
+  });
+
   it.each([1, 30])('requests at most %i PRs across real-sized pages', async (maxPrs) => {
     const requests: number[] = [];
     const rows = Array.from({ length: 60 }, (_, i) => node(i + 1, '2026-01-01T00:00:00Z', 'OPEN'));

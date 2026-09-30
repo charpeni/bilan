@@ -141,6 +141,11 @@ async function runSync(repo: RepoRef, options: SyncOptions): Promise<SyncResult>
         ),
     });
     if (options.fresh) {
+      if (!result.complete && result.fetched === 0) {
+        throw new Error(
+          `Fresh sync stopped before fetching data; GitHub's rate limit resets at ${result.rateLimit?.resetAt ?? 'an unknown time'}.`,
+        );
+      }
       renameSync(staging, path);
       rmSync(`${path}.journal`, { force: true });
     }

@@ -29,6 +29,53 @@ export class GithubError extends Error {
   }
 }
 
+export class GithubRateLimitError extends GithubError {
+  readonly resetAt: string | null;
+  readonly retryAfterMs: number | null;
+
+  constructor(
+    message: string,
+    status: number,
+    resetAt: string | null,
+    retryAfterMs: number | null,
+  ) {
+    super(
+      `${message}${resetAt === null ? '' : ` (resets at ${resetAt})`}`,
+      status,
+      retryAfterMs !== null && retryAfterMs <= 30_000,
+    );
+    this.name = 'GithubRateLimitError';
+    this.resetAt = resetAt;
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+
+function rateLimitFailure(
+  response: Response,
+  message: string,
+  resetAt?: string,
+): GithubRateLimitError {
+  const now = Date.now();
+  const retry = response.headers.get('retry-after');
+  const retryDelay =
+    retry === null
+      ? NaN
+      : /^\d+(\.\d+)?$/.test(retry)
+        ? Number(retry) * 1000
+        : Date.parse(retry) - now;
+  const resetHeader = response.headers.get('x-ratelimit-reset');
+  const reset = resetHeader === null ? Date.parse(resetAt ?? '') : Number(resetHeader) * 1000;
+  const wait = Number.isFinite(retryDelay)
+    ? Math.max(0, retryDelay)
+    : Number.isFinite(reset)
+      ? Math.max(0, reset - now)
+      : response.status === 403 || response.status === 429
+        ? 60_000
+        : null;
+  const resumeAt = wait === null ? null : new Date(now + wait).toISOString();
+  return new GithubRateLimitError(message, response.status, resumeAt, wait);
+}
+
 /** One line naming a thrown value: the message of an `Error`, or the value itself. */
 function describeCause(error: unknown): string {
   if (error instanceof Error) {
@@ -130,7 +177,8 @@ export class GithubClient {
         lastError = error;
         const retryable = !(error instanceof GithubError) || error.retryable;
         if (!retryable || attempt === this.retries) throw error;
-        const wait = 2 ** attempt * 2000;
+        const wait =
+          error instanceof GithubRateLimitError ? (error.retryAfterMs ?? 0) : 2 ** attempt * 2000;
         this.onRetry?.(attempt + 1, wait, error);
         await this.sleep(wait);
       }
@@ -157,6 +205,18 @@ export class GithubClient {
 
     if (!response.ok) {
       const text = await response.text().catch(() => '');
+      if (
+        response.status === 429 ||
+        (response.status === 403 &&
+          (response.headers.has('retry-after') ||
+            response.headers.get('x-ratelimit-remaining') === '0' ||
+            /rate limit/i.test(text)))
+      ) {
+        throw rateLimitFailure(
+          response,
+          `GitHub responded ${response.status}: ${errorSummary(text)}`,
+        );
+      }
       const retryable = response.status >= 500 || response.status === 429;
       throw new GithubError(
         `GitHub responded ${response.status}: ${errorSummary(text)}`,
@@ -173,6 +233,11 @@ export class GithubClient {
     }
     if (body.errors?.length) {
       const message = body.errors.map((e) => e.message).join('; ');
+      if (body.errors.every((e) => e.type === 'RATE_LIMITED')) {
+        const resetAt = (body.data as { rateLimit?: { resetAt?: string } } | undefined)?.rateLimit
+          ?.resetAt;
+        throw rateLimitFailure(response, message, resetAt);
+      }
       // A missing or invisible object comes back as `{ data: { repository: null },
       // errors: [{ type: 'NOT_FOUND' }] }`: the data is the answer, so hand it to
       // the caller, which maps the null to a domain error. Any other error type

@@ -1,3 +1,4 @@
+import { GithubRateLimitError } from '../github/client.ts';
 import { compact } from '../github/compact.ts';
 import { DAY } from '../metrics/time.ts';
 
@@ -231,14 +232,22 @@ export async function sync(input: SyncInput): Promise<SyncResult> {
         stoppedBecause = 'max-prs';
         break;
       }
-      const result = await syncPage({
-        client: input.client,
-        store: input.store,
-        repo: input.repo,
-        cursor,
-        pageSize: Math.min(input.pageSize ?? 25, remaining),
-        ...(states === undefined ? {} : { states }),
-      });
+      let result: SyncPageResult;
+      try {
+        result = await syncPage({
+          client: input.client,
+          store: input.store,
+          repo: input.repo,
+          cursor,
+          pageSize: Math.min(input.pageSize ?? 25, remaining),
+          ...(states === undefined ? {} : { states }),
+        });
+      } catch (error) {
+        if (!(error instanceof GithubRateLimitError)) throw error;
+        rateLimit = { cost: 0, remaining: 0, resetAt: error.resetAt ?? 'unknown' };
+        stoppedBecause = 'rate-limit';
+        break;
+      }
       pages++;
       fetched += result.fetched;
       changed += result.changed;

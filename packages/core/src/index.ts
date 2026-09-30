@@ -2,6 +2,7 @@ export type * from './types.ts';
 export {
   GithubClient,
   GithubError,
+  GithubRateLimitError,
   GithubNotFoundError,
   RepoNotFoundError,
 } from './github/client.ts';

@@ -6,6 +6,47 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
 describe('GithubClient', () => {
+  it.each([403, 429])('honors retry-after on a %i rate limit', async (status) => {
+    let calls = 0;
+    const waits: number[] = [];
+    const client = new GithubClient({
+      token: 't',
+      sleep: async (ms) => {
+        waits.push(ms);
+      },
+      fetch: async () => {
+        if (++calls > 1) return json({ data: { ok: true } });
+        return new Response('{"message":"secondary rate limit"}', {
+          status,
+          headers: { 'retry-after': '3' },
+        });
+      },
+    });
+    await expect(client.graphql('query {}', {})).resolves.toEqual({ ok: true });
+    expect(waits).toEqual([3000]);
+  });
+
+  it('surfaces a distant primary rate-limit reset without retrying early', async () => {
+    const resetAt = new Date(Date.now() + 3600_000).toISOString();
+    let calls = 0;
+    const client = new GithubClient({
+      token: 't',
+      sleep: async () => {},
+      fetch: async () => {
+        calls++;
+        return json({
+          data: { rateLimit: { resetAt } },
+          errors: [{ type: 'RATE_LIMITED', message: 'API rate limit exceeded' }],
+        });
+      },
+    });
+    await expect(client.graphql('query {}', {})).rejects.toMatchObject({
+      name: 'GithubRateLimitError',
+      resetAt,
+    });
+    expect(calls).toBe(1);
+  });
+
   it('aborts stalled requests and bounds every retry', async () => {
     let calls = 0;
     const client = new GithubClient({
