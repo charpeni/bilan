@@ -59,7 +59,8 @@ export function derive(prs: readonly PayloadPr[]): MetricPr[] {
 
 /** Timestamp of the most recent event in the data set. */
 export const lastActivity = (prs: readonly MetricPr[]): number =>
-  Math.max(...prs.map((p) => Math.max(p.c, p.x ?? 0, p.m ?? 0)));
+  prs.reduce((latest, p) => Math.max(latest, p.c, p.x ?? 0, p.m ?? 0), -Infinity);
 
 /** Earliest opening time in the data set. */
-export const firstActivity = (prs: readonly MetricPr[]): number => Math.min(...prs.map((p) => p.c));
+export const firstActivity = (prs: readonly MetricPr[]): number =>
+  prs.reduce((earliest, p) => Math.min(earliest, p.c), Infinity);

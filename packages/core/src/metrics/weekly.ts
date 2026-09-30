@@ -1,3 +1,4 @@
+import { firstActivity } from './derive.ts';
 import { median } from './stats.ts';
 import { DAY, HOUR, weekStart } from './time.ts';
 
@@ -15,8 +16,7 @@ export interface WeekBuckets {
 
 export function weekBuckets(s: Scope, last: number): WeekBuckets {
   const { from, authored } = s;
-  const start =
-    from === -Infinity ? weekStart(Math.min(...authored.map((p) => p.c))) : weekStart(from);
+  const start = from === -Infinity ? weekStart(firstActivity(authored)) : weekStart(from);
   const weeks: number[] = [];
   for (let w = start; w <= last; w += 7 * DAY) weeks.push(w);
   return {

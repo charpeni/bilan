@@ -6,6 +6,14 @@ import { derive, firstActivity, isMerged, isReady, lastActivity } from './derive
 const one = (...args: Parameters<typeof payloadPr>) => derive([payloadPr(...args)])[0]!;
 
 describe('derive', () => {
+  it('finds date bounds for reports larger than the engine argument limit', () => {
+    const prs = Array.from({ length: 150_000 }, () => one());
+    expect(firstActivity(prs)).toBe(T0);
+    expect(lastActivity(prs)).toBe(T0 + DAY_MS);
+    expect(firstActivity([])).toBe(Infinity);
+    expect(lastActivity([])).toBe(-Infinity);
+  });
+
   it('keeps every payload field and adds the derived ones for a plain merged PR', () => {
     const p = one();
     expect(p).toMatchObject({ n: 1, a: 'alice', merged: true, open: false, size: 12 });

@@ -57,6 +57,11 @@ describe('weekStart', () => {
 });
 
 describe('weekBuckets', () => {
+  it('handles all-time histories larger than the engine argument limit', () => {
+    const s = { ...sc(), authored: Array.from({ length: 150_000 }, () => prs[0]!) };
+    expect(weekBuckets(s, LAST).start).toBe(W0);
+  });
+
   it('runs from the first opening to the last activity on all time', () => {
     const wb = weekBuckets(sc(), LAST);
     expect(wb.start).toBe(W0);
