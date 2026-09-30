@@ -28,7 +28,7 @@
   --guide: #eef0f2;
   --grid: #eceef0;
   --axis: #8a8f98;
-  /* the accent: ink blue, for the pressed state, links, and the bracket */
+  /* the accent: ink blue, for the pressed state, links, and the mark's stem */
   --accent: #2b4fcf;
   --accent-wash: #e3e9ff;
   --on-accent: #ffffff;
@@ -296,10 +296,9 @@ thead th .sort:focus-visible,
   color: var(--on-accent);
 }
 /*
- * The range control: the pressed range is written as the interval it
- * measures, "[Last 30 days)", with the brand's ink-blue bracket where the
- * window starts. Every button reserves its brackets, so pressing never
- * shifts the row.
+ * The range control: the pressed range takes the brand mark's ink-blue stem,
+ * the axis its window is read from. Every button reserves the stem, so
+ * pressing never shifts the row.
  */
 .range-seg {
   background: none;
@@ -321,25 +320,16 @@ thead th .sort:focus-visible,
   color: var(--ink);
   font-weight: 600;
 }
-.range-seg button::before,
-.range-seg button::after {
-  font-weight: 700;
-  line-height: 1;
-  color: transparent;
-}
 .range-seg button::before {
-  content: '[' / '';
-  margin-right: 3px;
-}
-.range-seg button::after {
-  content: ')' / '';
-  margin-left: 3px;
+  content: '';
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-right: 6px;
+  vertical-align: -0.15em;
 }
 .range-seg button[aria-pressed='true']::before {
-  color: var(--accent);
-}
-.range-seg button[aria-pressed='true']::after {
-  color: var(--ink);
+  background: var(--accent);
 }
 .seg button.needs-load {
   color: var(--muted);

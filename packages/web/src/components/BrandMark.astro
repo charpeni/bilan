@@ -1,18 +1,17 @@
 ---
 /**
- * The bilan mark, inlined: the half-open interval "[ )", the window of time a
- * pulse is read over. The square bracket closes the start of the window and
- * takes the accent (`--accent`) unless `accent` is false; the parenthesis
- * leaves the end open (the story is still going) and follows `currentColor`.
- * Below 24px it switches to the
- * pixel-snapped 16-unit drawing used by the favicon. `size` is the height of
- * the bracket; the parenthesis tips overshoot it slightly (overflow is
- * visible). Geometry and usage rules: public/brand/README.md.
+ * The bilan mark, inlined: the ledger b, a lowercase b drawn as a bar chart.
+ * The stem is the axis every figure is read from and takes the accent
+ * (`--accent`) unless `accent` is false; the bars that come off it trace the
+ * bowl and follow `currentColor`. Below 24px it switches to the pixel-snapped
+ * 16-unit drawing used by the favicon. `size` is the height of the stem. In a
+ * flex row, align the row's items to the baseline: the mark sits on it like a
+ * letter. Geometry and usage rules: public/brand/README.md.
  */
 interface Props {
-  /** Bracket height in px; the width follows the mark's proportions. */
+  /** Stem height in px; the width follows the mark's proportions. */
   size?: number;
-  /** Paint the bracket in the accent colour. When false the whole mark is `currentColor`. */
+  /** Paint the stem in the accent colour. When false the whole mark is `currentColor`. */
   accent?: boolean;
   /** Accessible name. Omit when the mark sits next to the visible word "bilan". */
   title?: string;
@@ -22,12 +21,11 @@ interface Props {
 const { size = 20, accent = true, title, class: className } = Astro.props;
 
 const small = size < 24;
-const box = small ? { x: 2, y: 2, w: 12, h: 12 } : { x: 8, y: 10, w: 47, h: 44 };
-const bracket = small ? 'M2 2H6V4H4V12H6V14H2Z' : 'M8 10H24V18H16V46H24V54H8Z';
-const paren = small
-  ? 'M9.8 2.48C13.6 4.98 13.6 11.02 9.8 13.52'
-  : 'M41 12.94C54 19.94 54 44.06 41 51.06';
-const stroke = small ? 2.1 : 8.5;
+const box = small ? { x: 3, y: 1, w: 9, h: 14 } : { x: 15, y: 5, w: 34, h: 54 };
+const stem = small ? 'M3 1H5V15H3Z' : 'M15 5H23V59H15Z';
+const bars = small
+  ? 'M5 4H9V6H5ZM5 7H12V9H5ZM5 10H12V12H5ZM5 13H9V15H5Z'
+  : 'M23 22H39V29H23ZM23 32H49V39H23ZM23 42H49V49H23ZM23 52H39V59H23Z';
 const width = Math.round(((size * box.w) / box.h) * 100) / 100;
 ---
 
@@ -41,13 +39,12 @@ const width = Math.round(((size * box.w) / box.h) * 100) / 100;
   aria-hidden={title ? undefined : 'true'}
   focusable="false"
 >
-  <path fill={accent ? 'var(--accent)' : 'currentColor'} d={bracket}></path>
-  <path fill="none" stroke="currentColor" stroke-width={stroke} d={paren}></path>
+  <path fill={accent ? 'var(--accent)' : 'currentColor'} d={stem}></path>
+  <path fill="currentColor" d={bars}></path>
 </svg>
 
 <style>
   .brand-mark {
     flex: none;
-    overflow: visible;
   }
 </style>

@@ -171,10 +171,16 @@ html {
   gap: 16px;
   min-width: 0;
 }
+/*
+ * The mark sits on the baseline like a letter of the word; wrapping lets
+ * `align-content` centre that one baseline-aligned line in the header's height.
+ */
 .wordmark {
   flex: none;
   display: inline-flex;
-  align-items: center;
+  flex-wrap: wrap;
+  align-items: baseline;
+  align-content: center;
   gap: 0.3em;
   height: var(--hdr-h);
   font: 650 20px/1 var(--font-sans);
@@ -685,7 +691,7 @@ form + .pop-item,
 }
 .state-card .eyebrow {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 8px;
   margin: 0;
   font-size: 14px;
@@ -838,7 +844,7 @@ form + .pop-item,
 }
 .gloss-word {
   display: inline-flex !important;
-  align-items: center;
+  align-items: baseline;
   gap: 0.3em;
   font-weight: 650;
   font-size: 16px;
@@ -1242,6 +1248,10 @@ form + .pop-item,
   font-size: 13px;
   letter-spacing: 0;
 }
+/*
+ * The anchor is the mark's stem: the accent axis the lanes' bars start from,
+ * so the timeline draws the ledger b where the clock starts.
+ */
 .tl-anchor {
   position: absolute;
   left: var(--x);
@@ -1250,22 +1260,6 @@ form + .pop-item,
   width: 2px;
   margin-left: -1px;
   background: var(--accent);
-}
-/* The anchor is drawn as the brand's bracket: "[", closed where the clock starts. */
-.tl-anchor::before,
-.tl-anchor::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  width: 8px;
-  height: 2px;
-  background: var(--accent);
-}
-.tl-anchor::before {
-  top: 0;
-}
-.tl-anchor::after {
-  bottom: 0;
 }
 .tl-anchor span {
   position: absolute;
