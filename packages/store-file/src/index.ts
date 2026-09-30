@@ -1,4 +1,18 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import {
+  chmodSync,
+  closeSync,
+  constants,
+  existsSync,
+  fchmodSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  truncateSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname } from 'node:path';
 
 import { writePrivateFile } from './private-file.ts';
@@ -8,6 +22,8 @@ import type { RawPr, RepoMeta, SyncStore } from '@bilan/core';
 export { writePrivateFile } from './private-file.ts';
 
 interface FileShape {
+  /** Matches page records to the snapshot they extend. */
+  journalId?: string;
   repo: string;
   syncedAt: string | null;
   /** Absent in files written before coverage existed; those came from full walks. */
@@ -32,19 +48,37 @@ function earliest(a: string | null, b: string | null): string | null {
 }
 
 /**
- * One JSON file per repo, written atomically. Small enough to hold in memory
- * for any repo the CLI is likely to see; the web app uses a database instead.
+ * An atomic JSON snapshot plus an append-only journal of pages. A completed
+ * run compacts the journal, keeping writes linear in the synced data size.
  */
 export class FileStore implements SyncStore {
   private readonly path: string;
   private readonly data: FileShape;
+  private readonly journalPath: string;
+  private tornJournalAt: number | undefined;
 
   constructor(path: string, repo: string) {
     this.path = path;
+    this.journalPath = `${path}.journal`;
     this.data = existsSync(path)
       ? (JSON.parse(readFileSync(path, 'utf8')) as FileShape)
       : { repo, syncedAt: null, prs: {} };
     this.data.repo = repo;
+    if (existsSync(this.journalPath)) {
+      const journal = readFileSync(this.journalPath);
+      const end = journal.lastIndexOf(10) + 1;
+      // A killed process can leave an incomplete final record. Its earlier
+      // pages are durable; discard the torn tail before the next append.
+      if (end < journal.length) this.tornJournalAt = end;
+      for (const line of journal.subarray(0, end).toString('utf8').split('\n')) {
+        if (line) {
+          const record = JSON.parse(line) as { journalId: string; prs: RawPr[] };
+          if (record.journalId === this.data.journalId) {
+            for (const pr of record.prs) this.data.prs[pr.number] = pr;
+          }
+        }
+      }
+    }
   }
 
   meta(): Promise<RepoMeta> {
@@ -70,7 +104,31 @@ export class FileStore implements SyncStore {
 
   upsert(prs: RawPr[]): Promise<void> {
     for (const pr of prs) this.data.prs[pr.number] = pr;
-    this.flush();
+    if (
+      !existsSync(this.path) ||
+      this.data.journalId === undefined ||
+      lstatSync(this.path).isSymbolicLink() ||
+      (process.platform !== 'win32' && (lstatSync(this.path).mode & 0o777) !== 0o600)
+    ) {
+      this.flush();
+    } else if (prs.length) {
+      chmodSync(dirname(this.path), 0o700);
+      if (this.tornJournalAt !== undefined) {
+        truncateSync(this.journalPath, this.tornJournalAt);
+        this.tornJournalAt = undefined;
+      }
+      const fd = openSync(
+        this.journalPath,
+        constants.O_WRONLY | constants.O_APPEND | constants.O_CREAT | (constants.O_NOFOLLOW ?? 0),
+        0o600,
+      );
+      try {
+        fchmodSync(fd, 0o600);
+        writeFileSync(fd, `${JSON.stringify({ journalId: this.data.journalId, prs })}\n`);
+      } finally {
+        closeSync(fd);
+      }
+    }
     return Promise.resolve();
   }
 
@@ -120,6 +178,12 @@ export class FileStore implements SyncStore {
     mkdirSync(directory, { recursive: true, mode: 0o700 });
     // mkdir's mode does not tighten a cache directory created by an older CLI.
     chmodSync(directory, 0o700);
-    writePrivateFile(this.path, JSON.stringify(this.data));
+    const journalId = randomUUID();
+    writePrivateFile(this.path, JSON.stringify({ ...this.data, journalId }));
+    this.data.journalId = journalId;
+    // Old records cannot overwrite a newer snapshot if the process dies
+    // after this rename, or a fresh sync replaces the snapshot separately.
+    rmSync(this.journalPath, { force: true });
+    this.tornJournalAt = undefined;
   }
 }

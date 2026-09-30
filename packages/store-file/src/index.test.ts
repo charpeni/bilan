@@ -1,5 +1,7 @@
 import {
   chmodSync,
+  appendFileSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -93,6 +95,54 @@ describe('FileStore', () => {
     });
     expect((await reopened.all()).map((p) => p.number).toSorted()).toEqual([1, 2]);
     expect(JSON.parse(readFileSync(path, 'utf8')).repo).toBe('acme/widgets');
+  });
+
+  it('persists each page without rewriting the snapshot and compacts on completion', async () => {
+    const path = join(dir, 'journal.json');
+    const store = new FileStore(path, 'acme/widgets');
+    await store.markStarted('2026-01-01T00:00:00Z');
+    const snapshot = readFileSync(path, 'utf8');
+    for (let page = 0; page < 10; page++) {
+      await store.upsert(Array.from({ length: 25 }, (_, i) => pr(page * 25 + i + 1, 'a')));
+    }
+    expect(readFileSync(path, 'utf8') === snapshot).toBe(true);
+    expect(new FileStore(path, 'acme/widgets').size).toBe(250);
+    if (process.platform !== 'win32') expect(statSync(`${path}.journal`).mode & 0o777).toBe(0o600);
+    await store.markSynced('2026-01-02T00:00:00Z', null, true, true);
+    expect(existsSync(`${path}.journal`)).toBe(false);
+    expect(Object.keys(JSON.parse(readFileSync(path, 'utf8')).prs)).toHaveLength(250);
+    expect((await new FileStore(path, 'acme/widgets').meta()).interrupted).toBe(false);
+  });
+
+  it('recovers complete pages before a torn final journal record and can resume', async () => {
+    const path = join(dir, 'torn.json');
+    const store = new FileStore(path, 'acme/widgets');
+    await store.markStarted('2026-01-01T00:00:00Z');
+    await store.upsert([pr(1, 'a')]);
+    const { journalId } = JSON.parse(readFileSync(path, 'utf8'));
+    appendFileSync(
+      `${path}.journal`,
+      `${JSON.stringify({ journalId, prs: [pr(2, 'b')] })}\n[{"number":3`,
+    );
+    const reopened = new FileStore(path, 'acme/widgets');
+    expect(reopened.size).toBe(2);
+    expect((await reopened.meta()).interrupted).toBe(true);
+    await reopened.upsert([pr(3, 'c')]);
+    expect(new FileStore(path, 'acme/widgets').size).toBe(3);
+  });
+
+  it('ignores a journal from an older snapshot left behind during replacement', async () => {
+    const path = join(dir, 'replacement.json');
+    const store = new FileStore(path, 'acme/widgets');
+    await store.markStarted('2026-01-01T00:00:00Z');
+    await store.upsert([pr(1, 'old')]);
+    const oldJournal = readFileSync(`${path}.journal`);
+    await store.upsert([pr(1, 'new')]);
+    await store.markSynced('2026-01-02T00:00:00Z', null, true, true);
+    writeFileSync(`${path}.journal`, oldJournal);
+    expect(await new FileStore(path, 'acme/widgets').updatedAtByNumber([1])).toEqual(
+      new Map([[1, 'new']]),
+    );
   });
 
   it('starts with no coverage and takes the first bound as given', async () => {
