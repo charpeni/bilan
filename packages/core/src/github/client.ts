@@ -43,6 +43,11 @@ export class GithubError extends Error {
 export class GithubRateLimitError extends GithubError {
   readonly resetAt: string | null;
   readonly retryAfterMs: number | null;
+  /**
+   * Points GitHub reported for the requests of the same page that succeeded
+   * before this stop, such as a page and its first review-request follow-ups.
+   */
+  pointsSpent = 0;
 
   constructor(
     message: string,
@@ -326,42 +331,48 @@ export class GithubClient {
       states: options.states ?? null,
     });
     let rateLimit = data.rateLimit;
-    for (const pr of data.repository.pullRequests.nodes) {
-      let info = pr.timelineItems.pageInfo;
-      while (info?.hasNextPage) {
-        if (info.endCursor === null)
-          throw new GithubError('GitHub omitted the review-request cursor', null, false);
-        const reserve = options.rateLimitReserve;
-        if (reserve !== undefined && rateLimit.remaining < reserve) {
-          throw new GithubRateLimitError(
-            `GitHub rate limit is down to ${rateLimit.remaining} points, under the ${reserve}-point reserve`,
-            null,
-            rateLimit.resetAt,
-            null,
+    try {
+      for (const pr of data.repository.pullRequests.nodes) {
+        let info = pr.timelineItems.pageInfo;
+        while (info?.hasNextPage) {
+          if (info.endCursor === null)
+            throw new GithubError('GitHub omitted the review-request cursor', null, false);
+          const reserve = options.rateLimitReserve;
+          if (reserve !== undefined && rateLimit.remaining < reserve) {
+            throw new GithubRateLimitError(
+              `GitHub rate limit is down to ${rateLimit.remaining} points, under the ${reserve}-point reserve`,
+              null,
+              rateLimit.resetAt,
+              null,
+            );
+          }
+          const next = await this.repoQuery<PullRequestTimelinePage>(
+            repo,
+            PULL_REQUEST_TIMELINE_QUERY,
+            {
+              number: pr.number,
+              cursor: info.endCursor,
+            },
           );
+          const timeline = next.repository.pullRequest?.timelineItems;
+          if (!timeline)
+            throw new GithubError(
+              `Pull request #${pr.number} became inaccessible during sync`,
+              404,
+              false,
+            );
+          pr.timelineItems.nodes.push(...timeline.nodes);
+          rateLimit = { ...next.rateLimit, cost: rateLimit.cost + next.rateLimit.cost };
+          if (timeline.pageInfo?.hasNextPage && timeline.pageInfo.endCursor === info.endCursor) {
+            throw new GithubError('GitHub repeated the review-request cursor', null, false);
+          }
+          info = timeline.pageInfo;
         }
-        const next = await this.repoQuery<PullRequestTimelinePage>(
-          repo,
-          PULL_REQUEST_TIMELINE_QUERY,
-          {
-            number: pr.number,
-            cursor: info.endCursor,
-          },
-        );
-        const timeline = next.repository.pullRequest?.timelineItems;
-        if (!timeline)
-          throw new GithubError(
-            `Pull request #${pr.number} became inaccessible during sync`,
-            404,
-            false,
-          );
-        pr.timelineItems.nodes.push(...timeline.nodes);
-        rateLimit = { ...next.rateLimit, cost: rateLimit.cost + next.rateLimit.cost };
-        if (timeline.pageInfo?.hasNextPage && timeline.pageInfo.endCursor === info.endCursor) {
-          throw new GithubError('GitHub repeated the review-request cursor', null, false);
-        }
-        info = timeline.pageInfo;
       }
+    } catch (error) {
+      // The page is lost, but the points its successful requests used are not.
+      if (error instanceof GithubRateLimitError) error.pointsSpent += rateLimit.cost;
+      throw error;
     }
     return { page: data.repository.pullRequests, rateLimit };
   }

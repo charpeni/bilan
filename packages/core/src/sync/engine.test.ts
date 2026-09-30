@@ -811,9 +811,32 @@ describe('sync', () => {
     expect(result).toMatchObject({
       pages: 0,
       fetched: 0,
+      pointsSpent: 1,
       stoppedBecause: 'rate-limit',
-      rateLimit: { resetAt: '2026-10-01T00:00:00Z' },
+      rateLimit: { cost: 1, resetAt: '2026-10-01T00:00:00Z' },
       complete: false,
+    });
+    expect(store.prs.size).toBe(0);
+  });
+
+  it('counts the points of an interrupted page in the totals', async () => {
+    const { client } = timelineGithub({
+      events: 305,
+      fail: (call) =>
+        call === 3
+          ? new Response('{"message":"You have exceeded a secondary rate limit"}', {
+              status: 403,
+              headers: { 'retry-after': '600' },
+            })
+          : undefined,
+    });
+    const store = new MemoryStore();
+    const result = await sync({ client, store, repo, mode: 'full' });
+    expect(result).toMatchObject({
+      fetched: 0,
+      pointsSpent: 2,
+      stoppedBecause: 'rate-limit',
+      rateLimit: { cost: 2 },
     });
     expect(store.prs.size).toBe(0);
   });

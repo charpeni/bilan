@@ -250,7 +250,8 @@ export async function sync(input: SyncInput): Promise<SyncResult> {
         });
       } catch (error) {
         if (!(error instanceof GithubRateLimitError)) throw error;
-        rateLimit = { cost: 0, remaining: 0, resetAt: error.resetAt ?? 'unknown' };
+        totals.pointsSpent += error.pointsSpent;
+        rateLimit = { cost: error.pointsSpent, remaining: 0, resetAt: error.resetAt ?? 'unknown' };
         stoppedBecause = 'rate-limit';
         break;
       }

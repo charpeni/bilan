@@ -6,6 +6,7 @@ import { FileStore } from '@bilan/store-file';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { rawPr } from '../../core/src/testing/fixtures.ts';
+import { timelineGithub } from '../../core/src/testing/timeline.ts';
 import { main } from './cli.ts';
 
 vi.mock('./report.ts', () => ({ renderReport: (payload: unknown) => JSON.stringify(payload) }));
@@ -98,6 +99,30 @@ describe('CLI cache and report lifecycle', () => {
     await store.markSynced('2026-01-02T00:00:00Z', null, true, true);
     expect(await main(['acme/widgets', '--offline', '--out', out])).toBe(0);
     expect(JSON.parse(readFileSync(out, 'utf8')).prs).toHaveLength(1);
+  });
+
+  it('reports the points of a page interrupted while following review requests', async () => {
+    const path = join(cache, 'acme/widgets.json');
+    const store = new FileStore(path, 'acme/widgets');
+    await store.markStarted('2026-01-01T00:00:00Z');
+    await store.upsert([rawPr({ number: 7 })]);
+    await store.markSynced('2026-01-02T00:00:00Z', null, true, true);
+    const { fetch } = timelineGithub({
+      events: 305,
+      fail: (call) =>
+        call === 3
+          ? new Response('{"message":"You have exceeded a secondary rate limit"}', {
+              status: 403,
+              headers: { 'retry-after': '600' },
+            })
+          : undefined,
+    });
+    vi.stubGlobal('fetch', fetch);
+    expect(await main(['acme/widgets', '--full', '--token', 'test-token', '--out', out])).toBe(0);
+    expect(process.stderr.write).toHaveBeenCalledWith(
+      expect.stringMatching(/^rate limit low, resets at .* · 2 points spent\n$/),
+    );
+    expect(new FileStore(path, 'acme/widgets').size).toBe(1);
   });
 
   it.each(['missing', 'directory', 'empty'])(

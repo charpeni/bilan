@@ -39,8 +39,25 @@ describe('pull request timelines', () => {
     const { client, cursors } = timelineGithub({ events: 205, remaining: (call) => 101 - call });
     const page = client.pullRequestsPage(repo, 25, null, { rateLimitReserve: 200 });
     await expect(page).rejects.toThrow(GithubRateLimitError);
-    await expect(page).rejects.toMatchObject({ resetAt: '2026-10-01T00:00:00Z' });
+    await expect(page).rejects.toMatchObject({ resetAt: '2026-10-01T00:00:00Z', pointsSpent: 1 });
     expect(cursors).toEqual([null]);
+  });
+
+  it('keeps the points of successful requests when a follow-up is rate limited', async () => {
+    const { client, cursors } = timelineGithub({
+      events: 305,
+      fail: (call) =>
+        call === 3
+          ? new Response('{"message":"You have exceeded a secondary rate limit"}', {
+              status: 403,
+              headers: { 'retry-after': '600' },
+            })
+          : undefined,
+    });
+    const page = client.pullRequestsPage(repo, 25, null, { rateLimitReserve: 200 });
+    await expect(page).rejects.toThrow(GithubRateLimitError);
+    await expect(page).rejects.toMatchObject({ pointsSpent: 2 });
+    expect(cursors).toEqual([null, '100', '200']);
   });
 
   it('follows requests while GitHub reports at least the reserve', async () => {
