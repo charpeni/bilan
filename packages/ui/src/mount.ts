@@ -4,7 +4,7 @@ import { renderBrief } from './brief.ts';
 import { DEFAULT_RANGE, isCovered, isRange, rangeSinceDate } from './range.ts';
 import { render } from './render.ts';
 import { createTooltip } from './tooltip.ts';
-import { el, fmtDate } from './utils.ts';
+import { el, fmtDate, holdHeight } from './utils.ts';
 
 import type { Range } from './range.ts';
 import type { DashboardContext } from './state.ts';
@@ -169,7 +169,8 @@ export function mount(root: HTMLElement, payload: Payload, options: MountOptions
   };
   press(theme, 'data-theme-set');
 
-  const draw = (): void => render(ctx);
+  const app = must<HTMLElement>('#app');
+  const draw = (): void => holdHeight(app, () => render(ctx));
 
   // Ranges the payload cannot back stay clickable and say so (a "+" and a
   // description), but never become the active range until the host loads them.
@@ -280,10 +281,16 @@ export function mount(root: HTMLElement, payload: Payload, options: MountOptions
     draw();
   });
 
+  // Only the width lays the dashboard out. A phone resizes the viewport's
+  // height each time its toolbars slide in or out under a scrolling reader,
+  // and that redraws nothing.
   let resizeTimer: ReturnType<typeof setTimeout> | undefined;
+  let drawnWidth = html.clientWidth;
   const onResize = (): void => {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
+      if (html.clientWidth === drawnWidth) return;
+      drawnWidth = html.clientWidth;
       brief.relayout();
       draw();
     }, 180);

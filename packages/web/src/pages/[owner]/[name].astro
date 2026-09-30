@@ -196,7 +196,7 @@ const chipTitle =
           data-stale={stale ? '1' : '0'}
         />
         <script>
-          import { LoadMoreError, loadingText, mount } from '@bilan/ui';
+          import { holdHeight, LoadMoreError, loadingText, mount } from '@bilan/ui';
 
           import { fmtCount, liveCount, splitAtCount } from '../../lib/count-up.ts';
           import { fmtAgo, fmtHistory, fmtInstant } from '../../lib/format.ts';
@@ -311,12 +311,16 @@ const chipTitle =
 
           function render(payload: Payload, initialRange?: Range): void {
             const range = initialRange ?? mounted?.range();
-            mounted?.destroy();
-            mounted = mount(root, payload, {
-              theme: currentTheme(),
-              themeControl: false,
-              ...(range === undefined ? {} : { initialRange: range }),
-              onLoadMore: (next) => loadMore(next),
+            // A refresh can land while the reader is far down the page: the
+            // dashboard it replaces keeps its height until the new one is drawn.
+            holdHeight(root, () => {
+              mounted?.destroy();
+              mounted = mount(root, payload, {
+                theme: currentTheme(),
+                themeControl: false,
+                ...(range === undefined ? {} : { initialRange: range }),
+                onLoadMore: (next) => loadMore(next),
+              });
             });
             shown = payload;
             updateChip(payload);

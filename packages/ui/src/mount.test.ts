@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DAY, fixturePayload as payload, HOUR, LAST } from './fixture.ts';
-import { LoadMoreError, mount } from './index.ts';
+import { holdHeight, LoadMoreError, mount } from './index.ts';
 import { activitySpan } from './mount.ts';
 import { hoursFmt } from './render.ts';
 
@@ -63,6 +63,35 @@ const layoutCards = (perRow: number): void => {
   });
 };
 
+/** happy-dom has no viewport either: the page is stubbed `px` wide, as the resize handler reads it. */
+const viewportWidth = (px: number): void => {
+  vi.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(px);
+};
+
+/** `node` measures `px` tall; everything else in happy-dom measures 0. */
+const heightOf = (node: HTMLElement, px: number): void => {
+  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this === node ? px : 0;
+  });
+};
+/**
+ * `held()` at each moment a chart reads its host's width, which lays out
+ * the page. (A table's scroll cue reads widths too, a frame later, on a
+ * page already whole.)
+ */
+const atChartLayout = (held: () => string): string[] => {
+  const seen: string[] = [];
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    if (this.parentElement?.matches('#app .card')) seen.push(held());
+    return 0;
+  });
+  return seen;
+};
+
 const texts = (root: ParentNode, sel: string): string[] =>
   [...root.querySelectorAll(sel)].map((n) => n.textContent ?? '');
 
@@ -114,6 +143,7 @@ describe('mount', () => {
     return node as HTMLElement;
   };
   const shown = (): number => cards().filter((c) => !c.hasAttribute('inert')).length;
+  const firstCard = (): Element | null => root.querySelector('#app .card');
 
   it('renders the header, tiles, every card, and the brief', async () => {
     setup();
@@ -633,10 +663,12 @@ describe('mount', () => {
 
     it('follows the grid when the window is resized', () => {
       vi.useFakeTimers();
+      viewportWidth(1200);
       layoutCards(3);
       setup();
       expect(shown()).toBe(3);
       vi.restoreAllMocks();
+      viewportWidth(800);
       layoutCards(2);
       window.dispatchEvent(new Event('resize'));
       vi.advanceTimersByTime(200);
@@ -652,6 +684,64 @@ describe('mount', () => {
       expect(root.querySelector('.brief-toggle')?.textContent).toBe('Show more');
       expect(grid().dataset.clipped).toBeUndefined();
       expect(grid().style.maxHeight).toBe('');
+    });
+  });
+
+  describe('under a scrolling reader', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+      vi.useRealTimers();
+    });
+
+    it('ignores a resize that only changes the height, as a phone toolbar does', () => {
+      vi.useFakeTimers();
+      viewportWidth(390);
+      setup();
+      const before = firstCard();
+      window.dispatchEvent(new Event('resize'));
+      vi.advanceTimersByTime(200);
+      expect(firstCard()).toBe(before);
+    });
+
+    it('redraws once the width changes', () => {
+      vi.useFakeTimers();
+      viewportWidth(390);
+      setup();
+      const before = firstCard();
+      vi.restoreAllMocks();
+      viewportWidth(844);
+      window.dispatchEvent(new Event('resize'));
+      vi.advanceTimersByTime(200);
+      expect(firstCard()).not.toBe(before);
+      expect(texts(root, '.card > h2')).toEqual(CARD_TITLES);
+    });
+
+    it('keeps its height through a redraw until every chart is drawn', async () => {
+      setup();
+      await flush();
+      const app = root.querySelector<HTMLElement>('#app') as HTMLElement;
+      heightOf(app, 8000);
+      const held = atChartLayout(() => app.style.minHeight);
+      click('90');
+      await flush();
+      expect(held.length).toBeGreaterThanOrEqual(8);
+      expect(new Set(held)).toEqual(new Set(['8000px']));
+      expect(app.style.minHeight).toBe('');
+    });
+
+    it('lets a host keep its height through a remount until every chart is drawn', async () => {
+      setup();
+      await flush();
+      heightOf(root, 9000);
+      const held = atChartLayout(() => root.style.minHeight);
+      holdHeight(root, () => {
+        handle?.destroy();
+        handle = mount(root, payload());
+      });
+      await flush();
+      expect(held.length).toBeGreaterThanOrEqual(8);
+      expect(new Set(held)).toEqual(new Set(['9000px']));
+      expect(root.style.minHeight).toBe('');
     });
   });
 

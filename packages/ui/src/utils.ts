@@ -67,3 +67,23 @@ export const fmtDay = (t: number): string =>
 
 export const css = (name: string): string =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+/**
+ * Run `rebuild`, which empties `node` and fills it again, with `node` held at
+ * its current height until the charts `rebuild` queued are drawn. Charts read
+ * their width as they draw, which lays out the half-built page; were it shorter
+ * for that moment, the browser would clamp the scroll position to it and keep
+ * it once the page grew back, throwing the reader up the page.
+ */
+export function holdHeight(node: HTMLElement, rebuild: () => void): void {
+  const prev = node.style.minHeight;
+  node.style.minHeight = `${node.offsetHeight}px`;
+  try {
+    rebuild();
+  } finally {
+    // Charts draw in microtasks queued by `rebuild`, so this one runs after them.
+    queueMicrotask(() => {
+      node.style.minHeight = prev;
+    });
+  }
+}
