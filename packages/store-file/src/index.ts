@@ -41,6 +41,80 @@ interface FileShape {
   prs: Record<string, RawPr>;
 }
 
+const record = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value);
+const nullableString = (value: unknown): boolean => value === null || typeof value === 'string';
+const strings = (value: unknown): boolean =>
+  Array.isArray(value) && value.every((item) => typeof item === 'string');
+
+function validPr(value: unknown): value is RawPr {
+  if (!record(value)) return false;
+  return (
+    Number.isSafeInteger(value.number) &&
+    Number(value.number) > 0 &&
+    ['OPEN', 'CLOSED', 'MERGED'].includes(String(value.state)) &&
+    typeof value.isDraft === 'boolean' &&
+    ['title', 'createdAt', 'updatedAt', 'baseRefName'].every(
+      (key) => typeof value[key] === 'string',
+    ) &&
+    ['closedAt', 'mergedAt', 'author', 'authorType', 'mergedBy'].every((key) =>
+      nullableString(value[key]),
+    ) &&
+    [
+      'additions',
+      'deletions',
+      'changedFiles',
+      'comments',
+      'reviewThreads',
+      'fileCount',
+      'reviewCount',
+    ].every((key) => typeof value[key] === 'number' && Number.isFinite(value[key])) &&
+    ['labels', 'fileSample', 'readyAt', 'draftedAt'].every((key) => strings(value[key])) &&
+    Array.isArray(value.reviews) &&
+    value.reviews.every(
+      (review) =>
+        record(review) &&
+        nullableString(review.author) &&
+        nullableString(review.authorType) &&
+        nullableString(review.at) &&
+        typeof review.state === 'string',
+    ) &&
+    Array.isArray(value.reviewRequests) &&
+    value.reviewRequests.every(
+      (request) => record(request) && typeof request.at === 'string' && nullableString(request.to),
+    )
+  );
+}
+
+function cacheError(path: string, cause: unknown): Error {
+  return new Error(
+    `Cannot read cache "${path}". Check the file or run with --no-cache to replace it.`,
+    { cause },
+  );
+}
+
+function readSnapshot(path: string, repo: string): FileShape {
+  try {
+    const value: unknown = JSON.parse(readFileSync(path, 'utf8'));
+    if (
+      !record(value) ||
+      value.repo !== repo ||
+      !nullableString(value.syncedAt) ||
+      !record(value.prs) ||
+      !Object.entries(value.prs).every(([key, pr]) => validPr(pr) && key === String(pr.number)) ||
+      !['coverageSince', 'openPrsSyncedAt', 'syncStartedAt', 'reconciledAt'].every(
+        (key) => value[key] === undefined || nullableString(value[key]),
+      ) ||
+      (value.journalId !== undefined && typeof value.journalId !== 'string')
+    ) {
+      throw new Error('Invalid cache contents');
+    }
+    return value as unknown as FileShape;
+  } catch (cause) {
+    throw cacheError(path, cause);
+  }
+}
+
 /** Earliest of two coverage bounds, where `null` (full history) beats any instant. */
 function earliest(a: string | null, b: string | null): string | null {
   if (a === null || b === null) return null;
@@ -60,23 +134,33 @@ export class FileStore implements SyncStore {
   constructor(path: string, repo: string) {
     this.path = path;
     this.journalPath = `${path}.journal`;
-    this.data = existsSync(path)
-      ? (JSON.parse(readFileSync(path, 'utf8')) as FileShape)
-      : { repo, syncedAt: null, prs: {} };
+    this.data = existsSync(path) ? readSnapshot(path, repo) : { repo, syncedAt: null, prs: {} };
     this.data.repo = repo;
     if (existsSync(this.journalPath)) {
-      const journal = readFileSync(this.journalPath);
-      const end = journal.lastIndexOf(10) + 1;
-      // A killed process can leave an incomplete final record. Its earlier
-      // pages are durable; discard the torn tail before the next append.
-      if (end < journal.length) this.tornJournalAt = end;
-      for (const line of journal.subarray(0, end).toString('utf8').split('\n')) {
-        if (line) {
-          const record = JSON.parse(line) as { journalId: string; prs: RawPr[] };
-          if (record.journalId === this.data.journalId) {
-            for (const pr of record.prs) this.data.prs[pr.number] = pr;
+      try {
+        const journal = readFileSync(this.journalPath);
+        const end = journal.lastIndexOf(10) + 1;
+        // A killed process can leave an incomplete final record. Its earlier
+        // pages are durable; discard the torn tail before the next append.
+        if (end < journal.length) this.tornJournalAt = end;
+        for (const line of journal.subarray(0, end).toString('utf8').split('\n')) {
+          if (line) {
+            const entry: unknown = JSON.parse(line);
+            if (
+              !record(entry) ||
+              typeof entry.journalId !== 'string' ||
+              !Array.isArray(entry.prs) ||
+              !entry.prs.every(validPr)
+            ) {
+              throw new Error('Invalid cache journal');
+            }
+            if (entry.journalId === this.data.journalId) {
+              for (const pr of entry.prs) this.data.prs[pr.number] = pr;
+            }
           }
         }
+      } catch (cause) {
+        throw cacheError(this.journalPath, cause);
       }
     }
   }

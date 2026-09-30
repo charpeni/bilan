@@ -50,6 +50,20 @@ describe('FileStore', () => {
   const dir = mkdtempSync(join(tmpdir(), 'bilan-'));
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
+  it.each([
+    '{',
+    'null',
+    '[]',
+    '{}',
+    '{"repo":"acme/widgets","syncedAt":null,"prs":[]}',
+    '{"repo":"acme/widgets","syncedAt":null,"prs":{"1":{"number":1}}}',
+  ])('names corrupt caches and explains how to replace them: %s', (contents) => {
+    mkdirSync(dir, { recursive: true });
+    const path = join(dir, 'broken.json');
+    writeFileSync(path, contents);
+    expect(() => new FileStore(path, 'acme/widgets')).toThrow(/broken\.json.*--no-cache/);
+  });
+
   it.skipIf(process.platform === 'win32')(
     'keeps fresh and replaced private caches owner-only',
     async () => {
