@@ -43,9 +43,7 @@ incremental.
 | `--areas FILE` | Override how changed paths map to areas                                  |
 
 By default a sync covers the last 30 days of activity plus every open pull
-request; later runs only widen that coverage. A 25-PR page costs one GitHub
-rate-limit point, so even a full history of a large repository fits in one
-hour's budget. The cache lives in `~/.cache/bilan`, or `$XDG_CACHE_HOME/bilan` when set.
+request; later runs only widen that coverage. GitHub reports each request's rate-limit cost. Long review-request histories can need extra requests; the CLI reports points spent and stops near the rate limit. The cache lives in `~/.cache/bilan`, or `$XDG_CACHE_HOME/bilan` when set.
 `BILAN_CACHE_DIR` can select a dedicated cache directory; empty values use the default.
 Existing directories with unrelated files are rejected before changing permissions. On Unix, cache directories
 are owner-only (`0700`), and cache files and HTML exports are written with
@@ -154,6 +152,8 @@ its own anchor, so "last 30 days" means what happened in those 30 days rather
 than which pull requests were opened in them. Area attribution samples up to 30
 changed files per pull request, and up to 40 reviews are captured per pull
 request.
+
+Draft transitions are fetched separately from review requests, and review-request histories are paginated without a fixed event limit. Run `--full` to refresh all cached PR metadata after upgrading.
 
 ## Development
 

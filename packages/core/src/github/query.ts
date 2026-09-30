@@ -22,7 +22,14 @@ query($owner:String!, $name:String!, $page:Int!, $cursor:String, $states:[PullRe
           totalCount
           nodes { author { login __typename } state submittedAt }
         }
-        timelineItems(first:10, itemTypes:[READY_FOR_REVIEW_EVENT, CONVERT_TO_DRAFT_EVENT, REVIEW_REQUESTED_EVENT]) {
+        readyEvents: timelineItems(first:1, itemTypes:[READY_FOR_REVIEW_EVENT]) {
+          nodes { ... on ReadyForReviewEvent { createdAt } }
+        }
+        draftEvents: timelineItems(first:1, itemTypes:[CONVERT_TO_DRAFT_EVENT]) {
+          nodes { ... on ConvertToDraftEvent { createdAt } }
+        }
+        timelineItems(first:100, itemTypes:[REVIEW_REQUESTED_EVENT]) {
+          pageInfo { hasNextPage endCursor }
           nodes {
             __typename
             ... on ReadyForReviewEvent { createdAt }
@@ -31,6 +38,25 @@ query($owner:String!, $name:String!, $page:Int!, $cursor:String, $states:[PullRe
               createdAt
               requestedReviewer { ... on User { login } ... on Team { name } }
             }
+          }
+        }
+      }
+    }
+  }
+  rateLimit { cost remaining resetAt }
+}`;
+
+export const PULL_REQUEST_TIMELINE_QUERY = `
+query($owner:String!, $name:String!, $number:Int!, $cursor:String) {
+  repository(owner:$owner, name:$name) {
+    pullRequest(number:$number) {
+      timelineItems(first:100, after:$cursor, itemTypes:[REVIEW_REQUESTED_EVENT]) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          __typename
+          ... on ReviewRequestedEvent {
+            createdAt
+            requestedReviewer { ... on User { login } ... on Team { name } }
           }
         }
       }
@@ -75,6 +101,9 @@ interface Actor {
 }
 
 export interface PullRequestNode {
+  /** Separate first transitions cannot be crowded out by review requests. */
+  readyEvents?: { nodes: { createdAt: string }[] };
+  draftEvents?: { nodes: { createdAt: string }[] };
   number: number;
   title: string;
   state: 'OPEN' | 'CLOSED' | 'MERGED';
@@ -102,6 +131,7 @@ export interface PullRequestNode {
     }[];
   };
   timelineItems: {
+    pageInfo?: { hasNextPage: boolean; endCursor: string | null };
     nodes: (
       | { __typename: 'ReadyForReviewEvent'; createdAt: string }
       | { __typename: 'ConvertToDraftEvent'; createdAt: string }
@@ -112,6 +142,10 @@ export interface PullRequestNode {
         }
     )[];
   };
+}
+export interface PullRequestTimelinePage {
+  repository: { pullRequest: { timelineItems: PullRequestNode['timelineItems'] } | null } | null;
+  rateLimit: RateLimit;
 }
 
 export interface PullRequestsPage {

@@ -1,7 +1,18 @@
-import { PULL_REQUESTS_QUERY, REPO_META_QUERY, VIEWER_QUERY } from './query.ts';
+import {
+  PULL_REQUESTS_QUERY,
+  PULL_REQUEST_TIMELINE_QUERY,
+  REPO_META_QUERY,
+  VIEWER_QUERY,
+} from './query.ts';
 
 import type { PrState, RepoRef } from '../types.ts';
-import type { PullRequestsPage, RateLimit, RepoMetaResult, ViewerResult } from './query.ts';
+import type {
+  PullRequestsPage,
+  PullRequestTimelinePage,
+  RateLimit,
+  RepoMetaResult,
+  ViewerResult,
+} from './query.ts';
 
 export interface GithubClientOptions {
   token: string;
@@ -308,7 +319,36 @@ export class GithubClient {
       cursor,
       states: options.states ?? null,
     });
-    return { page: data.repository.pullRequests, rateLimit: data.rateLimit };
+    let rateLimit = data.rateLimit;
+    for (const pr of data.repository.pullRequests.nodes) {
+      let info = pr.timelineItems.pageInfo;
+      while (info?.hasNextPage) {
+        if (info.endCursor === null)
+          throw new GithubError('GitHub omitted the review-request cursor', null, false);
+        const next = await this.repoQuery<PullRequestTimelinePage>(
+          repo,
+          PULL_REQUEST_TIMELINE_QUERY,
+          {
+            number: pr.number,
+            cursor: info.endCursor,
+          },
+        );
+        const timeline = next.repository.pullRequest?.timelineItems;
+        if (!timeline)
+          throw new GithubError(
+            `Pull request #${pr.number} became inaccessible during sync`,
+            404,
+            false,
+          );
+        pr.timelineItems.nodes.push(...timeline.nodes);
+        rateLimit = { ...next.rateLimit, cost: rateLimit.cost + next.rateLimit.cost };
+        if (timeline.pageInfo?.hasNextPage && timeline.pageInfo.endCursor === info.endCursor) {
+          throw new GithubError('GitHub repeated the review-request cursor', null, false);
+        }
+        info = timeline.pageInfo;
+      }
+    }
+    return { page: data.repository.pullRequests, rateLimit };
   }
 
   async repoMeta(

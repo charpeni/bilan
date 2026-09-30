@@ -32,10 +32,12 @@ export function compact(pr: PullRequestNode): RawPr {
       state: r.state,
       at: r.submittedAt,
     })),
-    readyAt: timeline.filter((t) => t.__typename === 'ReadyForReviewEvent').map((t) => t.createdAt),
-    draftedAt: timeline
-      .filter((t) => t.__typename === 'ConvertToDraftEvent')
-      .map((t) => t.createdAt),
+    readyAt:
+      pr.readyEvents?.nodes.map((t) => t.createdAt) ??
+      timeline.filter((t) => t.__typename === 'ReadyForReviewEvent').map((t) => t.createdAt),
+    draftedAt:
+      pr.draftEvents?.nodes.map((t) => t.createdAt) ??
+      timeline.filter((t) => t.__typename === 'ConvertToDraftEvent').map((t) => t.createdAt),
     reviewRequests: timeline
       .filter((t) => t.__typename === 'ReviewRequestedEvent')
       .map((t) => ({
