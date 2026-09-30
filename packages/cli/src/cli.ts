@@ -77,6 +77,9 @@ export async function main(argv: string[]): Promise<number> {
     throw new Error('--no-cache and --offline contradict each other.');
   }
   const repo = parseRepo(repoArg);
+  if (values.full && values.since !== undefined)
+    throw new Error('--full and --since cannot be combined.');
+  const since = parseSince(values.since);
   const areas = readAreaRules(values.areas);
   const maxPrs = values['max-prs'] === undefined ? undefined : Number(values['max-prs']);
   if (
@@ -90,7 +93,7 @@ export async function main(argv: string[]): Promise<number> {
     await runSync(repo, {
       full: values.full,
       maxPrs,
-      since: values.since === undefined ? undefined : new Date(values.since),
+      since,
       token: values.token,
       fresh: values['no-cache'],
     });
@@ -109,10 +112,27 @@ interface SyncOptions {
   fresh: boolean;
 }
 
-async function runSync(repo: RepoRef, options: SyncOptions): Promise<SyncResult> {
-  if (options.since !== undefined && Number.isNaN(options.since.getTime())) {
-    throw new Error('--since must be a date like 2025-01-01');
+function parseSince(value: string | undefined): Date | undefined {
+  if (value === undefined) return undefined;
+  const date = new Date(value);
+  const calendarDate = new Date(`${value.slice(0, 10)}T00:00:00Z`);
+  if (
+    !/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2}))?$/.test(
+      value,
+    ) ||
+    !Number.isFinite(date.getTime()) ||
+    !Number.isFinite(calendarDate.getTime()) ||
+    calendarDate.toISOString().slice(0, 10) !== value.slice(0, 10) ||
+    date.getTime() > Date.now()
+  ) {
+    throw new Error(
+      '--since must be a valid ISO date or timestamp, such as 2025-01-01, and cannot be in the future',
+    );
   }
+  return date;
+}
+
+async function runSync(repo: RepoRef, options: SyncOptions): Promise<SyncResult> {
   const { token, source } = await resolveToken(options.token);
   const client = new GithubClient({
     token,

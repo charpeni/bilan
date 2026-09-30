@@ -45,6 +45,23 @@ describe('CLI cache and report lifecycle', () => {
     });
   });
 
+  it.each(['1', '2026-02-30', '2999-01-01', 'not-a-date'])(
+    'rejects invalid since date %s even offline',
+    async (since) => {
+      await expect(
+        main(['acme/widgets', '--offline', '--since', since, '--out', out]),
+      ).rejects.toThrow(/--since/);
+      expect(existsSync(cache)).toBe(false);
+    },
+  );
+
+  it('rejects conflicting history options', async () => {
+    await expect(
+      main(['acme/widgets', '--offline', '--full', '--since', '2025-01-01']),
+    ).rejects.toThrow(/--full.*--since/);
+    expect(existsSync(cache)).toBe(false);
+  });
+
   it.each([null, {}, { known: 'src' }, { known: [42] }, { known: ['src/lib'] }, { known: [''] }])(
     'rejects malformed area rules before syncing: %j',
     async (rules) => {
