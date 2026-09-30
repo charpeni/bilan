@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
-import { readFileSync, rmSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { readFileSync, renameSync, rmSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 
 import {
@@ -117,23 +118,35 @@ async function runSync(repo: RepoRef, options: SyncOptions): Promise<SyncResult>
   });
   secureCacheDirectory();
   const path = storePath(repo);
-  if (options.fresh) rmSync(path, { force: true });
-  const store = new FileStore(path, `${repo.owner}/${repo.name}`);
+  const staging = options.fresh ? `${path}.${randomUUID()}.fresh` : path;
+  const store = new FileStore(staging, `${repo.owner}/${repo.name}`);
   log(`syncing ${repo.owner}/${repo.name} with token from ${source}`);
 
   const since = options.full ? undefined : (options.since ?? defaultSince());
-  const result = await sync({
-    client,
-    store,
-    repo,
-    mode: options.full ? 'full' : 'incremental',
-    ...(options.maxPrs === undefined ? {} : { maxPrs: options.maxPrs }),
-    ...(since === undefined ? {} : { since }),
-    onPage: (p) =>
-      log(
-        `${p.pass === 'open' ? 'open page' : 'page'} ${p.pages} (${p.fetched} prs, ${p.changedOnPage} changed) · rate remaining ${p.rateLimit.remaining}`,
-      ),
-  });
+  let result: SyncResult;
+  try {
+    result = await sync({
+      client,
+      store,
+      repo,
+      mode: options.full ? 'full' : 'incremental',
+      ...(options.maxPrs === undefined ? {} : { maxPrs: options.maxPrs }),
+      ...(since === undefined ? {} : { since }),
+      onPage: (p) =>
+        log(
+          `${p.pass === 'open' ? 'open page' : 'page'} ${p.pages} (${p.fetched} prs, ${p.changedOnPage} changed) · rate remaining ${p.rateLimit.remaining}`,
+        ),
+    });
+    if (options.fresh) {
+      renameSync(staging, path);
+      rmSync(`${path}.journal`, { force: true });
+    }
+  } finally {
+    if (options.fresh) {
+      rmSync(staging, { force: true });
+      rmSync(`${staging}.journal`, { force: true });
+    }
+  }
 
   const why: Record<SyncResult['stoppedBecause'], string> = {
     exhausted: 'reached the end of history',
