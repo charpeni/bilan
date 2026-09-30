@@ -46,4 +46,20 @@ describe('dynamic response security', () => {
     expect(response.headers.get('cache-control')).toBe('public, max-age=3600');
     expect(response.headers.has('strict-transport-security')).toBe(false);
   });
+
+  it('keeps the route response itself, so a pre-gzipped payload is not gzipped again', () => {
+    // Workers reads `encodeBody: 'manual'` from the response the route built;
+    // a copy would lose it and compress the gzipped bytes a second time.
+    const payload = new Response(new Uint8Array([0x1f, 0x8b]), {
+      headers: { 'content-type': 'application/json', 'content-encoding': 'gzip' },
+    });
+    const response = secureResponse(
+      payload,
+      new URL('https://bilan.test/api/repos/withastro/astro/payload'),
+      false,
+    );
+    expect(response).toBe(payload);
+    expect(response.headers.get('content-encoding')).toBe('gzip');
+    expect(response.headers.get('x-frame-options')).toBe('DENY');
+  });
 });
