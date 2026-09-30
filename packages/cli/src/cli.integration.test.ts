@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -44,6 +44,21 @@ describe('CLI cache and report lifecycle', () => {
       reconciledAt: '2026-01-01T00:00:00Z',
     });
   });
+
+  it.each([null, {}, { known: 'src' }, { known: [42] }, { known: ['src/lib'] }, { known: [''] }])(
+    'rejects malformed area rules before syncing: %j',
+    async (rules) => {
+      const path = join(dir, 'areas.json');
+      writeFileSync(path, JSON.stringify(rules));
+      const fetch = vi.fn(async () => new Response('Unauthorized', { status: 401 }));
+      vi.stubGlobal('fetch', fetch);
+      await expect(
+        main(['acme/widgets', '--token', 'test-token', '--areas', path, '--out', out]),
+      ).rejects.toThrow(/--areas.*areas\.json/);
+      expect(fetch).not.toHaveBeenCalled();
+      expect(existsSync(cache)).toBe(false);
+    },
+  );
 
   it('exports a successfully synced empty repository, including offline', async () => {
     vi.stubGlobal(

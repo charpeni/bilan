@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { readFileSync, renameSync, rmSync } from 'node:fs';
+import { renameSync, rmSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 
 import {
@@ -13,6 +13,7 @@ import {
 } from '@bilan/core';
 import { FileStore, writePrivateFile } from '@bilan/store-file';
 
+import { readAreaRules } from './areas.ts';
 import { secureCacheDirectory, storePath } from './paths.ts';
 import { renderReport } from './report.ts';
 import { resolveToken } from './token.ts';
@@ -75,6 +76,7 @@ export async function main(argv: string[]): Promise<number> {
     throw new Error('--no-cache and --offline contradict each other.');
   }
   const repo = parseRepo(repoArg);
+  const areas = readAreaRules(values.areas);
   const maxPrs = values['max-prs'] === undefined ? undefined : Number(values['max-prs']);
   if (
     maxPrs !== undefined &&
@@ -92,7 +94,7 @@ export async function main(argv: string[]): Promise<number> {
       fresh: values['no-cache'],
     });
   }
-  const out = await runReport(repo, { out: values.out, areas: values.areas });
+  const out = await runReport(repo, { out: values.out, areas });
   if (values.open) await openInBrowser(out);
   return 0;
 }
@@ -188,7 +190,7 @@ export function describeCoverage({
 
 interface ReportOptions {
   out: string | undefined;
-  areas: string | undefined;
+  areas: AreaRules | undefined;
 }
 
 async function runReport(repo: RepoRef, options: ReportOptions): Promise<string> {
@@ -201,10 +203,7 @@ async function runReport(repo: RepoRef, options: ReportOptions): Promise<string>
       `Nothing cached for ${repo.owner}/${repo.name}. Run without --offline to sync it first.`,
     );
   }
-  const areas =
-    options.areas === undefined
-      ? undefined
-      : (JSON.parse(readFileSync(options.areas, 'utf8')) as AreaRules);
+  const areas = options.areas;
   if (meta.interrupted) {
     log(
       'Partial sync: some cached pull requests may be missing or stale. Run without --offline to finish syncing.',
