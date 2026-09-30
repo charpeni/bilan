@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { renameSync, rmSync } from 'node:fs';
+import { posix, win32 } from 'node:path';
 import { parseArgs } from 'node:util';
 
 import {
@@ -222,16 +223,17 @@ export function openerArgv(
   path: string,
   platform: NodeJS.Platform = process.platform,
 ): [string, string[]] {
-  if (platform === 'darwin') return ['open', [path]];
+  const absolute = (platform === 'win32' ? win32 : posix).resolve(path);
+  if (platform === 'darwin') return ['open', [absolute]];
   // Not `cmd /c start`: cmd would expand `%VAR%` and split on `&`, `^`, `|`
   // inside the path. rundll32 hands the argument to ShellExecute as is.
-  if (platform === 'win32') return ['rundll32', ['url.dll,FileProtocolHandler', path]];
-  return ['xdg-open', [path]];
+  if (platform === 'win32') return ['rundll32', ['url.dll,FileProtocolHandler', absolute]];
+  return ['xdg-open', [absolute]];
 }
 
 /**
- * Hand the report to the desktop opener without blocking on it. A missing
- * opener (headless Linux, say) is a one-line warning, never a failure.
+ * Check short-lived desktop launchers for failure, then detach after two
+ * seconds if the launcher stays open with the browser. Report errors as warnings.
  */
 export function openInBrowser(
   path: string,
@@ -240,13 +242,23 @@ export function openInBrowser(
   const [command, args] = argv;
   return new Promise((resolve) => {
     const child = spawn(command, args, { detached: true, stdio: 'ignore' });
-    child.once('error', (error) => {
-      log(`could not open ${path} with ${command}: ${error.message}`);
-      resolve();
-    });
-    child.once('spawn', () => {
+    let finished = false;
+    const finish = (error?: string): void => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      if (error) log(`could not open ${path} with ${command}: ${error}`);
       child.unref();
       resolve();
+    };
+    const timer = setTimeout(() => finish(), 2_000);
+    child.once('error', (error) => {
+      finish(error.message);
+    });
+    child.once('exit', (code, signal) => {
+      finish(
+        code === 0 ? undefined : signal ? `terminated by ${signal}` : `exited with code ${code}`,
+      );
     });
   });
 }

@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { resolve, win32 } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -57,10 +58,13 @@ describe('describeCoverage', () => {
 describe('openerArgv', () => {
   it('builds an argument vector per platform, never a shell string', () => {
     const path = 'my report; rm -rf $HOME.html';
-    expect(openerArgv(path, 'darwin')).toEqual(['open', [path]]);
-    expect(openerArgv(path, 'win32')).toEqual(['rundll32', ['url.dll,FileProtocolHandler', path]]);
-    expect(openerArgv(path, 'linux')).toEqual(['xdg-open', [path]]);
-    expect(openerArgv(path, 'freebsd')).toEqual(['xdg-open', [path]]);
+    expect(openerArgv(path, 'darwin')).toEqual(['open', [resolve(path)]]);
+    expect(openerArgv(path, 'win32')).toEqual([
+      'rundll32',
+      ['url.dll,FileProtocolHandler', win32.resolve(path)],
+    ]);
+    expect(openerArgv(path, 'linux')).toEqual(['xdg-open', [resolve(path)]]);
+    expect(openerArgv(path, 'freebsd')).toEqual(['xdg-open', [resolve(path)]]);
   });
 
   it('passes a path full of cmd metacharacters as one literal argument on Windows', () => {
@@ -74,6 +78,16 @@ describe('openerArgv', () => {
 });
 
 describe('openInBrowser', () => {
+  it('warns when a launched opener exits unsuccessfully', async () => {
+    const stderr = await capture(process.stderr, () =>
+      openInBrowser('report.html', [process.execPath, ['-e', 'process.exit(4)']]),
+    );
+    expect(stderr).toMatch(/could not open report\.html.*exit.*4/);
+  });
+
+  it('passes leading-dash filenames as absolute paths', () => {
+    expect(openerArgv('-report.html', 'linux')[1]).toEqual([resolve('-report.html')]);
+  });
   it('warns instead of throwing when the opener is missing', async () => {
     const stderr = await capture(process.stderr, () =>
       openInBrowser('report.html', ['bilan-no-such-opener-4f2c', ['report.html']]),
