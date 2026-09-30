@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
-  <style>.a{fill:#2b4fcf}.i{stroke:#111214}@media (prefers-color-scheme:dark){.a{fill:#8aa4ff}.i{stroke:#ececee}}</style>
-  <path class="a" d="M2 2H6V4H4V12H6V14H2Z"/>
-  <path class="i" fill="none" stroke-width="2.1" d="M9.8 2.48C13.6 4.98 13.6 11.02 9.8 13.52"/>
+  <style>.a{fill:#2b4fcf}.i{fill:#111214}@media (prefers-color-scheme:dark){.a{fill:#8aa4ff}.i{fill:#ececee}}</style>
+  <path class="a" d="M3 1H5V15H3Z"/>
+  <path class="i" d="M5 4H9V6H5ZM5 7H12V9H5ZM5 10H12V12H5ZM5 13H9V15H5Z"/>
 </svg>
