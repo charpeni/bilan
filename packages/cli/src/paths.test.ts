@@ -1,4 +1,4 @@
-import { chmodSync, mkdtempSync, rmSync, statSync } from 'node:fs';
+import { chmodSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -34,6 +34,28 @@ describe('paths', () => {
   it('falls back to XDG_CACHE_HOME', () => {
     expect(cacheDir({ XDG_CACHE_HOME: '/x' })).toBe('/x/bilan');
   });
+
+  it('treats empty cache environment values as unset', () => {
+    expect(cacheDir({ BILAN_CACHE_DIR: '', XDG_CACHE_HOME: '/x' })).toBe('/x/bilan');
+    expect(cacheDir({ BILAN_CACHE_DIR: '', XDG_CACHE_HOME: '' })).toBe(cacheDir({}));
+  });
+
+  it.skipIf(process.platform === 'win32')(
+    'leaves an unrelated existing directory and its permissions alone',
+    () => {
+      const parent = mkdtempSync(join(tmpdir(), 'bilan-shared-'));
+      try {
+        chmodSync(parent, 0o775);
+        writeFileSync(join(parent, 'important.txt'), 'keep');
+        expect(() => secureCacheDirectory({ BILAN_CACHE_DIR: parent })).toThrow(
+          /dedicated cache directory/,
+        );
+        expect(statSync(parent).mode & 0o777).toBe(0o775);
+      } finally {
+        rmSync(parent, { recursive: true, force: true });
+      }
+    },
+  );
 
   it.each([
     { owner: '..', name: 'victim' },
