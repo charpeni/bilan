@@ -90,8 +90,13 @@ export function render(ctx: DashboardContext): void {
     const coverage =
       data.coverageSince === null
         ? 'full history'
-        : `covers activity since ${fmtDate(Date.parse(data.coverageSince))} · ${data.openPrsSyncedAt === null ? 'open PRs partially synced' : 'plus all open PRs'}`;
-    note.textContent = `${prs.length.toLocaleString()} PRs synced · ${new Date(data.syncedAt ?? 0).toLocaleString()} · ${coverage}`;
+        : `covers activity since ${fmtDate(Date.parse(data.coverageSince))} · ${data.interrupted || data.openPrsSyncedAt === null ? 'open PRs partially synced' : 'plus all open PRs'}`;
+    const freshness = data.interrupted
+      ? data.reconciledAt == null
+        ? 'No complete sync yet'
+        : `Last complete sync: ${new Date(data.reconciledAt).toLocaleString()}`
+      : new Date(data.syncedAt ?? 0).toLocaleString();
+    note.textContent = `${prs.length.toLocaleString()} PRs synced · ${freshness} · ${coverage}`;
   }
 
   /* ---- headline tiles ---- */

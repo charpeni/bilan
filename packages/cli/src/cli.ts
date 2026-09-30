@@ -192,6 +192,11 @@ async function runReport(repo: RepoRef, options: ReportOptions): Promise<string>
       ? undefined
       : (JSON.parse(readFileSync(options.areas, 'utf8')) as AreaRules);
   const [meta, prs] = await Promise.all([store.meta(), store.all()]);
+  if (meta.interrupted) {
+    log(
+      'Partial sync: some cached pull requests may be missing or stale. Run without --offline to finish syncing.',
+    );
+  }
   const payload = buildPayload(meta, prs, areas === undefined ? {} : { areas });
   const html = renderReport(payload);
   const target = options.out ?? `${repo.name}.report.html`;

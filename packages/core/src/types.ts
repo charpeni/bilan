@@ -154,6 +154,10 @@ export interface PayloadPr {
 export interface Payload {
   repo: string;
   syncedAt: string | null;
+  /** Absent in older snapshots; true when cached rows may be stale after an unfinished run. */
+  interrupted?: boolean;
+  /** The last complete run's start, when available; see `RepoMeta.reconciledAt`. */
+  reconciledAt?: string | null;
   /** See `RepoMeta.coverageSince`; the dashboard disables ranges that reach past it. */
   coverageSince: string | null;
   /** See `RepoMeta.openPrsSyncedAt`. */

@@ -14,6 +14,13 @@ const meta = {
 };
 
 describe('buildPayload', () => {
+  it('preserves incomplete-sync metadata for exported reports', () => {
+    expect(buildPayload({ ...meta, interrupted: true }, [])).toMatchObject({
+      interrupted: true,
+      reconciledAt: meta.reconciledAt,
+    });
+  });
+
   it('slims PRs into the dashboard shape, sorted by creation time', () => {
     const payload = buildPayload(meta, [
       rawPr({ number: 2, createdAt: '2026-01-05T00:00:00Z' }),

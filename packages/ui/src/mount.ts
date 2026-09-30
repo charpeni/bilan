@@ -72,6 +72,7 @@ const shell = (themeControl: boolean): string => `<div class="wrap">
     ${themeControl ? THEME_SEG : ''}
   </header>
 
+  <p class="note" id="sync-warning" role="status" hidden></p>
   <section class="brief" id="brief" aria-label="Last 30 days at a glance"></section>
 
   <div class="filters">
@@ -104,6 +105,11 @@ export function mount(root: HTMLElement, payload: Payload, options: MountOptions
   };
 
   const prs = derive(payload.prs);
+  const warning = must<HTMLElement>('#sync-warning');
+  warning.hidden = !payload.interrupted;
+  warning.textContent = payload.interrupted
+    ? 'Partial sync: some pull requests may be missing or stale. Refresh the repository to finish syncing.'
+    : '';
   const ctx: DashboardContext = {
     root,
     data: payload,

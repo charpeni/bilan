@@ -62,6 +62,8 @@ export function buildPayload(
   return {
     repo: meta.repo,
     syncedAt: meta.syncedAt,
+    interrupted: meta.interrupted,
+    reconciledAt: meta.reconciledAt,
     coverageSince: meta.coverageSince,
     openPrsSyncedAt: meta.openPrsSyncedAt,
     areas: allAreas(rules),

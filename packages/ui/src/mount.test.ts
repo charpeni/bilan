@@ -149,6 +149,15 @@ describe('mount', () => {
     );
   });
 
+  it('labels interrupted snapshots without claiming all open PRs are current', () => {
+    setup({ ...payload(), interrupted: true, reconciledAt: '2026-01-01T00:00:00Z' });
+    const warning = root.querySelector<HTMLElement>('#sync-warning');
+    expect(warning?.hidden).toBe(false);
+    expect(warning?.textContent).toMatch(/partial sync.*stale/i);
+    expect(root.querySelector('#scope-note')?.textContent).toContain('Last complete sync');
+    expect(root.querySelector('#scope-note')?.textContent).not.toContain('plus all open PRs');
+  });
+
   it('re-renders when a range button is clicked', () => {
     setup();
     const before = heroValue(root);
