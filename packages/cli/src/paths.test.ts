@@ -1,10 +1,32 @@
-import { chmodSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
 import { cacheDir, secureCacheDirectory, storePath } from './paths.ts';
+
+const legacy = (repo = 'acme/widgets') =>
+  JSON.stringify({ repo, syncedAt: '2026-01-01T00:00:00Z', prs: {} });
+
+/** A 0775 directory holding `files`, keyed by relative path. */
+function setup(files: Record<string, string>): string {
+  const parent = mkdtempSync(join(tmpdir(), 'bilan-legacy-'));
+  chmodSync(parent, 0o775);
+  for (const [path, contents] of Object.entries(files)) {
+    mkdirSync(join(parent, path, '..'), { recursive: true });
+    writeFileSync(join(parent, path), contents);
+  }
+  return parent;
+}
 
 describe('paths', () => {
   it.skipIf(process.platform === 'win32')(
@@ -56,6 +78,45 @@ describe('paths', () => {
       }
     },
   );
+
+  describe('caches written before the ownership marker', () => {
+    it.skipIf(process.platform === 'win32')('adopts a directory of bilan snapshots', () => {
+      const parent = setup({
+        'acme/widgets.json': legacy(),
+        'acme/widgets.json.journal': '',
+        'Other/Thing.json': legacy('other/thing'),
+      });
+      try {
+        secureCacheDirectory({ BILAN_CACHE_DIR: parent });
+        expect(statSync(parent).mode & 0o777).toBe(0o700);
+        expect(existsSync(join(parent, '.bilan-cache'))).toBe(true);
+      } finally {
+        rmSync(parent, { recursive: true, force: true });
+      }
+    });
+
+    it
+      .skipIf(process.platform === 'win32')
+      .each([
+        { 'project/settings.json': '{"important":true}' },
+        { 'project/settings.json': legacy('someone/else') },
+        { 'acme/widgets.json': legacy(), 'project/settings.json': '{"repo":"project/settings"}' },
+        { 'acme/widgets.json': 'not json' },
+        { 'acme/widgets.json.journal': '' },
+        { 'acme/empty/.keep': '' },
+      ])('refuses unrelated JSON before changing permissions: %j', (files) => {
+      const parent = setup(files);
+      try {
+        expect(() => secureCacheDirectory({ BILAN_CACHE_DIR: parent })).toThrow(
+          /dedicated cache directory/,
+        );
+        expect(statSync(parent).mode & 0o777).toBe(0o775);
+        expect(existsSync(join(parent, '.bilan-cache'))).toBe(false);
+      } finally {
+        rmSync(parent, { recursive: true, force: true });
+      }
+    });
+  });
 
   it.each([
     { owner: '..', name: 'victim' },
