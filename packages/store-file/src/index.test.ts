@@ -174,6 +174,63 @@ describe('FileStore', () => {
     expect(new FileStore(path, 'acme/widgets').size).toBe(3);
   });
 
+  describe('checkpoints', () => {
+    const checkpoints = {
+      all: { cursor: 'c2', reached: '2025-01-01T00:00:00.000Z', from: '2026-01-01T00:00:00Z' },
+      open: null,
+    };
+
+    it('journals them after each page and keeps them when the run completes', async () => {
+      const path = join(dir, 'checkpoints.json');
+      const store = new FileStore(path, 'acme/widgets');
+      await store.markStarted('2026-01-01T00:00:00Z');
+      const snapshot = readFileSync(path, 'utf8');
+      await store.upsert([pr(1, 'a')]);
+      await store.saveCheckpoints({ ...checkpoints, all: { ...checkpoints.all, cursor: 'c1' } });
+      await store.upsert([pr(2, 'b')]);
+      await store.saveCheckpoints(checkpoints);
+      expect(readFileSync(path, 'utf8')).toBe(snapshot);
+      // Checkpoint records carry an empty page, which older releases replay as such.
+      const records = readFileSync(`${path}.journal`, 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line));
+      expect(records.map((record) => record.prs.length)).toEqual([1, 0, 1, 0]);
+
+      // A process killed here resumes from the last checkpoint.
+      expect((await new FileStore(path, 'acme/widgets').meta()).checkpoints).toEqual(checkpoints);
+
+      await store.markSynced('2026-01-02T00:00:00Z', '2025-01-01T00:00:00.001Z', false, false);
+      expect(existsSync(`${path}.journal`)).toBe(false);
+      const reopened = new FileStore(path, 'acme/widgets');
+      expect((await reopened.meta()).checkpoints).toEqual(checkpoints);
+      expect(reopened.size).toBe(2);
+    });
+
+    it('treats files without them, or with ones that do not validate, as having none', async () => {
+      const path = join(dir, 'no-checkpoints.json');
+      mkdirSync(dir, { recursive: true });
+      for (const value of [undefined, { all: { cursor: 1 }, open: null }, 'nope']) {
+        writeFileSync(
+          path,
+          JSON.stringify({ repo: 'acme/widgets', syncedAt: null, prs: {}, checkpoints: value }),
+        );
+        const meta = await new FileStore(path, 'acme/widgets').meta();
+        expect(meta).not.toHaveProperty('checkpoints');
+      }
+    });
+
+    it('recovers the last complete checkpoint before a torn record', async () => {
+      const path = join(dir, 'torn-checkpoint.json');
+      const store = new FileStore(path, 'acme/widgets');
+      await store.markStarted('2026-01-01T00:00:00Z');
+      await store.upsert([pr(1, 'a')]);
+      await store.saveCheckpoints(checkpoints);
+      appendFileSync(`${path}.journal`, '{"journalId":"x","prs":[],"checkpoints":{"all":');
+      expect((await new FileStore(path, 'acme/widgets').meta()).checkpoints).toEqual(checkpoints);
+    });
+  });
+
   it('ignores a journal from an older snapshot left behind during replacement', async () => {
     const path = join(dir, 'replacement.json');
     const store = new FileStore(path, 'acme/widgets');

@@ -4,7 +4,7 @@ import { DAY } from '../metrics/time.ts';
 
 import type { GithubClient } from '../github/client.ts';
 import type { RateLimit } from '../github/query.ts';
-import type { PrState, RepoMeta, RepoRef } from '../types.ts';
+import type { PrState, RepoMeta, RepoRef, SyncCheckpoints, WalkCheckpoint } from '../types.ts';
 import type { SyncStore } from './store.ts';
 
 /** How far back a default sync reaches. */
@@ -20,7 +20,10 @@ export interface SyncPageInput {
   store: SyncStore;
   repo: RepoRef;
   cursor: string | null;
-  /** PRs per page. Defaults to 25, which keeps a page around 25 rate-limit points. */
+  /**
+   * PRs per page. Defaults to 25; GitHub reports what each page costs (a few
+   * points, more when review-request histories need follow-up requests).
+   */
   pageSize?: number;
   /** Only PRs in these states; omit for all states. */
   states?: PrState[];
@@ -177,7 +180,8 @@ export async function sync(input: SyncInput): Promise<SyncResult> {
   // Stamp the run as in flight before touching any row. `markSynced` clears
   // it; if this run dies in between, the next one sees `interrupted` and
   // knows that unchanged pages may be this run's half-finished work.
-  await input.store.markStarted(now().toISOString());
+  const startedAt = now().toISOString();
+  await input.store.markStarted(startedAt);
   const existing =
     meta.syncedAt === null
       ? Infinity
@@ -219,11 +223,23 @@ export async function sync(input: SyncInput): Promise<SyncResult> {
     meta.openPrsSyncedAt === null || meta.interrupted ? -Infinity : target;
 
   const totals = { pages: 0, fetched: 0, changed: 0, pointsSpent: 0 };
+  let checkpoints: SyncCheckpoints = meta.checkpoints ?? { all: null, open: null };
 
   const walk = async (pass: SyncPass): Promise<Pass> => {
     const states: PrState[] | undefined = pass === 'open' ? ['OPEN'] : undefined;
     const passSince = pass === 'open' ? undefined : since;
     const trustFrom = pass === 'open' ? trustUnchangedFromOpen : trustUnchangedFrom;
+    const key = pass === 'open' ? 'open' : 'all';
+    const prior = usableCheckpoint(checkpoints[key], startedAt);
+    // A walk left off by an earlier run holds from `prior.from` down to
+    // `prior.reached`. This walk starts from the newest page again, since PRs
+    // updated in between moved up there, and joins the earlier one once a
+    // page reaches below `prior.from`: it then goes on from `prior.cursor`.
+    let joined = prior === null;
+    const save = async (checkpoint: WalkCheckpoint | null): Promise<void> => {
+      checkpoints = { ...checkpoints, [key]: checkpoint };
+      await input.store.saveCheckpoints?.(checkpoints);
+    };
     let cursor: string | null = null;
     let pages = 0;
     let fetched = 0;
@@ -251,7 +267,12 @@ export async function sync(input: SyncInput): Promise<SyncResult> {
           ...(states === undefined ? {} : { states }),
         });
       } catch (error) {
-        if (!(error instanceof GithubRateLimitError)) throw error;
+        if (!(error instanceof GithubRateLimitError)) {
+          // A saved cursor GitHub no longer takes must not fail every later
+          // run: forget it, so the next one walks down from the newest page.
+          if (cursor !== null && cursor === prior?.cursor) await save(null);
+          throw error;
+        }
         totals.pointsSpent += error.pointsSpent;
         rateLimit = { cost: error.pointsSpent, remaining: 0, resetAt: error.resetAt ?? 'unknown' };
         stoppedBecause = 'rate-limit';
@@ -266,6 +287,21 @@ export async function sync(input: SyncInput): Promise<SyncResult> {
       totals.pointsSpent += result.rateLimit.cost;
       oldestReached = Math.min(oldestReached, result.oldestUpdatedAt);
       rateLimit = result.rateLimit;
+      let next = result.nextCursor;
+      if (prior !== null && !joined && next !== null && oldestReached < Date.parse(prior.from)) {
+        joined = true;
+        if (Date.parse(prior.reached) < oldestReached) {
+          oldestReached = Date.parse(prior.reached);
+          next = prior.cursor;
+        }
+      }
+      if (joined || next === null) {
+        await save(
+          next === null
+            ? null
+            : { cursor: next, reached: new Date(oldestReached).toISOString(), from: startedAt },
+        );
+      }
       input.onPage?.({
         pass,
         pages: totals.pages,
@@ -274,7 +310,7 @@ export async function sync(input: SyncInput): Promise<SyncResult> {
         rateLimit,
       });
 
-      if (result.nextCursor === null) break;
+      if (next === null) break;
       if (mode === 'incremental' && result.oldestUpdatedAt < trustFrom) {
         unchangedStreak = result.changed === 0 ? unchangedStreak + 1 : 0;
         if (unchangedStreak >= unchangedToStop) {
@@ -286,7 +322,7 @@ export async function sync(input: SyncInput): Promise<SyncResult> {
         stoppedBecause = 'max-prs';
         break;
       }
-      if (passSince !== undefined && result.oldestUpdatedAt < passSince.getTime()) {
+      if (passSince !== undefined && oldestReached < passSince.getTime()) {
         stoppedBecause = 'since';
         break;
       }
@@ -294,7 +330,7 @@ export async function sync(input: SyncInput): Promise<SyncResult> {
         stoppedBecause = 'rate-limit';
         break;
       }
-      cursor = result.nextCursor;
+      cursor = next;
     }
     return { pages, fetched, changed, stoppedBecause, oldestReached, rateLimit };
   };
@@ -368,6 +404,22 @@ export async function sync(input: SyncInput): Promise<SyncResult> {
 interface Pass extends SyncPassResult {
   oldestReached: number;
   rateLimit: RateLimit | null;
+}
+
+/**
+ * A stored checkpoint this run can join, or `null`: one from a run that
+ * started after this one (a clock that moved back) or that does not parse
+ * vouches for nothing.
+ */
+function usableCheckpoint(
+  checkpoint: WalkCheckpoint | null,
+  startedAt: string,
+): WalkCheckpoint | null {
+  if (checkpoint === null) return null;
+  const from = Date.parse(checkpoint.from);
+  return from <= Date.parse(startedAt) && Number.isFinite(Date.parse(checkpoint.reached))
+    ? checkpoint
+    : null;
 }
 
 /** A pass that stopped for any reason other than the budget did what it set out to. */

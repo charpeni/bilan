@@ -95,6 +95,33 @@ export interface RepoMeta {
    * Catch-up walks reach back to it. `null` until a run completes.
    */
   reconciledAt: string | null;
+  /** Where walks can go on from; absent in stores that do not keep them. */
+  checkpoints?: SyncCheckpoints;
+}
+
+/**
+ * How far one walk (newest `updatedAt` first) got. Every PR whose `updatedAt`
+ * lies strictly between `reached` and `from` is stored as it is on GitHub:
+ * the walk saw it after its last update, and any later update would move it
+ * to `from` or later. That stays true however long ago the walk ran, so a
+ * later run only re-walks what changed since `from`, then continues from
+ * `cursor`.
+ */
+export interface WalkCheckpoint {
+  /** GitHub's cursor after the last page walked. */
+  cursor: string;
+  /** ISO `updatedAt` of the oldest PR walked. */
+  reached: string;
+  /** ISO start of the run that last walked down from the newest page into this walk. */
+  from: string;
+}
+
+/** A checkpoint per walk; `null` when that walk has none to go on from. */
+export interface SyncCheckpoints {
+  /** The walk over every state. */
+  all: WalkCheckpoint | null;
+  /** The walk over open PRs. */
+  open: WalkCheckpoint | null;
 }
 
 /** `[reviewer, state, submittedAt]` with the timestamp in epoch ms. */

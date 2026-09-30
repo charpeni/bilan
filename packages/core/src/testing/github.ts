@@ -69,15 +69,19 @@ export class FakeGithub {
     this.remaining = remaining;
   }
 
-  /** `count` merged PRs numbered from 1, the highest updated most recently, an hour apart before `newest`. */
-  static history(count: number, newest = '2026-06-01T00:00:00Z', remaining?: number): FakeGithub {
+  /**
+   * `count` merged PRs numbered from 1, the highest updated at `newest` and
+   * each lower one `stepHours` earlier.
+   */
+  static history(count: number, newest = '2026-06-01T00:00:00Z', stepHours = 1): FakeGithub {
     return new FakeGithub(
       Array.from({ length: count }, (_, i) => ({
         number: i + 1,
-        updatedAt: new Date(Date.parse(newest) - (count - 1 - i) * 3_600_000).toISOString(),
+        updatedAt: new Date(
+          Date.parse(newest) - (count - 1 - i) * stepHours * 3_600_000,
+        ).toISOString(),
         state: 'MERGED' as const,
       })),
-      remaining,
     );
   }
 

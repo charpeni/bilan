@@ -51,7 +51,12 @@ keeps the old cache, which the report then shows.
 environment are ignored.
 
 By default a sync covers the last 30 days of activity plus every open pull
-request; later runs only widen that coverage. GitHub reports each request's rate-limit cost. Long review-request histories can need extra requests; the CLI reports points spent and stops near the rate limit. The cache lives in `~/.cache/bilan`, or `$XDG_CACHE_HOME/bilan` when set.
+request; later runs only widen that coverage. GitHub reports each request's
+rate-limit cost, a few points per page of 25 pull requests; long review-request
+histories need extra requests. The CLI reports points spent and stops near the
+rate limit or at `--max-prs`. The next run first re-checks pull requests updated
+since the stopped run began, then continues from where it stopped, so a history
+too large for one rate-limit window finishes over several runs. The cache lives in `~/.cache/bilan`, or `$XDG_CACHE_HOME/bilan` when set.
 `BILAN_CACHE_DIR` can select a dedicated cache directory; empty values use the default.
 An existing directory is only adopted when it is empty or holds a bilan cache
 (older ones are recognized by their snapshots); anything else is rejected before

@@ -1,4 +1,4 @@
-import type { RawPr, RepoMeta } from '../types.ts';
+import type { RawPr, RepoMeta, SyncCheckpoints } from '../types.ts';
 
 /**
  * Where synced PRs live. The file store (CLI) and the D1 store (web) both
@@ -39,4 +39,11 @@ export interface SyncStore {
     openPrsComplete: boolean,
     complete: boolean,
   ): Promise<void>;
+  /**
+   * Optional: keep `checkpoints` for `meta()`, durably once this resolves,
+   * even if the run never reaches `markSynced`. The engine calls it after the
+   * page it describes is stored. A store without it (or whose `meta()` omits
+   * them) makes every run walk down from the newest page.
+   */
+  saveCheckpoints?(checkpoints: SyncCheckpoints): Promise<void>;
 }

@@ -48,9 +48,11 @@ describe('describeCoverage', () => {
   it('flags a budget-cut run as partial and claims only the stored bound', () => {
     expect(
       describeCoverage({ coverageSince: since, openPrsComplete: false, complete: false }),
-    ).toBe('covers activity since 2026-08-24 (partial run; run again to finish)');
+    ).toBe(
+      'covers activity since 2026-08-24 (partial run; run again to continue where it stopped)',
+    );
     expect(describeCoverage({ coverageSince: null, openPrsComplete: false, complete: false })).toBe(
-      'covers full history (partial run; run again to finish)',
+      'covers full history (partial run; run again to continue where it stopped)',
     );
   });
 });

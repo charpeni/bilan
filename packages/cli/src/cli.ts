@@ -259,7 +259,8 @@ function describeStop(result: SyncResult): string {
  * The "done:" line's coverage clause. Full history implies every open PR too.
  * A run cut short by the budget only claims the coverage bound the store now
  * holds and says so: rows past where it stopped may still be stale until a
- * run finishes.
+ * run finishes. The next run re-checks what changed since this one started,
+ * then goes on from where it stopped.
  */
 export function describeCoverage({
   coverageSince,
@@ -270,7 +271,7 @@ export function describeCoverage({
     coverageSince === null
       ? 'covers full history'
       : `covers activity since ${coverageSince.slice(0, 10)}`;
-  if (!complete) return `${bound} (partial run; run again to finish)`;
+  if (!complete) return `${bound} (partial run; run again to continue where it stopped)`;
   if (coverageSince === null) return bound;
   const open = openPrsComplete
     ? 'plus all open PRs'

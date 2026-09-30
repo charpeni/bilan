@@ -206,7 +206,7 @@ describe('CLI cache and report lifecycle', () => {
       expect(await main(['acme/widgets', '--token', 'test-token', '--out', out])).toBe(0);
       expect(JSON.parse(readFileSync(out, 'utf8'))).toMatchObject({ interrupted: true, prs: [] });
       expect(process.stderr.write).toHaveBeenCalledWith(
-        expect.stringMatching(/partial run; run again to finish/),
+        expect.stringMatching(/partial run; run again to continue where it stopped/),
       );
     });
   });
@@ -305,6 +305,37 @@ describe('CLI cache and report lifecycle', () => {
       expect(readdirSync(join(cache, 'acme'))).toHaveLength(2);
     },
   );
+
+  it.each([
+    ['--full', ['--full']],
+    ['a deep --since', ['--since', '2026-05-20']],
+  ])('finishes %s sync across rate-limit windows', async (_, flags) => {
+    const github = FakeGithub.history(400);
+    for (let n = 1; n < 60; n += 3) github.set(n, github.prs.get(n)!.updatedAt, 'OPEN');
+    vi.stubGlobal('fetch', github.fetch);
+    const path = join(cache, 'acme/widgets.json');
+    let runs = 0;
+    do {
+      runs++;
+      github.newWindow(206);
+      // Upstream changes between windows are re-checked before going on.
+      if (runs === 2) github.set(400, new Date().toISOString(), 'CLOSED');
+      expect(await main(['acme/widgets', ...flags, '--token', 'test-token', '--out', out])).toBe(0);
+    } while ((await new FileStore(path, 'acme/widgets').meta()).interrupted && runs < 10);
+    expect(runs).toBeLessThanOrEqual(4);
+    const cached = await new FileStore(path, 'acme/widgets').all();
+    const since = flags[0] === '--since' ? Date.parse('2026-05-20') : -Infinity;
+    const expected = [...github.prs.values()].filter(
+      (pr) => pr.state === 'OPEN' || Date.parse(pr.updatedAt) >= since,
+    );
+    expect(
+      expected.every((pr) =>
+        cached.some(
+          (c) => c.number === pr.number && c.updatedAt === pr.updatedAt && c.state === pr.state,
+        ),
+      ),
+    ).toBe(true);
+  });
 
   describe('a fresh sync that does not finish', () => {
     it.each([

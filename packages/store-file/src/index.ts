@@ -17,7 +17,7 @@ import { dirname } from 'node:path';
 
 import { writePrivateFile } from './private-file.ts';
 
-import type { RawPr, RepoMeta, SyncStore } from '@bilan/core';
+import type { RawPr, RepoMeta, SyncCheckpoints, SyncStore, WalkCheckpoint } from '@bilan/core';
 
 export { writePrivateFile } from './private-file.ts';
 
@@ -38,7 +38,16 @@ interface FileShape {
   syncStartedAt?: string | null;
   /** See `RepoMeta.reconciledAt`. Absent in files written before it existed. */
   reconciledAt?: string | null;
+  /** See `RepoMeta.checkpoints`. Absent in files written before they existed. */
+  checkpoints?: SyncCheckpoints;
   prs: Record<string, RawPr>;
+}
+
+/** A journal line: a page of PRs, or the checkpoints after one (with no PRs). */
+interface JournalRecord {
+  journalId: string;
+  prs: RawPr[];
+  checkpoints?: SyncCheckpoints;
 }
 
 const record = (value: unknown): value is Record<string, unknown> =>
@@ -98,6 +107,23 @@ export function sameRepo(stored: unknown, repo: string): boolean {
   return typeof stored === 'string' && stored.toLowerCase() === repo.toLowerCase();
 }
 
+function validCheckpoint(value: unknown): value is WalkCheckpoint | null {
+  return (
+    value === null ||
+    (record(value) &&
+      ['cursor', 'reached', 'from'].every((key) => typeof value[key] === 'string') &&
+      Number.isFinite(Date.parse(String(value.reached))) &&
+      Number.isFinite(Date.parse(String(value.from))))
+  );
+}
+
+/** Checkpoints only save work; ones that do not validate are dropped, not an error. */
+function checkpointsOrNothing(value: unknown): SyncCheckpoints | undefined {
+  return record(value) && validCheckpoint(value.all) && validCheckpoint(value.open)
+    ? { all: value.all, open: value.open }
+    : undefined;
+}
+
 function cacheError(path: string, cause: unknown): Error {
   return new Error(
     `Cannot read cache "${path}". Check the file or run with --no-cache to replace it.`,
@@ -148,6 +174,9 @@ export class FileStore implements SyncStore {
     this.journalPath = `${path}.journal`;
     this.data = existsSync(path) ? readSnapshot(path, repo) : { repo, syncedAt: null, prs: {} };
     this.data.repo = repo;
+    const checkpoints = checkpointsOrNothing(this.data.checkpoints);
+    if (checkpoints === undefined) delete this.data.checkpoints;
+    else this.data.checkpoints = checkpoints;
     // Older clients omitted `to` for reviewer types they did not query.
     for (const pr of Object.values(this.data.prs)) {
       for (const request of pr.reviewRequests) request.to ??= null;
@@ -175,6 +204,8 @@ export class FileStore implements SyncStore {
                 for (const request of pr.reviewRequests) request.to ??= null;
                 this.data.prs[pr.number] = pr;
               }
+              const saved = checkpointsOrNothing(entry.checkpoints);
+              if (saved !== undefined) this.data.checkpoints = saved;
             }
           }
         }
@@ -193,6 +224,7 @@ export class FileStore implements SyncStore {
       interrupted: (this.data.syncStartedAt ?? null) !== null,
       syncStartedAt: this.data.syncStartedAt ?? null,
       reconciledAt: this.data.reconciledAt ?? null,
+      ...(this.data.checkpoints === undefined ? {} : { checkpoints: this.data.checkpoints }),
     });
   }
 
@@ -207,31 +239,14 @@ export class FileStore implements SyncStore {
 
   upsert(prs: RawPr[]): Promise<void> {
     for (const pr of prs) this.data.prs[pr.number] = pr;
-    if (
-      !existsSync(this.path) ||
-      this.data.journalId === undefined ||
-      lstatSync(this.path).isSymbolicLink() ||
-      (process.platform !== 'win32' && (lstatSync(this.path).mode & 0o777) !== 0o600)
-    ) {
-      this.flush();
-    } else if (prs.length) {
-      chmodSync(dirname(this.path), 0o700);
-      if (this.tornJournalAt !== undefined) {
-        truncateSync(this.journalPath, this.tornJournalAt);
-        this.tornJournalAt = undefined;
-      }
-      const fd = openSync(
-        this.journalPath,
-        constants.O_WRONLY | constants.O_APPEND | constants.O_CREAT | (constants.O_NOFOLLOW ?? 0),
-        0o600,
-      );
-      try {
-        fchmodSync(fd, 0o600);
-        writeFileSync(fd, `${JSON.stringify({ journalId: this.data.journalId, prs })}\n`);
-      } finally {
-        closeSync(fd);
-      }
-    }
+    this.append({ prs });
+    return Promise.resolve();
+  }
+
+  saveCheckpoints(checkpoints: SyncCheckpoints): Promise<void> {
+    this.data.checkpoints = checkpoints;
+    // An empty page keeps older releases, which require `prs`, able to replay it.
+    this.append({ prs: [], checkpoints });
     return Promise.resolve();
   }
 
@@ -274,6 +289,37 @@ export class FileStore implements SyncStore {
 
   get size(): number {
     return Object.keys(this.data.prs).length;
+  }
+
+  /** Journal a record against the snapshot, or rewrite the snapshot when it cannot take one. */
+  private append(entry: Omit<JournalRecord, 'journalId'>): void {
+    if (
+      !existsSync(this.path) ||
+      this.data.journalId === undefined ||
+      lstatSync(this.path).isSymbolicLink() ||
+      (process.platform !== 'win32' && (lstatSync(this.path).mode & 0o777) !== 0o600)
+    ) {
+      this.flush();
+      return;
+    }
+    if (entry.prs.length === 0 && entry.checkpoints === undefined) return;
+    chmodSync(dirname(this.path), 0o700);
+    if (this.tornJournalAt !== undefined) {
+      truncateSync(this.journalPath, this.tornJournalAt);
+      this.tornJournalAt = undefined;
+    }
+    const fd = openSync(
+      this.journalPath,
+      constants.O_WRONLY | constants.O_APPEND | constants.O_CREAT | (constants.O_NOFOLLOW ?? 0),
+      0o600,
+    );
+    try {
+      fchmodSync(fd, 0o600);
+      const line: JournalRecord = { journalId: this.data.journalId, ...entry };
+      writeFileSync(fd, `${JSON.stringify(line)}\n`);
+    } finally {
+      closeSync(fd);
+    }
   }
 
   private flush(): void {
