@@ -1,6 +1,6 @@
 {
   "name": "github-bilan",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "The pulse of a GitHub repository: contributors, moving areas, review flow, and bottlenecks, as a self-contained HTML report.",
   "license": "MIT",
   "repository": {
