@@ -1,6 +1,6 @@
 import { chmodSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative, resolve, sep } from 'node:path';
 
 import type { RepoRef } from '@bilan/core';
 
@@ -10,7 +10,18 @@ export function cacheDir(env: NodeJS.ProcessEnv = process.env): string {
 }
 
 export function storePath(repo: RepoRef, env?: NodeJS.ProcessEnv): string {
-  return join(cacheDir(env), repo.owner, `${repo.name}.json`);
+  if (
+    [repo.owner, repo.name].some((part) => !/^[\w.-]+$/.test(part) || part === '.' || part === '..')
+  ) {
+    throw new Error('Invalid repository cache path');
+  }
+  const root = resolve(cacheDir(env));
+  const target = resolve(root, repo.owner, `${repo.name}.json`);
+  const child = relative(root, target);
+  if (!child || child === '..' || child.startsWith(`..${sep}`)) {
+    throw new Error('Repository cache path must stay inside the cache directory');
+  }
+  return target;
 }
 
 /** Tighten an existing cache root too, without changing shared ancestors. */

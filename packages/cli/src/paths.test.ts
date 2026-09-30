@@ -34,4 +34,13 @@ describe('paths', () => {
   it('falls back to XDG_CACHE_HOME', () => {
     expect(cacheDir({ XDG_CACHE_HOME: '/x' })).toBe('/x/bilan');
   });
+
+  it.each([
+    { owner: '..', name: 'victim' },
+    { owner: '.', name: 'victim' },
+    { owner: 'acme', name: '../../victim' },
+    { owner: '/tmp', name: 'victim' },
+  ])('rejects unsafe store references before accessing files: %j', (repo) => {
+    expect(() => storePath(repo, { BILAN_CACHE_DIR: '/tmp/cache' })).toThrow();
+  });
 });
