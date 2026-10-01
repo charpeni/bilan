@@ -4,6 +4,7 @@ export {
   GithubError,
   GithubRateLimitError,
   GithubNotFoundError,
+  RepoChangedError,
   RepoNotFoundError,
 } from './github/client.ts';
 export type { GithubClientOptions, PullRequestsPageOptions, Viewer } from './github/client.ts';

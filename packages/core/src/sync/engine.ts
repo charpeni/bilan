@@ -29,6 +29,8 @@ export interface SyncPageInput {
   states?: PrState[];
   /** See `PullRequestsPageOptions.rateLimitReserve`. */
   rateLimitReserve?: number;
+  /** See `PullRequestsPageOptions.repoId`: a page from any other repo is never stored. */
+  repoId?: string;
 }
 
 export interface SyncPageResult {
@@ -37,6 +39,8 @@ export interface SyncPageResult {
   nextCursor: string | null;
   /** Epoch ms of the oldest `updatedAt` on the page; `Infinity` for an empty page. */
   oldestUpdatedAt: number;
+  /** The node ID `repo` resolved to for this page. */
+  repoId: string;
   rateLimit: RateLimit;
 }
 
@@ -45,13 +49,14 @@ export interface SyncPageResult {
  * the unit of work a durable job runner can make into a single step.
  */
 export async function syncPage(input: SyncPageInput): Promise<SyncPageResult> {
-  const { page, rateLimit } = await input.client.pullRequestsPage(
+  const { page, repoId, rateLimit } = await input.client.pullRequestsPage(
     input.repo,
     input.pageSize ?? 25,
     input.cursor,
     {
       ...(input.states === undefined ? {} : { states: input.states }),
       ...(input.rateLimitReserve === undefined ? {} : { rateLimitReserve: input.rateLimitReserve }),
+      ...(input.repoId === undefined ? {} : { repoId: input.repoId }),
     },
   );
   const prs = page.nodes.map(compact);
@@ -63,6 +68,7 @@ export async function syncPage(input: SyncPageInput): Promise<SyncPageResult> {
     changed,
     nextCursor: page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null,
     oldestUpdatedAt: prs.reduce((min, pr) => Math.min(min, Date.parse(pr.updatedAt)), Infinity),
+    repoId,
     rateLimit,
   };
 }
@@ -87,6 +93,11 @@ export interface SyncInput {
   since?: Date;
   /** Stop when GitHub reports fewer points than this. Defaults to 200. */
   rateLimitReserve?: number;
+  /**
+   * The repo's GitHub node ID; see `PullRequestsPageOptions.repoId`. When
+   * omitted, the run holds every page to the repo its first page resolved to.
+   */
+  repoId?: string;
   unchangedPagesToStop?: number;
   onPage?: (progress: SyncProgress) => void;
   now?: () => Date;
@@ -223,6 +234,9 @@ export async function sync(input: SyncInput): Promise<SyncResult> {
     meta.openPrsSyncedAt === null || meta.interrupted ? -Infinity : target;
 
   const totals = { pages: 0, fetched: 0, changed: 0, pointsSpent: 0 };
+  // A rename or transfer mid-run would point `owner/name` at another repo:
+  // pin the run to one repo so its pull requests never land in this store.
+  let repoId = input.repoId;
   let checkpoints: SyncCheckpoints = meta.checkpoints ?? { all: null, open: null };
 
   const walk = async (pass: SyncPass): Promise<Pass> => {
@@ -265,6 +279,7 @@ export async function sync(input: SyncInput): Promise<SyncResult> {
           pageSize: Math.min(input.pageSize ?? 25, remaining),
           rateLimitReserve: reserve,
           ...(states === undefined ? {} : { states }),
+          ...(repoId === undefined ? {} : { repoId }),
         });
       } catch (error) {
         if (!(error instanceof GithubRateLimitError)) {
@@ -278,6 +293,7 @@ export async function sync(input: SyncInput): Promise<SyncResult> {
         stoppedBecause = 'rate-limit';
         break;
       }
+      repoId ??= result.repoId;
       pages++;
       fetched += result.fetched;
       changed += result.changed;
