@@ -431,17 +431,21 @@ export interface Bin {
   edge?: number;
 }
 
-export interface ColumnChartOptions {
-  bins: Bin[];
+export interface ColumnChartOptions<B extends Bin> {
+  bins: B[];
   color: string;
   height?: number;
   valueFmt?: (v: number) => string;
-  tipTitle?: (b: Bin) => string;
+  tipTitle?: (b: B) => string;
+  /** The tooltip's rows; `sub` and the count when omitted. */
+  tip?: ((b: B) => TipRow[]) | null;
+  /** Nothing to draw; by default, when every bin is zero (a count). A rate passes its own. */
+  empty?: boolean;
   tooltip: Tooltip;
 }
 
 /** Columns for a distribution. Buckets are pre-binned; labels go on the axis. */
-export function columnChart(
+export function columnChart<B extends Bin>(
   host: HTMLElement,
   {
     bins,
@@ -449,8 +453,10 @@ export function columnChart(
     height = 200,
     valueFmt = num,
     tipTitle = (b) => b.label,
+    tip = null,
+    empty = bins.every((b) => !b.value),
     tooltip,
-  }: ColumnChartOptions,
+  }: ColumnChartOptions<B>,
 ): void {
   const W = host.clientWidth || 700;
   const H = height;
@@ -462,7 +468,7 @@ export function columnChart(
     'aria-label': host.dataset.label,
   });
   host.append(svg);
-  if (!bins.length || bins.every((b) => !b.value)) {
+  if (!bins.length || empty) {
     host.append(el('div', { class: 'empty', text: 'No data in range' }));
     return;
   }
@@ -517,7 +523,11 @@ export function columnChart(
     });
     svg.append(hit);
     hit.addEventListener('pointermove', (ev) =>
-      tooltip.show(ev, tipTitle(b), [{ color, label: b.sub ?? 'PRs', value: num(b.value) }]),
+      tooltip.show(
+        ev,
+        tipTitle(b),
+        tip ? tip(b) : [{ color, label: b.sub ?? 'PRs', value: num(b.value) }],
+      ),
     );
     hit.addEventListener('pointerleave', tooltip.hide);
     if (column) {

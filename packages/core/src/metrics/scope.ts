@@ -34,6 +34,8 @@ export interface Scope {
   base: MetricPr[];
   authored: MetricPr[];
   reviews: ReviewRow[];
+  /** Reviewers whose reviews are left out: the bots, while bots are hidden. */
+  skip: ReadonlySet<string>;
   inWin: InWindow;
   focus: string | null;
 }
@@ -56,16 +58,17 @@ export function scope(
   const inWin: InWindow = (t): t is number => t !== null && t !== undefined && t >= from;
   const focus = state.person || null;
   const authored = focus ? base.filter((p) => p.a === focus) : base;
+  const skip: ReadonlySet<string> = state.hideBots ? bots : new Set();
   // Review rows, flattened, already excluding self-reviews at build time.
   const reviews: ReviewRow[] = [];
   for (const p of base) {
     for (const [who, st, at] of p.rv) {
       if (focus && who !== focus) continue;
-      if (state.hideBots && bots.has(who)) continue;
+      if (skip.has(who)) continue;
       reviews.push({ who, st, at, pr: p });
     }
   }
-  return { from, base, authored, reviews, inWin, focus };
+  return { from, base, authored, reviews, skip, inWin, focus };
 }
 
 /** The scoped PRs and reviews, each windowed on its own anchor event. */

@@ -9,6 +9,7 @@ import {
   mergeTimeBins,
   oldestOpen,
   openBacklog,
+  reviewDepth,
   reviewPairs,
   reviewerRows,
   roster,
@@ -29,7 +30,7 @@ import { HOUR, compact, css, dur, el, fmtDate, num, pctFmt, plural } from './uti
 import type { Bin } from './charts.ts';
 import type { DashboardContext } from './state.ts';
 import type { Col } from './table.ts';
-import type { ContributorRow, MetricPr, ReviewerRow } from '@bilan/core';
+import type { ContributorRow, DepthBand, MetricPr, ReviewerRow } from '@bilan/core';
 
 const S1 = (): string => css('--s1');
 const S2 = (): string => css('--s2');
@@ -56,6 +57,9 @@ export function chartHost(c: HTMLElement): HTMLDivElement {
   c.append(h);
   return h;
 }
+
+/** A mean such as threads per PR, to one decimal. */
+const perPr = (v: number | null): string => (v === null ? '—' : v.toFixed(1));
 
 /**
  * Hours as the dashboard's durations (`18h`, `2.4d`, `1.2mo`), years past
@@ -409,7 +413,66 @@ export function render(ctx: DashboardContext): void {
     );
   }
 
-  /* 11. collaboration pairs */
+  /* 11. review depth by PR size */
+  {
+    const bands = reviewDepth(w);
+    const c = card(
+      'split',
+      'Review depth by PR size',
+      'Review threads per PR merged in range, by lines added + deleted: scrutiny should grow with the change. Approved, no threads: every review was an approval and nobody opened a review thread. Threads opened by bot reviewers count too, since GitHub does not say who opened a thread, so these figures overstate human discussion.',
+    );
+    const h = chartHost(c);
+    const t = chartHost(c);
+    grid.append(c);
+    const bins = bands.map((b) => ({ label: b.label, value: b.threads ?? 0, band: b }));
+    queueMicrotask(() =>
+      columnChart(h, {
+        bins,
+        color: S2(),
+        // Ticks run in quarters below one thread per PR.
+        valueFmt: (v) => String(Math.round(v * 100) / 100),
+        tip: ({ band }) => [
+          { color: S2(), label: 'Threads per PR', value: perPr(band.threads) },
+          { label: 'PRs merged', value: num(band.merged) },
+          { label: 'Approved, no threads', value: pctFmt(band.quietShare) },
+        ],
+        // Zero threads is a reading, not a gap: the chart is empty only when nothing merged.
+        empty: !merged.length,
+        tooltip: tip,
+      }),
+    );
+    if (merged.length) {
+      const cols: Col<DepthBand>[] = [
+        { key: 'band', label: 'Lines changed', val: (b) => b.edge, fmt: (_, b) => b.label },
+        { key: 'merged', label: 'Merged', val: (b) => b.merged },
+        {
+          key: 'quiet',
+          label: 'Approved, no threads',
+          help: 'Share of merged PRs whose reviews were all approvals, with no review thread',
+          val: (b) => b.quietShare,
+          fmt: pctFmt,
+          bar: true,
+        },
+        {
+          key: 'threads',
+          label: 'Threads / PR',
+          help: 'Mean review threads per merged PR',
+          val: (b) => b.threads,
+          fmt: perPr,
+        },
+        {
+          key: 'appr',
+          label: 'Med. to approval',
+          help: 'Median time from ready-for-review to the first approval',
+          val: (b) => b.medApproval,
+          fmt: dur,
+        },
+      ];
+      table(t, cols, bands, 'band', true);
+    }
+  }
+
+  /* 12. collaboration pairs */
   {
     const rows = reviewPairs(winReviews).map((p) => ({
       label: `${p.reviewer} → ${p.author}`,
@@ -431,7 +494,7 @@ export function render(ctx: DashboardContext): void {
     queueMicrotask(() => barChart(h, { rows, color: S3(), tooltip: tip }));
   }
 
-  /* 12. area ownership / bus factor */
+  /* 13. area ownership / bus factor */
   {
     const rows = busFactor(merged).map((r) => ({
       label: r.area,
@@ -464,7 +527,7 @@ export function render(ctx: DashboardContext): void {
     );
   }
 
-  /* 13. insights */
+  /* 14. insights */
   {
     const s = standouts(w, people);
     const candidates: (Insight | false | 0)[] = [
@@ -544,7 +607,7 @@ export function render(ctx: DashboardContext): void {
     grid.append(c);
   }
 
-  /* 14. oldest open PRs */
+  /* 15. oldest open PRs */
   {
     const rows = oldestOpen(stillOpen);
     const c = card(

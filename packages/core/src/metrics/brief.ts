@@ -1,3 +1,4 @@
+import { isQuiet } from './depth.ts';
 import { isMerged, isReady } from './derive.ts';
 import { count, median, ranked, share } from './stats.ts';
 import { DAY } from './time.ts';
@@ -159,6 +160,16 @@ export interface BriefAreas {
   firstBy: { area: string; v: number }[];
 }
 
+export interface BriefDepth {
+  /** PRs over 1,000 lines merged in the current window. */
+  large: number;
+  /** Those approved with no review threads (see `isQuiet`), largest first. */
+  quiet: MergedPr[];
+  /** The same two counts for the previous window. */
+  largeBefore: number;
+  quietBefore: number;
+}
+
 export interface BriefBacklog {
   open: number;
   drafts: number;
@@ -194,6 +205,8 @@ export interface Brief {
   automation: BriefAutomation | null;
   /** Null unless two distinct areas moved. */
   areas: BriefAreas | null;
+  /** Null unless 3+, and at least half, of the large PRs merged were approved with no threads. */
+  depth: BriefDepth | null;
   backlog: BriefBacklog;
   churn: BriefChurn;
 }
@@ -280,6 +293,21 @@ export function brief(prs: readonly MetricPr[], bots: ReadonlySet<string>, last:
     return { up, down, firstBy };
   })();
 
+  // One or two large PRs approved quietly is usual (merges of long-lived
+  // branches, generated code); most of them in a month is not.
+  const depth = ((): BriefDepth | null => {
+    const now = A.merged.filter((p) => p.size > 1000);
+    const quiet = now.filter((p) => isQuiet(p, bots)).toSorted((a, b) => b.size - a.size);
+    if (quiet.length < 3 || quiet.length < now.length / 2) return null;
+    const before = B.merged.filter((p) => p.size > 1000);
+    return {
+      large: now.length,
+      quiet,
+      largeBefore: before.length,
+      quietBefore: before.filter((p) => isQuiet(p, bots)).length,
+    };
+  })();
+
   const backlog = ((): BriefBacklog => {
     const open = H.filter((p) => p.open);
     const drafts = open.filter((p) => p.dr);
@@ -328,5 +356,5 @@ export function brief(prs: readonly MetricPr[], bots: ReadonlySet<string>, last:
     };
   })();
 
-  return { last, cur: A, prev: B, reviewLoad, automation, areas, backlog, churn };
+  return { last, cur: A, prev: B, reviewLoad, automation, areas, depth, backlog, churn };
 }
