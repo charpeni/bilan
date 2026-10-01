@@ -7,12 +7,21 @@ export interface RepoPageState {
   repo: Repo | undefined;
 }
 
-/** Opening a page decides what to display; importing a repo requires a POST. */
-export function repoPageState(access: AccessDecision, cached: Repo | undefined): RepoPageState {
+/**
+ * Opening a page decides what to display; importing a repo requires a POST.
+ * Signed out, a public repo shows only once it has a payload: until then (or
+ * for anything else) the sign-in card, since a signed-out viewer cannot sync.
+ */
+export function repoPageState(
+  access: AccessDecision,
+  cached: Repo | undefined,
+  signedIn: boolean,
+): RepoPageState {
   switch (access.kind) {
     case 'ok':
       if (!cached) throw new Error('an access decision of ok needs a cached row');
-      return { view: cached.lastSyncedAt === null ? 'syncing' : 'ready', repo: cached };
+      if (cached.lastSyncedAt !== null) return { view: 'ready', repo: cached };
+      return signedIn ? { view: 'syncing', repo: cached } : { view: 'sign-in', repo: undefined };
     case 'unknown':
     case 'replaced':
       return { view: 'syncing', repo: undefined };

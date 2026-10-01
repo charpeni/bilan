@@ -1,5 +1,5 @@
 import { GithubError, RepoNotFoundError } from '@bilan/core';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   ACCESS_CACHE_TTL_S,
@@ -102,25 +102,97 @@ const notFound = new RepoNotFoundError({ owner: 'acme', name: 'secret' });
 const outage = new GithubError('boom', 502, true);
 /** A transport failure core wraps: no HTTP status at all. */
 const transport = new GithubError('fetch failed', null, true);
+/** GitHub refusing the server token itself: expired or revoked. */
+const rejected = new GithubError('GitHub responded 401: Bad credentials', 401, false);
 
 describe('signed out', () => {
-  it('asks anyone to sign in for any repo, cached or not, public or private', async () => {
+  it('asks to sign in for an unknown name or a private row, without GitHub or the cache', async () => {
+    for (const target of [unknownRef, privateRepo]) {
+      const deps = setup({});
+      expect(await checkRepoAccess(deps, null, target)).toEqual(loginRequired);
+      expect(deps.calls).toEqual([]);
+      expect(deps.probes).toEqual([]);
+      expect(deps.kv.puts).toEqual([]);
+      expect(deps.marked).toEqual([]);
+    }
+  });
+
+  it('never serves a private row, even with a cached public visibility or an allow', async () => {
     const deps = setup({});
-    expect(await checkRepoAccess(deps, null, unknownRef)).toEqual(loginRequired);
-    expect(await checkRepoAccess(deps, null, publicRepo)).toEqual(loginRequired);
+    await deps.kv.put(visibilityCacheKey('R_priv'), 'public');
+    await deps.kv.put(accessCacheKey(7, 'R_priv'), 'allowed');
     expect(await checkRepoAccess(deps, null, privateRepo)).toEqual(loginRequired);
-    expect(deps.calls).toEqual([]);
     expect(deps.probes).toEqual([]);
-    expect(deps.kv.puts).toEqual([]);
+  });
+
+  it('opens a public row once the server token confirms it is still public', async () => {
+    const deps = setup({});
+    expect(await checkRepoAccess(deps, null, publicRepo)).toEqual(ok);
+    expect(deps.calls).toEqual([]);
+    expect(deps.probes).toEqual([{ owner: 'acme', name: 'lib' }]);
+    expect(deps.kv.store.get(visibilityCacheKey('R_pub'))).toEqual({
+      value: 'public',
+      ttl: VISIBILITY_CACHE_TTL_S,
+    });
+    // The confirmation is shared: the next look, signed in or out, does not probe again.
+    expect(await checkRepoAccess(deps, null, publicRepo)).toEqual(ok);
+    expect(await checkRepoAccess(deps, user, publicRepo)).toEqual(ok);
+    expect(deps.probes).toHaveLength(1);
+  });
+
+  it('asks to sign in for a public row GitHub now reports as private, and marks it', async () => {
+    const deps = setup({ server: { isPrivate: true } });
+    expect(await checkRepoAccess(deps, null, publicRepo)).toEqual(loginRequired);
+    expect(deps.marked).toEqual(['R_pub']);
+    expect(deps.kv.store.get(visibilityCacheKey('R_pub'))?.value).toBe('private');
+    expect(deps.calls).toEqual([]);
+  });
+
+  it('asks to sign in for a public row the server token cannot see any more', async () => {
+    const deps = setup({ server: notFound });
+    expect(await checkRepoAccess(deps, null, publicRepo)).toEqual(loginRequired);
+    expect(deps.marked).toEqual(['R_pub']);
+  });
+
+  it('asks to sign in for a public row when a different repo now lives at the name', async () => {
+    const deps = setup({ server: { id: 'R_replacement' } });
+    expect(await checkRepoAccess(deps, null, publicRepo)).toEqual(loginRequired);
+    expect(deps.marked).toEqual(['R_pub']);
+  });
+
+  it('is unavailable, not exposed or hidden, when the visibility probe fails', async () => {
+    for (const failure of [outage, transport]) {
+      const deps = setup({ server: failure });
+      expect(await checkRepoAccess(deps, null, publicRepo)).toEqual(unavailable);
+      expect(deps.kv.puts).toEqual([]);
+      expect(deps.marked).toEqual([]);
+    }
+  });
+
+  describe('without a server token', () => {
+    it('asks to sign in for a public row nothing can confirm, leaving the row alone', async () => {
+      const deps = setup({ server: null });
+      expect(await checkRepoAccess(deps, null, publicRepo)).toEqual(loginRequired);
+      expect(deps.calls).toEqual([]);
+      expect(deps.kv.puts).toEqual([]);
+      expect(deps.marked).toEqual([]);
+    });
+
+    it('opens a public row a signed-in look confirmed recently', async () => {
+      const deps = setup({ server: null, meta: { id: 'R_pub', isPrivate: false } });
+      expect(await checkRepoAccess(deps, user, publicRepo)).toEqual(ok);
+      expect(await checkRepoAccess(deps, null, publicRepo)).toEqual(ok);
+      expect(deps.calls).toHaveLength(1);
+    });
   });
 });
 
 describe('the answer never tells an unknown name from a cached private repo', () => {
   const targets = { unknown: unknownRef, public: publicRepo, private: privateRepo };
 
-  it('signed out: login-required for every target, without touching GitHub or the cache', async () => {
-    for (const target of Object.values(targets)) {
-      const deps = setup({});
+  it('signed out: login-required for both, without touching GitHub or the cache', async () => {
+    for (const target of [unknownRef, privateRepo]) {
+      const deps = setup({ meta: outage, server: outage });
       expect(await checkRepoAccess(deps, null, target)).toEqual(loginRequired);
       expect(deps.calls).toEqual([]);
       expect(deps.probes).toEqual([]);
@@ -424,5 +496,36 @@ describe('a different repo at a cached name', () => {
     const deps = setup({ meta: { id: 'R_replacement' }, server: { id: 'R_replacement' } });
     expect(await checkRepoAccess(deps, null, privateRepo)).toEqual(loginRequired);
     expect(deps.probes).toEqual([]);
+  });
+});
+
+describe('a server token GitHub rejects', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('confirms a public repo on the viewer token instead, as with no server token', async () => {
+    const deps = setup({ server: rejected, meta: { id: 'R_pub', isPrivate: false } });
+    expect(await checkRepoAccess(deps, user, publicRepo)).toEqual(ok);
+    expect(deps.calls).toEqual([{ owner: 'acme', name: 'lib', userId: 7 }]);
+    expect(deps.kv.store.get(visibilityCacheKey('R_pub'))?.value).toBe('public');
+    expect(deps.marked).toEqual([]);
+    expect(console.error).toHaveBeenCalledWith(expect.stringMatching(/GITHUB_TOKEN/), rejected);
+  });
+
+  it('asks a signed-out viewer to sign in, leaving the row and the cache alone', async () => {
+    const deps = setup({ server: rejected });
+    expect(await checkRepoAccess(deps, null, publicRepo)).toEqual(loginRequired);
+    expect(deps.calls).toEqual([]);
+    expect(deps.kv.puts).toEqual([]);
+    expect(deps.marked).toEqual([]);
+  });
+
+  it('answers an unknown name the viewer token cannot see as not-found, not unavailable', async () => {
+    const deps = setup({ server: rejected, meta: notFound });
+    expect(await checkRepoAccess(deps, user, unknownRef)).toEqual(notFoundDecision);
   });
 });
