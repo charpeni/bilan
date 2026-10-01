@@ -27,9 +27,9 @@ export interface TokenSourceDeps {
   userRepoMeta(userId: number, ref: RepoRef): Promise<GithubRepoMeta>;
   /**
    * The same on the server token (a no-scope PAT): sees public repos only.
-   * Rejects with a plain `Error` when `GITHUB_TOKEN` is not configured.
+   * `null` when `GITHUB_TOKEN` is not configured.
    */
-  serverRepoMeta(ref: RepoRef): Promise<GithubRepoMeta>;
+  serverRepoMeta: ((ref: RepoRef) => Promise<GithubRepoMeta>) | null;
 }
 
 export function tokenSourceDeps(env: TokenEnv & Pick<Env, 'GITHUB_TOKEN'>) {
@@ -40,16 +40,17 @@ export function tokenSourceDeps(env: TokenEnv & Pick<Env, 'GITHUB_TOKEN'>) {
         userId,
         async (token) => (await new GithubClient({ token }).repoMeta(ref)).meta,
       ),
-    serverRepoMeta: async (ref) =>
-      (await new GithubClient({ token: serverToken(env) }).repoMeta(ref)).meta,
+    serverRepoMeta: env.GITHUB_TOKEN
+      ? async (ref: RepoRef) =>
+          (await new GithubClient({ token: serverToken(env) }).repoMeta(ref)).meta
+      : null,
   } satisfies TokenSourceDeps;
 }
 
 /**
- * The optional server token (`GITHUB_TOKEN`). Nothing reads it at startup:
- * it is only resolved when the public-repo fallback below is actually taken,
- * so a deployment without it works until a signed-in viewer opens a public
- * repo their own token cannot reach.
+ * The optional server token (`GITHUB_TOKEN`). Without it the public-repo
+ * fallback below is never taken: a repo the viewer's own token cannot reach
+ * is simply not found.
  */
 export function serverToken(env: Pick<Env, 'GITHUB_TOKEN'>): string {
   if (!env.GITHUB_TOKEN) throw new Error('GITHUB_TOKEN is not configured');
@@ -67,6 +68,7 @@ export function serverToken(env: Pick<Env, 'GITHUB_TOKEN'>): string {
  * | signed in  | yes                | —                    | user           |
  * | signed in  | no                 | yes, public          | server         |
  * | signed in  | no                 | no, or private       | not-found      |
+ * | signed in  | no                 | (no server token)    | not-found      |
  * | signed out | —                  | —                    | login-required |
  *
  * The server token's own private repos are never served: a private answer from
@@ -89,6 +91,7 @@ export async function resolveTokenSource(
 }
 
 async function serverSource(deps: TokenSourceDeps, ref: RepoRef): Promise<TokenSource> {
+  if (!deps.serverRepoMeta) return { source: 'not-found' };
   let meta: GithubRepoMeta;
   try {
     meta = await deps.serverRepoMeta(ref);
