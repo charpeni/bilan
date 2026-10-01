@@ -6,7 +6,7 @@ import { activitySpan } from './mount.ts';
 import { hoursFmt } from './render.ts';
 
 import type { Mounted } from './mount.ts';
-import type { Payload } from '@bilan/core';
+import type { Payload, PayloadPr } from '@bilan/core';
 
 const CARD_TITLES = [
   'Throughput',
@@ -19,6 +19,7 @@ const CARD_TITLES = [
   'Contributors',
   'Reviewers',
   'Top reviewers',
+  'Review depth by PR size',
   'Strongest review pairs',
   'Bus factor by area',
   'What stands out',
@@ -92,6 +93,31 @@ const atChartLayout = (held: () => string): string[] => {
   return seen;
 };
 
+/** A PR of over 1,000 lines merged 4 days before `LAST` on an approval alone, with no review threads. */
+const bigQuietPr = (n: number): PayloadPr => ({
+  n,
+  t: `Vendor parser ${n}`,
+  a: 'alice',
+  bot: 0,
+  c: LAST - 5 * DAY,
+  r: LAST - 5 * DAY,
+  d: 0,
+  m: LAST - 4 * DAY,
+  x: LAST - 4 * DAY,
+  s: 'MERGED',
+  dr: 0,
+  mb: 'alice',
+  ad: 1000 + n,
+  de: 0,
+  cf: 3,
+  ar: ['api'],
+  cm: 0,
+  th: 0,
+  rc: 1,
+  rv: [['bob', 'APPROVED', LAST - 4 * DAY - HOUR]],
+  rq: [],
+});
+
 const texts = (root: ParentNode, sel: string): string[] =>
   [...root.querySelectorAll(sel)].map((n) => n.textContent ?? '');
 
@@ -164,7 +190,7 @@ describe('mount', () => {
     // Charts are drawn in a microtask after the cards are laid out.
     await flush();
     expect(root.querySelectorAll('#app svg').length).toBeGreaterThanOrEqual(8);
-    expect(root.querySelectorAll('#app table').length).toBe(3);
+    expect(root.querySelectorAll('#app table').length).toBe(4);
   });
 
   it('defaults to the last 30 days and excludes bots', () => {
@@ -436,6 +462,29 @@ describe('mount', () => {
       expect(titles().some((t) => /^The median PR is \d+ lines$/.test(t))).toBe(true);
       expect(texts(root, '#brief .ins-tag')).not.toContain('Where work lands');
     });
+  });
+
+  it('flags large PRs approved with no review threads, largest first', () => {
+    const data = payload();
+    setup({
+      ...data,
+      prs: [...data.prs, bigQuietPr(101), bigQuietPr(103), bigQuietPr(102)].toSorted(
+        (a, b) => a.c - b.c,
+      ),
+    });
+    const card = cards().find(
+      (c) =>
+        c.querySelector('h3')?.textContent ===
+        '3 of 3 PRs over 1,000 lines were approved with no review threads',
+    );
+    expect(card?.querySelector('.ins-tag')?.textContent).toBe('Review depth');
+    expect(card?.querySelector('.ins-flag')).not.toBeNull();
+    expect(texts(card ?? root, '.ins-links li > a')).toEqual([
+      '#103 Vendor parser 103',
+      '#102 Vendor parser 102',
+      '#101 Vendor parser 101',
+    ]);
+    expect(texts(card ?? root, '.ins-meta')[0]).toBe('alice · 1,103 lines');
   });
 
   it('re-renders when the person filter changes', () => {

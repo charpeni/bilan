@@ -206,6 +206,9 @@ local Wrangler state instead of production, or `--help` for the command options.
 | Time to merge            | merged          | ready → merged                                                               |
 | Reviewer turnaround      | review          | review request (or ready, if never requested) → that reviewer's first review |
 | Reviews given            | review          | self-reviews excluded                                                        |
+| Review threads per PR    | merged          | review threads ÷ pull requests merged, by size                               |
+| Approved with no threads | merged          | every review was an approval and no review thread was opened                 |
+| Time to approval         | merged          | ready → first approval, by size                                              |
 
 A pull request that opened as a draft becomes reviewable at its first
 ready-for-review event; later re-drafts are ignored. Each metric is scoped by
@@ -213,6 +216,11 @@ its own anchor, so "last 30 days" means what happened in those 30 days rather
 than which pull requests were opened in them. Area attribution samples up to 30
 changed files per pull request, and up to 40 reviews are captured per pull
 request.
+
+Review depth groups merged pull requests by size, in lines added + deleted:
+≤50, 51–250, 251–500, 501–1k, and over 1k. Its thread count is GitHub's total
+per pull request, which does not say who opened each thread, so threads opened
+by bot reviewers (such as Copilot) count too and overstate human discussion.
 
 Draft transitions are fetched separately from review requests, and review-request histories are paginated without a fixed event limit. Run `--full` to refresh all cached PR metadata after upgrading.
 

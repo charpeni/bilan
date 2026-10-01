@@ -24,14 +24,21 @@ const render = <T>(c: Col<T>, v: SortValue, r: T): string =>
 
 /**
  * Sortable table. cols: {key,label,fmt,val,bar?} — `val` returns the sort number.
- * It scrolls inside its own box (header row and first column sticky). When the
- * columns do not fit, the box carries `data-scroll`: `more` while columns sit
- * off to the right, `end` once scrolled to the last one; the stylesheet turns
- * it into a one-line cue above the table.
+ * It opens sorted on `initial`, descending unless `ascending`. It scrolls inside
+ * its own box (header row and first column sticky). When the columns do not
+ * fit, the box carries `data-scroll`: `more` while columns sit off to the
+ * right, `end` once scrolled to the last one; the stylesheet turns it into a
+ * one-line cue above the table.
  */
-export function table<T>(host: HTMLElement, cols: Col<T>[], rows: T[], initial: string): void {
+export function table<T>(
+  host: HTMLElement,
+  cols: Col<T>[],
+  rows: T[],
+  initial: string,
+  ascending = false,
+): void {
   let sortKey = initial;
-  let asc = false;
+  let asc = ascending;
   const box = el('div', { class: 'tablebox' });
   const wrap = el('div', { class: 'tablewrap' });
   box.append(wrap);

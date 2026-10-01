@@ -155,7 +155,16 @@ export function renderBrief(ctx: DashboardContext): BriefHandle {
   /** Full history: the only state in which "never seen before" can be claimed. */
   const fullHistory = data.coverageSince === null;
 
-  const { cur: A, prev: B, reviewLoad, automation, areas, backlog, churn } = brief(prs, bots, LAST);
+  const {
+    cur: A,
+    prev: B,
+    reviewLoad,
+    automation,
+    areas,
+    depth,
+    backlog,
+    churn,
+  } = brief(prs, bots, LAST);
   const items: BriefItem[] = [];
 
   /* throughput */
@@ -250,6 +259,25 @@ export function renderBrief(ctx: DashboardContext): BriefHandle {
         `${pctInt(A.approvedMerges)} of merged PRs carried an approval.`,
       ],
       watch: false,
+    });
+  }
+
+  /* large PRs approved with no review threads: only there when most of them were */
+  if (depth) {
+    const { large, quiet, largeBefore, quietBefore } = depth;
+    items.push({
+      tag: 'Review depth',
+      title: `${quiet.length} of ${large} PRs over 1,000 lines were approved with no review threads`,
+      body: [
+        `Every review they got was an approval.${vs(` In the previous 30 days: ${quietBefore} of ${largeBefore}.`)}`,
+        'Large changes usually draw discussion. Check these were mechanical, such as merges or generated code, or discussed in comments:',
+      ],
+      links: quiet.slice(0, 5).map((p) => ({
+        n: p.n,
+        t: p.t,
+        meta: [...author(p.a), ` · ${num(p.size)} lines`],
+      })),
+      watch: true,
     });
   }
 

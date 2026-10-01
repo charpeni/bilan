@@ -83,12 +83,14 @@ describe('scope', () => {
       ['bob', 1],
       ['alice', 2],
     ]);
+    expect(s.skip).toBe(bots);
   });
 
   it('includes bot authors and bot reviews when bots are shown', () => {
     const s = scope(prs, bots, state({ hideBots: false }), LAST);
     expect(s.base.map((p) => p.n)).toEqual([1, 2, 3, 4]);
     expect(s.reviews.map((r) => r.who)).toEqual(['bob', 'alice', 'dependabot[bot]', 'carol']);
+    expect(s.skip.size).toBe(0);
   });
 
   it('narrows to PRs touching the chosen area', () => {

@@ -485,11 +485,26 @@ label.check:hover {
 .card.twothirds {
   grid-column: span 8;
 }
+/* A chart and its table side by side, lined up with the half cards around them. */
+.card.split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 32px;
+  align-content: start;
+}
+.card.split > h2,
+.card.split > .desc {
+  grid-column: 1 / -1;
+}
 @media (max-width: 1000px) {
   .card.half,
   .card.third,
   .card.twothirds {
     grid-column: span 12;
+  }
+  .card.split {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 16px;
   }
 }
 .card > h2 {

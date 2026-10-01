@@ -190,6 +190,38 @@ describe('brief', () => {
     expect(b.churn.busiest).toEqual({ day: new Date(LAST - 8 * DAY_MS).getDay(), merges: 1 });
   });
 
+  it('flags large merges approved with no threads only when there are 3+, and at least half', () => {
+    // #1 (1,200 lines, one thread-free approval) is already quiet; the bot comment does not count.
+    expect(b.depth).toBeNull();
+    const large = (n: number, quiet: boolean, daysAgo = 5) =>
+      payloadPr({
+        n,
+        a: 'carol',
+        c: LAST - (daysAgo + 1) * DAY_MS,
+        r: LAST - (daysAgo + 1) * DAY_MS,
+        m: LAST - daysAgo * DAY_MS,
+        x: LAST - daysAgo * DAY_MS,
+        ad: 1000 + n,
+        de: 0,
+        th: quiet ? 0 : 4,
+        rv: [['bob', 'APPROVED', LAST - daysAgo * DAY_MS - HOUR_MS]],
+      });
+    const two = derive([large(10, true), large(11, false), large(12, false)]);
+    // 3 quiet of 5 large: flagged, largest first, with the previous window's count.
+    const d = brief(
+      [...prs, ...two, ...derive([large(13, true), large(14, true, 40)])],
+      bots,
+      LAST,
+    ).depth;
+    expect(d).toMatchObject({ large: 5, largeBefore: 1, quietBefore: 1 });
+    expect(d?.quiet.map((p) => p.n)).toEqual([1, 13, 10]);
+    // 3 quiet of 7 large is under half.
+    const under = derive([large(13, true), large(15, false), large(16, false)]);
+    expect(brief([...prs, ...two, ...under], bots, LAST).depth).toBeNull();
+    // 2 quiet of 2 is too few to flag a month.
+    expect(brief([...prs, ...derive([large(10, true)])], bots, LAST).depth).toBeNull();
+  });
+
   it('reports the busiest bot once it opens 5 PRs', () => {
     // Together with #5 from the fixture: 6 opened, 5 merged, one still open.
     const busy = derive(

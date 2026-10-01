@@ -120,6 +120,17 @@ const ANCHORS: { metric: string; anchor: string; ready?: boolean; measures: stri
     measures: 'Review request (or ready, if never requested) → that reviewer’s first review.',
   },
   { metric: 'Reviews given', anchor: 'review', measures: 'Counted when submitted; self-reviews excluded.' },
+  {
+    metric: 'Review threads per PR',
+    anchor: 'merged',
+    measures: 'Review threads per merged PR, by size. Threads opened by bot reviewers count too.',
+  },
+  {
+    metric: 'Approved with no threads',
+    anchor: 'merged',
+    measures: 'Every review was an approval, and no review thread was opened.',
+  },
+  { metric: 'Time to approval', anchor: 'merged', measures: 'Ready → first approval, by size.' },
 ];
 ---
 <Base title="bilan · the pulse of a GitHub repository" user={user} next="/repositories" description={DESCRIPTION}>

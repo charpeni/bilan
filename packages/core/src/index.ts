@@ -74,6 +74,8 @@ export type {
   ReviewerRow,
   TopReviewer,
 } from './metrics/people.ts';
+export { isQuiet, reviewDepth } from './metrics/depth.ts';
+export type { DepthBand } from './metrics/depth.ts';
 export { oldestOpen, STALE_DAYS, standouts } from './metrics/standouts.ts';
 export type { Standouts } from './metrics/standouts.ts';
 export { between, brief, briefStats, change } from './metrics/brief.ts';
@@ -84,6 +86,7 @@ export type {
   BriefAutomation,
   BriefBacklog,
   BriefChurn,
+  BriefDepth,
   BriefReviewLoad,
   BriefSizeBand,
   BriefStats,
