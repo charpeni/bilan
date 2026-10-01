@@ -67,6 +67,15 @@ const ogImage = new URL('/brand/og.png', Astro.url).href;
       ))
     }
     <style is:inline set:html={FONT_FACES} />
+    <script
+      is:inline
+      defer
+      src="https://pirsch.bilan.dev/static/files/pa.js"
+      id="pianjs"
+      data-hit-endpoint="https://pirsch.bilan.dev/p/pv"
+      data-event-endpoint="https://pirsch.bilan.dev/p/e"
+      data-session-endpoint="https://pirsch.bilan.dev/p/s"
+    ></script>
   </head>
   <body>
     <header class="hdr">
