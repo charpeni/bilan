@@ -139,7 +139,7 @@ export async function checkRepoAccess(
 
   let isPrivate = repo.isPrivate;
   if (!isPrivate) {
-    const visibility = await currentVisibility(deps, repo);
+    const visibility = await currentVisibility(deps, user, repo);
     if (visibility === 'unavailable') return UNAVAILABLE;
     if (visibility === 'public') return OK;
     isPrivate = true;
@@ -195,22 +195,28 @@ async function probe(
 /**
  * Is a row that says public still the same public repo? Answered from the
  * `repo_visibility` cache, else by a `repoMeta` on the server token (which
- * sees public repos only). "Private" covers everything the server token
- * cannot confirm: an actual private repo, a repo it cannot see at all, or a
- * different repo now living at that name; the row is updated so the private
- * rules apply from here on.
+ * sees public repos only), or on the viewer's own token when no server token
+ * is configured (a GitHub App user token reads public repos without an
+ * install). "Private" covers everything the token cannot confirm: an actual
+ * private repo, a repo it cannot see at all, or a different repo now living at
+ * that name; the row is updated so the private rules apply from here on (the
+ * next sync writes GitHub's answer back).
  */
 async function currentVisibility(
   deps: AccessDeps,
+  user: SessionUser,
   repo: AccessRepo,
 ): Promise<CachedVisibility | 'unavailable'> {
   const key = visibilityCacheKey(repo.id);
   const cached = (await deps.cache.get(key)) as CachedVisibility | null;
   if (cached === 'public' || cached === 'private') return cached;
 
+  const ref: RepoRef = { owner: repo.owner, name: repo.name };
   let visibility: CachedVisibility;
   try {
-    const meta = await deps.serverRepoMeta({ owner: repo.owner, name: repo.name });
+    const meta = deps.serverRepoMeta
+      ? await deps.serverRepoMeta(ref)
+      : await deps.userRepoMeta(user.id, ref);
     visibility = meta.id === repo.id && !meta.isPrivate ? 'public' : 'private';
   } catch (error) {
     if (error instanceof RepoNotFoundError) visibility = 'private';

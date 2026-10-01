@@ -23,7 +23,11 @@ function meta(
   };
 }
 
-function setup(options: { user?: GithubRepoMeta | Error; server?: GithubRepoMeta | Error }) {
+function setup(options: {
+  user?: GithubRepoMeta | Error;
+  /** `null`: no server token configured. */
+  server?: GithubRepoMeta | Error | null;
+}) {
   const calls: string[] = [];
   const answer = (
     which: 'user' | 'server',
@@ -34,9 +38,10 @@ function setup(options: { user?: GithubRepoMeta | Error; server?: GithubRepoMeta
     if (value instanceof Error) return Promise.reject(value);
     return Promise.resolve(value);
   };
+  const { server } = options;
   const deps: TokenSourceDeps = {
     userRepoMeta: () => answer('user', options.user),
-    serverRepoMeta: () => answer('server', options.server),
+    serverRepoMeta: server === null ? null : () => answer('server', server),
   };
   return { deps, calls };
 }
@@ -67,6 +72,12 @@ describe('signed in', () => {
     const { deps, calls } = setup({ user: notFound, server: notFound });
     expect(await resolveTokenSource(deps, user, ref)).toEqual({ source: 'not-found' });
     expect(calls).toEqual(['user', 'server']);
+  });
+
+  it('reports not-found without a server token when the user token does not see it', async () => {
+    const { deps, calls } = setup({ user: notFound, server: null });
+    expect(await resolveTokenSource(deps, user, ref)).toEqual({ source: 'not-found' });
+    expect(calls).toEqual(['user']);
   });
 
   it('never serves a private repo on the server token', async () => {

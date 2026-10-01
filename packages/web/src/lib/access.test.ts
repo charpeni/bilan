@@ -45,8 +45,8 @@ interface Fake extends AccessDeps {
 function setup(options: {
   /** What the viewer's token sees; defaults to the private repo with READ. */
   meta?: MetaResult;
-  /** What the server token sees; defaults to the public repo `R_pub`. */
-  server?: MetaResult;
+  /** What the server token sees; defaults to the public repo `R_pub`; `null` when not configured. */
+  server?: MetaResult | null;
 }): Fake {
   const kv = new FakeKv();
   const fake: Fake = {
@@ -67,18 +67,21 @@ function setup(options: {
         ...meta,
       };
     },
-    serverRepoMeta: async (ref) => {
-      fake.probes.push(ref);
-      const meta = options.server ?? {};
-      if (meta instanceof Error) throw meta;
-      return {
-        id: 'R_pub',
-        isPrivate: false,
-        viewerPermission: null,
-        pullRequests: { totalCount: 1 },
-        ...meta,
-      };
-    },
+    serverRepoMeta:
+      options.server === null
+        ? null
+        : async (ref) => {
+            fake.probes.push(ref);
+            const meta = options.server ?? {};
+            if (meta instanceof Error) throw meta;
+            return {
+              id: 'R_pub',
+              isPrivate: false,
+              viewerPermission: null,
+              pullRequests: { totalCount: 1 },
+              ...meta,
+            };
+          },
     markPrivate: async (repoId) => {
       fake.marked.push(repoId);
     },
@@ -251,8 +254,32 @@ describe('public repos', () => {
   });
 
   it('surface non-GitHub failures of the probe', async () => {
-    const deps = setup({ server: new Error('GITHUB_TOKEN is not configured') });
-    await expect(checkRepoAccess(deps, user, publicRepo)).rejects.toThrow(/GITHUB_TOKEN/);
+    const deps = setup({ server: new Error('boom') });
+    await expect(checkRepoAccess(deps, user, publicRepo)).rejects.toThrow(/boom/);
+  });
+
+  describe('without a server token', () => {
+    it('confirm visibility on the viewer token instead', async () => {
+      const deps = setup({ server: null, meta: { id: 'R_pub', isPrivate: false } });
+      expect(await checkRepoAccess(deps, user, publicRepo)).toEqual(ok);
+      expect(deps.calls).toEqual([{ owner: 'acme', name: 'lib', userId: 7 }]);
+      expect(deps.kv.store.get(visibilityCacheKey('R_pub'))?.value).toBe('public');
+      expect(deps.marked).toEqual([]);
+    });
+
+    it('are treated as private when the viewer token cannot see them', async () => {
+      const deps = setup({ server: null, meta: notFound });
+      expect(await checkRepoAccess(deps, user, publicRepo)).toEqual(notFoundDecision);
+      expect(deps.marked).toEqual(['R_pub']);
+      expect(deps.kv.store.get(visibilityCacheKey('R_pub'))?.value).toBe('private');
+    });
+
+    it('are unavailable when the viewer token probe fails', async () => {
+      const deps = setup({ server: null, meta: outage });
+      expect(await checkRepoAccess(deps, user, publicRepo)).toEqual(unavailable);
+      expect(deps.kv.puts).toEqual([]);
+      expect(deps.marked).toEqual([]);
+    });
   });
 });
 
