@@ -161,6 +161,40 @@ fill in the values, run `npx wrangler d1 migrations apply bilan --local`, then
 The built-in examples are regenerated with `pnpm examples:build`, which needs
 a GitHub token.
 
+### Payload storage maintenance
+
+Each sync publishes gzip-compressed dashboard snapshots to R2 under
+`payload/<repo-id>/<sync-timestamp>.json.gz`. The daily job at 06:00 UTC keeps
+the snapshot referenced by D1's `last_synced_at`, regardless of age, and any
+snapshot uploaded within the past 48 hours. It deletes older, superseded
+snapshots only after verifying that the current snapshot exists in R2. If the
+repository row, current reference, or current R2 object is missing, all older
+snapshots are kept as possible recovery copies. Unknown key formats are also
+left alone. The existing 90-day inactive private repository
+cleanup still removes those repositories and all their snapshots.
+
+To review the backlog from the repository root, authenticate with Wrangler
+for the Cloudflare account configured in `packages/web/wrangler.jsonc`, then run:
+
+```sh
+pnpm --filter @bilan/web payloads:prune
+```
+
+This defaults to a **dry run against production**. It prints each candidate's
+compressed size and key, then totals for objects scanned, candidate objects,
+and reclaimable bytes. `skippedUnverified` counts old objects kept because no
+current snapshot could be verified. It does not run the private repository/session cleanup.
+To perform the deletions, re-evaluating candidates against D1:
+
+```sh
+pnpm --filter @bilan/web payloads:prune --apply
+```
+
+Both paths process up to 1,000 objects at a time and re-read each repository's
+current reference before deleting its batch. Errors stop the run; a later run
+can safely resume by scanning the remaining objects. Use `--local` to work with
+local Wrangler state instead of production, or `--help` for the command options.
+
 ## What the numbers mean
 
 | Metric                   | Window anchor   | Definition                                                                   |
