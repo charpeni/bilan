@@ -1,4 +1,4 @@
-import { GithubClient, RepoNotFoundError } from '@bilan/core';
+import { GithubClient, GithubError, RepoNotFoundError } from '@bilan/core';
 
 import { useUserToken } from './tokens.ts';
 
@@ -11,7 +11,7 @@ export type TokenSource =
   | { source: 'server'; meta: GithubRepoMeta }
   /** A private repo the viewer cannot reach, or one that does not exist: indistinguishable by design. */
   | { source: 'not-found' }
-  /** Signed out: nothing is read on anyone's token (the built-in examples are static, see `examples.ts`). */
+  /** Signed out: no sync or first read runs on anyone's token. */
   | { source: 'login-required' };
 
 /** A `TokenSource` GitHub actually answered on: what a first sync runs with. */
@@ -72,9 +72,10 @@ export function serverToken(env: Pick<Env, 'GITHUB_TOKEN'>): string {
  * | signed out | —                  | —                    | login-required |
  *
  * The server token's own private repos are never served: a private answer from
- * it is treated as not found, so the viewer's own access is the only gate.
- * Signed-out viewers never reach GitHub: the built-in examples are served
- * from static files before any token is considered (see `examples.ts`).
+ * it is treated as not found, so the viewer's own access is the only gate. A
+ * server token GitHub rejects (expired, revoked) counts as none configured.
+ * Signed-out viewers never get a source: they cannot sync, and only see the
+ * built-in examples or a public repo bilan already holds (see `checkRepoAccess`).
  */
 export async function resolveTokenSource(
   deps: TokenSourceDeps,
@@ -92,13 +93,32 @@ export async function resolveTokenSource(
 
 async function serverSource(deps: TokenSourceDeps, ref: RepoRef): Promise<TokenSource> {
   if (!deps.serverRepoMeta) return { source: 'not-found' };
-  let meta: GithubRepoMeta;
+  let meta: GithubRepoMeta | 'rejected';
   try {
-    meta = await deps.serverRepoMeta(ref);
+    meta = await askServer(deps.serverRepoMeta, ref);
   } catch (error) {
     if (!(error instanceof RepoNotFoundError)) throw error;
     return { source: 'not-found' };
   }
-  if (meta.isPrivate) return { source: 'not-found' };
+  if (meta === 'rejected' || meta.isPrivate) return { source: 'not-found' };
   return { source: 'server', meta };
+}
+
+/**
+ * `serverRepoMeta`, with GitHub refusing the server token itself (a 401: it
+ * expired or was revoked) answered as `rejected` and logged. Callers then go on
+ * as if no server token were configured, rather than answering 503 for every
+ * public repo until the token is replaced.
+ */
+export async function askServer(
+  serverRepoMeta: NonNullable<TokenSourceDeps['serverRepoMeta']>,
+  ref: RepoRef,
+): Promise<GithubRepoMeta | 'rejected'> {
+  try {
+    return await serverRepoMeta(ref);
+  } catch (error) {
+    if (!(error instanceof GithubError) || error.status !== 401) throw error;
+    console.error('GITHUB_TOKEN was rejected by GitHub; replace it', error);
+    return 'rejected';
+  }
 }

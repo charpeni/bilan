@@ -73,7 +73,10 @@ The web app, at [bilan.dev](https://bilan.dev), runs on Cloudflare Workers
 with D1, R2, KV, and Workflows. Signed out, it shows two built-in example
 dashboards ([`withastro/astro`](https://bilan.dev/withastro/astro) and
 [`cloudflare/workers-sdk`](https://bilan.dev/cloudflare/workers-sdk)) shipped as
-static snapshots. Signed in, it syncs any repository you can read on your own
+static snapshots, plus the last sync of any public repository bilan already
+holds, once the server token confirms it is still public; signing in is needed
+to refresh it or sync more history. Private repositories always ask the viewer
+to sign in, whether or not bilan holds them. Signed in, it syncs any repository you can read on your own
 token into a shared cache, so a coworker who opens the same link sees the
 dashboard instantly. A new repository shows a **Start sync** button; following
 a link alone does not import its data. Existing dashboards can refresh during
@@ -136,8 +139,12 @@ is released. If the engine cannot report its status, the reservation is kept.
    The deploy runs through turbo, which builds the dashboard and its
    dependencies before `wrangler deploy`.
 
-   `GITHUB_TOKEN`, a classic token with no scopes, is optional: it is only used
-   as a fallback for public repositories a user token cannot reach.
+   `GITHUB_TOKEN`, a classic token with no scopes, is optional: it is used as a
+   fallback for public repositories a user token cannot reach, and to confirm a
+   repository is still public before showing its dashboard to signed-out
+   viewers. Without it, a signed-out viewer only sees a public dashboard in the
+   15 minutes after a signed-in viewer's check confirmed it. A token GitHub
+   rejects (expired or revoked) is logged and treated as not configured.
 
 Every push to `main` that passes CI is deployed by the `Deploy` workflow,
 which applies pending D1 migrations and then runs `wrangler deploy`. It needs

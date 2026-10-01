@@ -1,5 +1,5 @@
 import { GithubError, RepoNotFoundError } from '@bilan/core';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { resolveTokenSource } from './token-source.ts';
 import { ReauthRequiredError } from './tokens.ts';
@@ -91,6 +91,16 @@ describe('signed in', () => {
     expect(await resolveTokenSource(hidden.deps, user, ref)).toEqual(
       await resolveTokenSource(missing.deps, user, ref),
     );
+  });
+
+  it('reports not-found, as with no server token, when GitHub rejects the server token', async () => {
+    const rejected = new GithubError('GitHub responded 401: Bad credentials', 401, false);
+    const { deps, calls } = setup({ user: notFound, server: rejected });
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    expect(await resolveTokenSource(deps, user, ref)).toEqual({ source: 'not-found' });
+    expect(calls).toEqual(['user', 'server']);
+    expect(logged).toHaveBeenCalledWith(expect.stringMatching(/GITHUB_TOKEN/), rejected);
+    logged.mockRestore();
   });
 
   it('lets a re-login demand and other GitHub failures through', async () => {

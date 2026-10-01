@@ -3,11 +3,11 @@ import { schema } from '@bilan/store-d1';
 import { eq } from 'drizzle-orm';
 
 import { getDb } from './db.ts';
-import { resolveTokenSource, tokenSourceDeps } from './token-source.ts';
+import { askServer, resolveTokenSource, tokenSourceDeps } from './token-source.ts';
 
 import type { SessionUser } from './session.ts';
 import type { ResolvedTokenSource, TokenSource, TokenSourceDeps } from './token-source.ts';
-import type { RepoRef } from '@bilan/core';
+import type { GithubRepoMeta, RepoRef } from '@bilan/core';
 import type { Repo } from '@bilan/store-d1';
 
 /**
@@ -95,7 +95,10 @@ export function visibilityCacheKey(repoId: string): string {
  *
  * | target           | viewer                              | result                     |
  * | ---------------- | ----------------------------------- | -------------------------- |
- * | anything         | signed out                          | login-required             |
+ * | unknown          | signed out                          | login-required (no GitHub) |
+ * | private          | signed out                          | login-required (no GitHub) |
+ * | public (still)   | signed out, confirmed public        | ok                         |
+ * | public           | signed out, cannot be confirmed     | login-required             |
  * | unknown          | GitHub sees it (user, else server)  | unknown (with the source)  |
  * | unknown          | neither token sees it               | not-found                  |
  * | public (still)   | signed in                           | ok                         |
@@ -116,8 +119,10 @@ export function visibilityCacheKey(repoId: string): string {
  * Only an allow is ever cached: a cached denial would answer `not-found`
  * without asking GitHub, while an unknown name always asks, so the two would
  * come apart the moment GitHub cannot answer (503 for one, 404 for the other).
- * Signed-out viewers get the same answer whether or not the row exists, so the
- * cache never leaks either; the built-in examples are served from static
+ * Signed out, only a row bilan holds as public is ever served, and only once
+ * the visibility cache or the server token confirms it still is (see
+ * `signedOutAccess`); an unknown name and a private row answer alike, so the
+ * cache never tells them apart. The built-in examples are served from static
  * files before this check is reached (see `examples.ts`). A viewer whose
  * token is gone gets a `ReauthRequiredError` from `userRepoMeta`, which the
  * middleware turns into a login redirect (pages) or a 401 (APIs).
@@ -128,7 +133,7 @@ export async function checkRepoAccess(
   target: AccessRepo | RepoRef,
 ): Promise<AccessDecision> {
   const ref: RepoRef = { owner: target.owner, name: target.name };
-  if (!user) return LOGIN_REQUIRED;
+  if (!user) return signedOutAccess(deps, target);
   if (!isKnown(target)) {
     const source = await probe(deps, user, ref);
     if (source === 'unavailable') return UNAVAILABLE;
@@ -168,6 +173,25 @@ export async function checkRepoAccess(
   return OK;
 }
 
+/**
+ * A signed-out viewer may only see what is public on GitHub and already synced.
+ * An unknown name and a private row answer `login-required` at once, without
+ * GitHub, so neither the answer nor its timing tells them apart, and a
+ * signed-out request never makes bilan ask GitHub about a name it does not
+ * hold. A public row is served once its visibility is confirmed; anything
+ * else (now private, a different repo at the name, or no server token to ask
+ * with) asks the viewer to sign in.
+ */
+async function signedOutAccess(
+  deps: AccessDeps,
+  target: AccessRepo | RepoRef,
+): Promise<AccessDecision> {
+  if (!isKnown(target) || target.isPrivate) return LOGIN_REQUIRED;
+  const visibility = await currentVisibility(deps, null, target);
+  if (visibility === 'unavailable') return UNAVAILABLE;
+  return visibility === 'public' ? OK : LOGIN_REQUIRED;
+}
+
 function isKnown(target: AccessRepo | RepoRef): target is AccessRepo {
   return 'id' in target;
 }
@@ -200,13 +224,15 @@ async function probe(
  * install). "Private" covers everything the token cannot confirm: an actual
  * private repo, a repo it cannot see at all, or a different repo now living at
  * that name; the row is updated so the private rules apply from here on (the
- * next sync writes GitHub's answer back).
+ * next sync writes GitHub's answer back). Signed out with no server token (or
+ * one GitHub rejects), there is no token to ask: `unconfirmed`, which neither
+ * caches nor touches the row.
  */
 async function currentVisibility(
   deps: AccessDeps,
-  user: SessionUser,
+  user: SessionUser | null,
   repo: AccessRepo,
-): Promise<CachedVisibility | 'unavailable'> {
+): Promise<CachedVisibility | 'unavailable' | 'unconfirmed'> {
   const key = visibilityCacheKey(repo.id);
   const cached = (await deps.cache.get(key)) as CachedVisibility | null;
   if (cached === 'public' || cached === 'private') return cached;
@@ -214,9 +240,8 @@ async function currentVisibility(
   const ref: RepoRef = { owner: repo.owner, name: repo.name };
   let visibility: CachedVisibility;
   try {
-    const meta = deps.serverRepoMeta
-      ? await deps.serverRepoMeta(ref)
-      : await deps.userRepoMeta(user.id, ref);
+    const meta = await visibilityMeta(deps, user, ref);
+    if (meta === 'unconfirmed') return 'unconfirmed';
     visibility = meta.id === repo.id && !meta.isPrivate ? 'public' : 'private';
   } catch (error) {
     if (error instanceof RepoNotFoundError) visibility = 'private';
@@ -226,4 +251,17 @@ async function currentVisibility(
   if (visibility === 'private') await deps.markPrivate(repo.id);
   await deps.cache.put(key, visibility, { expirationTtl: VISIBILITY_CACHE_TTL_S });
   return visibility;
+}
+
+/** The repo on the server token, else on the viewer's; `unconfirmed` when neither can ask. */
+async function visibilityMeta(
+  deps: AccessDeps,
+  user: SessionUser | null,
+  ref: RepoRef,
+): Promise<GithubRepoMeta | 'unconfirmed'> {
+  if (deps.serverRepoMeta) {
+    const meta = await askServer(deps.serverRepoMeta, ref);
+    if (meta !== 'rejected') return meta;
+  }
+  return user ? deps.userRepoMeta(user.id, ref) : 'unconfirmed';
 }

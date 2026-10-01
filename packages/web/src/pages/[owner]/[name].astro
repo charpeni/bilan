@@ -45,28 +45,24 @@ let syncActive = false;
 if (example) {
   // Nothing to decide: no row, no access check, no sync, whoever is looking.
   view = 'ready';
-} else if (!user) {
-  // Signed out, the answer never depends on what bilan has cached: the built-in
-  // examples are static, anything else is the same sign-in card (a shared link
-  // explains itself before sending anyone to GitHub), built from the label alone.
-  view = 'sign-in';
-  Astro.response.status = 401;
 } else {
   const db = getDb(env);
   const cached = await getRepoByName(db, owner, name);
   // An unknown name takes the same GitHub round trip as a private row the viewer
-  // cannot see, so a login redirect, a 503, or the 404 page never tells them
-  // apart. A viewer whose token is gone throws `ReauthRequiredError`; the
-  // middleware sends them to login.
+  // cannot see, so a 503 or the 404 page never tells them apart. Signed out,
+  // only a synced public repo opens; anything else is the same sign-in card (a
+  // shared link explains itself before sending anyone to GitHub), built from
+  // the label alone. A viewer whose token is gone throws `ReauthRequiredError`;
+  // the middleware sends them to login.
   const access = await checkRepoAccess(accessDeps(env), user, cached ?? { owner, name });
-  if (access.kind === 'login-required') return Astro.redirect(loginHref, 302);
-  ({ view, repo } = repoPageState(access, cached));
+  ({ view, repo } = repoPageState(access, cached, user !== null));
   if (repo) {
-    await touchRepoView(db, { repoId: repo.id, userId: user.id, now });
+    if (user) await touchRepoView(db, { repoId: repo.id, userId: user.id, now });
     const active = await findActiveJob(db, repo.id);
     syncActive = active !== undefined;
     ownJobId = active && user && active.requestedBy === user.id ? active.id : null;
   }
+  if (view === 'sign-in') Astro.response.status = 401;
   if (view === 'unavailable') {
     Astro.response.status = 503;
     Astro.response.headers.set('retry-after', '60');
@@ -182,6 +178,19 @@ const chipTitle =
             ) : null}
           </div>
         )}
+        {!example && !user && (
+          <div class="banner">
+            <p>
+              <span class="label">Public repository</span>The last sync of {label} on bilan. Sign in
+              to refresh it or sync more history.
+            </p>
+            {oauthReady && (
+              <a class="btn btn-sm btn-primary" href={loginHref}>
+                Sign in with GitHub
+              </a>
+            )}
+          </div>
+        )}
         <div class="notice" id="status" role="status" aria-live="polite" hidden>
           <span id="status-text" />
           <button class="btn btn-sm" type="button" id="status-action" hidden />
@@ -192,6 +201,7 @@ const chipTitle =
           data-auto-refresh={autoRefresh ? '1' : '0'}
           data-sync-active={syncActive ? '1' : '0'}
           data-own-job-id={ownJobId ?? ''}
+          data-signed-in={user ? '1' : '0'}
           data-login-href={loginHref}
           data-stale={stale ? '1' : '0'}
         />
@@ -225,6 +235,7 @@ const chipTitle =
           const resync = document.getElementById('resync') as HTMLButtonElement | null;
           const resyncLabel = document.getElementById('resync-label');
           const loginHref = root.dataset.loginHref ?? '/auth/github/start';
+          const signedIn = root.dataset.signedIn === '1';
           const [, owner, name] = location.pathname.split('/');
           const base = `/api/repos/${owner}/${name}`;
 
@@ -389,6 +400,12 @@ const chipTitle =
 
           /** Ask for a deeper sync; the dashboard shows the busy state and any error beside the range buttons. */
           async function loadMore(range: Range): Promise<void> {
+            if (!signedIn) {
+              throw new LoadMoreError('Syncing more history needs a GitHub sign-in.', {
+                label: 'Sign in',
+                href: loginHref,
+              });
+            }
             if (busy) {
               throw new LoadMoreError(
                 firstSync
