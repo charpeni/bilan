@@ -1,0 +1,248 @@
+---
+import { env } from 'cloudflare:workers';
+
+import { EXAMPLES } from '../lib/examples.ts';
+import { isOauthConfigured, loginHref } from '../lib/oauth.ts';
+import { repoHref, repoKey } from '../lib/repo-switcher.ts';
+
+import type { SessionUser } from '../lib/session.ts';
+
+/**
+ * The repository in the header, as a menu to move to another one. Signed in,
+ * it lists the viewer's recent repositories (fetched from `/api/repositories`
+ * the first time it opens) under a field that filters them or opens any
+ * `owner/name` or GitHub URL; signed out, it lists the built-in examples.
+ * Either way it ends with the repository on GitHub.
+ */
+interface Props {
+  owner: string;
+  name: string;
+  user: SessionUser | null;
+}
+
+const { owner, name, user } = Astro.props;
+const label = `${owner}/${name}`;
+const current = repoKey({ owner, name });
+const signInHref = isOauthConfigured(env) ? loginHref('/repositories') : null;
+---
+
+<details
+  class="menu switcher"
+  data-switcher
+  data-current={current}
+  data-src={user ? '/api/repositories' : undefined}
+>
+  <summary aria-label={`Repository: ${label}`}>
+    <span class="owner">{owner}</span>
+    <span class="sep" aria-hidden="true">/</span>
+    <b>{name}</b>
+    <svg class="icon" viewBox="0 0 16 16" aria-hidden="true">
+      <path
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="m4 6 4 4 4-4"
+      />
+    </svg>
+  </summary>
+  <div class="pop">
+    {
+      user ? (
+        <>
+          <form class="switcher-find" method="get" action="/repositories" data-switcher-form>
+            <input
+              class="input"
+              name="repo"
+              type="text"
+              placeholder="Filter, or paste owner/name or a URL"
+              aria-label="Filter your recent repositories, or open one by owner/name or GitHub URL"
+              autocomplete="off"
+              autocapitalize="off"
+              spellcheck="false"
+              data-switcher-input
+            />
+          </form>
+          <p class="pop-label">Recent</p>
+          <div data-switcher-list />
+          <p class="switcher-note" role="status" data-switcher-note>
+            Loading…
+          </p>
+          <template data-switcher-lock>
+            <svg class="icon switcher-lock" viewBox="0 0 16 16" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M4 6V4.5a4 4 0 1 1 8 0V6h.5A1.5 1.5 0 0 1 14 7.5v6a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 13.5v-6A1.5 1.5 0 0 1 3.5 6H4Zm1.5 0h5V4.5a2.5 2.5 0 0 0-5 0V6Z"
+              />
+            </svg>
+            <span class="sr-only">(private)</span>
+          </template>
+        </>
+      ) : (
+        <>
+          <p class="pop-label">Examples</p>
+          <div data-switcher-list>
+            {EXAMPLES.map((example) => (
+              <a
+                class="pop-item switcher-row"
+                href={repoHref(example)}
+                aria-current={repoKey(example) === current ? 'page' : undefined}
+              >
+                <span class="switcher-name">{example.repo}</span>
+                <span class="switcher-meta">
+                  {repoKey(example) === current ? 'this page' : 'example'}
+                </span>
+              </a>
+            ))}
+          </div>
+        </>
+      )
+    }
+    <div class="switcher-foot">
+      {
+        user ? (
+          <a class="pop-item" href="/repositories">
+            All repositories<span aria-hidden="true">→</span>
+          </a>
+        ) : (
+          signInHref && (
+            <a class="pop-item" href={signInHref}>
+              Sign in to open your own<span aria-hidden="true">→</span>
+            </a>
+          )
+        )
+      }
+      <a
+        class="pop-item"
+        href={`https://github.com/${owner}/${name}`}
+        target="_blank"
+        rel="noopener"
+      >
+        View on GitHub<span aria-hidden="true">↗</span>
+      </a>
+    </div>
+  </div>
+</details>
+
+<script>
+  import { fmtAgo } from '../lib/format.ts';
+  import { repoHref, repoKey, switcherMatches, switcherTarget } from '../lib/repo-switcher.ts';
+
+  import type { SwitcherRepo } from '../lib/repo-switcher.ts';
+
+  const menu = document.querySelector<HTMLDetailsElement>('[data-switcher]');
+  if (menu) {
+    const summary = menu.querySelector('summary') as HTMLElement;
+    const list = menu.querySelector('[data-switcher-list]') as HTMLElement;
+    const form = menu.querySelector<HTMLFormElement>('[data-switcher-form]');
+    const input = menu.querySelector<HTMLInputElement>('[data-switcher-input]');
+    const note = menu.querySelector<HTMLElement>('[data-switcher-note]');
+    const lock = menu.querySelector<HTMLTemplateElement>('[data-switcher-lock]');
+    const src = menu.dataset.src;
+    const current = menu.dataset.current ?? '';
+    let repos: SwitcherRepo[] = [];
+    /** The first fetch, kept while it runs or once it worked; a failed one is tried again on the next open. */
+    let loading: Promise<void> | null = null;
+    let ready = false;
+
+    const say = (text: string): void => {
+      if (!note) return;
+      note.textContent = text;
+      note.hidden = text === '';
+    };
+
+    const row = (repo: SwitcherRepo): HTMLAnchorElement => {
+      const link = document.createElement('a');
+      link.className = 'pop-item switcher-row';
+      link.href = repoHref(repo);
+      link.dataset.key = repoKey(repo);
+      const here = link.dataset.key === current;
+      if (here) link.setAttribute('aria-current', 'page');
+      const label = document.createElement('span');
+      label.className = 'switcher-name';
+      label.textContent = `${repo.owner}/${repo.name}`;
+      const meta = document.createElement('span');
+      meta.className = 'switcher-meta';
+      meta.textContent = here ? 'this page' : fmtAgo(repo.lastViewedAt);
+      const privateMark = repo.isPrivate && lock ? [lock.content.cloneNode(true)] : [];
+      link.replaceChildren(label, ...privateMark, meta);
+      return link;
+    };
+
+    /** Show the rows the field matches, mark the one Enter opens, and say what Enter does when none match. */
+    const filter = (): void => {
+      if (!input || !ready) return;
+      const shown = new Set(switcherMatches(input.value, repos).map(repoKey));
+      const target = switcherTarget(input.value, repos, current);
+      for (const link of list.querySelectorAll<HTMLAnchorElement>('.switcher-row')) {
+        link.hidden = !shown.has(link.dataset.key ?? '');
+        link.toggleAttribute('data-target', target !== null && link.dataset.key === repoKey(target));
+      }
+      if (shown.size > 0) say('');
+      else if (target) say(`Press Enter to open ${target.owner}/${target.name}.`);
+      else say(input.value.trim() === '' ? 'No repositories opened yet.' : 'No recent repository matches.');
+    };
+
+    const load = async (url: string): Promise<void> => {
+      try {
+        const response = await fetch(url, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        ({ repositories: repos } = (await response.json()) as { repositories: SwitcherRepo[] });
+        list.replaceChildren(...repos.map(row));
+        ready = true;
+        filter();
+      } catch {
+        loading = null;
+        say('Your recent repositories could not be loaded.');
+      }
+    };
+
+    menu.addEventListener('toggle', () => {
+      if (!menu.open) {
+        if (input) input.value = '';
+        filter();
+        return;
+      }
+      if (src && loading === null) loading = load(src);
+      // A touch keyboard would cover the list it filters, so the field waits for a tap there.
+      if (input && !matchMedia('(pointer: coarse)').matches) input.focus();
+    });
+
+    input?.addEventListener('input', filter);
+
+    // Enter opens the repository the field names or matches. With neither, an
+    // empty field does nothing and anything else goes to /repositories, which
+    // says what it could not read.
+    form?.addEventListener('submit', (event) => {
+      const target = switcherTarget(input?.value ?? '', repos, current);
+      if (target) {
+        event.preventDefault();
+        location.assign(repoHref(target));
+      } else if ((input?.value ?? '').trim() === '') event.preventDefault();
+    });
+
+    // Up and down move between the field and the rows on show.
+    menu.addEventListener('keydown', (event) => {
+      if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+      const rows = [...list.querySelectorAll<HTMLAnchorElement>('.switcher-row:not([hidden])')];
+      const stops: HTMLElement[] = input ? [input, ...rows] : rows;
+      const at = stops.indexOf(document.activeElement as HTMLElement);
+      if (at === -1) return;
+      event.preventDefault();
+      const next = event.key === 'ArrowDown' ? Math.min(at + 1, stops.length - 1) : Math.max(at - 1, 0);
+      stops[next]?.focus();
+    });
+
+    // Like the account menu: closes on outside click and Escape.
+    document.addEventListener('click', (event) => {
+      if (menu.open && !menu.contains(event.target as Node)) menu.open = false;
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && menu.open) {
+        menu.open = false;
+        summary.focus();
+      }
+    });
+  }
+</script>

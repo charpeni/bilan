@@ -5,6 +5,7 @@ import '../styles/site.css';
 import BrandMark from '../components/BrandMark.astro';
 import Footer from '../components/Footer.astro';
 import PrivateLock from '../components/PrivateLock.astro';
+import RepoSwitcher from '../components/RepoSwitcher.astro';
 import UserMenu from '../components/UserMenu.astro';
 import { FONT_FACES, PRELOAD_FONTS } from '../styles/fonts.ts';
 
@@ -13,7 +14,10 @@ import type { SessionUser } from '../lib/session.ts';
 interface Props {
   title: string;
   user: SessionUser | null;
-  /** Shown as `owner / name` after the wordmark on repository pages. */
+  /**
+   * Shown after the wordmark on repository pages: `Repositories` (signed in),
+   * then `owner / name`, which opens the repository switcher.
+   */
   crumb?: { owner: string; name: string; isPrivate?: boolean };
   /** Where to land after signing in; defaults to the current page. */
   next?: string;
@@ -86,21 +90,19 @@ const ogImage = new URL('/brand/og.png', Astro.url).href;
         </a>
         {
           crumb && (
-            <span class="crumb">
-              <a
-                class="crumb-link"
-                href={`https://github.com/${crumb.owner}/${crumb.name}`}
-                target="_blank"
-                rel="noopener"
-                title={`${crumb.owner}/${crumb.name} on GitHub`}
-              >
-                <span class="sep" aria-hidden="true">/</span>
-                <span class="owner">{crumb.owner}</span>
-                <span class="sep" aria-hidden="true">/</span>
-                <b>{crumb.name}</b>
-              </a>
+            <nav class="crumb" aria-label="Breadcrumb">
+              {user && (
+                <>
+                  <span class="sep" aria-hidden="true">/</span>
+                  <a class="crumb-up" href="/repositories">
+                    Repositories
+                  </a>
+                </>
+              )}
+              <span class="sep" aria-hidden="true">/</span>
+              <RepoSwitcher owner={crumb.owner} name={crumb.name} user={user} />
               {crumb.isPrivate && <PrivateLock id="crumb" />}
-            </span>
+            </nav>
           )
         }
         {
