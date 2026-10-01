@@ -7,7 +7,9 @@
 export function secureResponse(response: Response, url: URL, signedIn: boolean): Response {
   const { headers } = response;
   headers.set('x-content-type-options', 'nosniff');
-  headers.set('referrer-policy', 'no-referrer');
+  // Not `no-referrer`: under it browsers send `Origin: null` on same-origin
+  // POSTs, and Astro's origin check rejects the logout form.
+  headers.set('referrer-policy', 'same-origin');
   headers.set('x-frame-options', 'DENY');
   // These restrictions do not interfere with the existing inline theme script.
   headers.set(
