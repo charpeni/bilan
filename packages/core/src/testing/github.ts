@@ -62,6 +62,8 @@ export class FakeGithub {
   remaining: number;
   cost = 1;
   resetAt = '2999-01-01T00:00:00.000Z';
+  /** The node ID `owner/name` resolves to; change it to model a rename mid-sync. */
+  repoId = 'R_repo';
   fail: (call: number) => Response | undefined = () => undefined;
 
   constructor(prs: FakePr[] = [], remaining = 5000) {
@@ -123,6 +125,7 @@ export class FakeGithub {
     return Response.json({
       data: {
         repository: {
+          id: this.repoId,
           pullRequests: {
             pageInfo: {
               hasNextPage,

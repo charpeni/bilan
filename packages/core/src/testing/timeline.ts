@@ -7,6 +7,8 @@ export interface TimelineGithubOptions {
   remaining?: (call: number) => number;
   /** A response that replaces the given 1-based call's answer. */
   fail?: (call: number) => Response | undefined;
+  /** The node ID `owner/name` resolves to on the given 1-based call. */
+  repoId?: (call: number) => string;
 }
 
 /**
@@ -17,6 +19,7 @@ export function timelineGithub({
   events: count,
   remaining = (call) => 5000 - call,
   fail = () => undefined,
+  repoId = () => 'R_repo',
 }: TimelineGithubOptions) {
   const events = Array.from({ length: count }, (_, i) => ({
     __typename: 'ReviewRequestedEvent',
@@ -39,7 +42,9 @@ export function timelineGithub({
     const rateLimit = { cost: 1, remaining: remaining(call), resetAt: '2026-10-01T00:00:00Z' };
     if (variables.number !== undefined)
       return new Response(
-        JSON.stringify({ data: { repository: { pullRequest: { timelineItems } }, rateLimit } }),
+        JSON.stringify({
+          data: { repository: { id: repoId(call), pullRequest: { timelineItems } }, rateLimit },
+        }),
       );
     const pr = {
       ...rawPr(),
@@ -60,6 +65,7 @@ export function timelineGithub({
       JSON.stringify({
         data: {
           repository: {
+            id: repoId(call),
             pullRequests: { nodes: [pr], pageInfo: { hasNextPage: false, endCursor: null } },
           },
           rateLimit,

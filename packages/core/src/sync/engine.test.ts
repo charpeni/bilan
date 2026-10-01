@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { GithubClient } from '../github/client.ts';
+import { GithubClient, RepoChangedError } from '../github/client.ts';
 import { DAY } from '../metrics/time.ts';
+import { FakeGithub } from '../testing/github.ts';
 import { MemoryStore } from '../testing/memory-store.ts';
 import { timelineGithub } from '../testing/timeline.ts';
 import { catchUpSince, defaultSince, effectiveSince, sync } from './engine.ts';
@@ -1136,5 +1137,36 @@ describe('catchUpSince', () => {
       new Date('2025-12-01T00:00:00Z'),
     );
     expect(catchUpSince(requested, { ...legacy, coverageSince: null })).toBeUndefined();
+  });
+});
+
+describe('sync of a repository renamed mid-run', () => {
+  it('stores nothing from another repository that took over the name', async () => {
+    const github = FakeGithub.history(60);
+    const store = new MemoryStore();
+    const run = sync({
+      client: github.client(),
+      store,
+      repo,
+      mode: 'full',
+      onPage: () => {
+        github.repoId = 'R_other';
+      },
+    });
+    await expect(run).rejects.toThrow(RepoChangedError);
+    // Only the first page, from the repository the run started on.
+    expect(store.prs.size).toBe(25);
+    expect(github.calls).toHaveLength(2);
+  });
+
+  it('refuses the first page when the name already resolves to another repository', async () => {
+    const github = FakeGithub.history(3);
+    github.repoId = 'R_other';
+    const store = new MemoryStore();
+    await expect(sync({ client: github.client(), store, repo, repoId: 'R_repo' })).rejects.toThrow(
+      RepoChangedError,
+    );
+    expect(store.prs.size).toBe(0);
+    expect(store.syncedAt).toBeNull();
   });
 });

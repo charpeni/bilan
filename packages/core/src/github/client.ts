@@ -130,6 +130,18 @@ export class RepoNotFoundError extends GithubError {
   }
 }
 
+/**
+ * Thrown when `owner/name` now resolves to a different repository than the
+ * one being synced: renamed, transferred, or replaced while the sync ran. Its
+ * pull requests must not be stored under the original repo.
+ */
+export class RepoChangedError extends GithubError {
+  constructor(repo: RepoRef) {
+    super(`${repo.owner}/${repo.name} now resolves to a different repository`, null, false);
+    this.name = 'RepoChangedError';
+  }
+}
+
 export interface Viewer {
   databaseId: number;
   login: string;
@@ -145,6 +157,13 @@ export interface PullRequestsPageOptions {
    * must not be stored. Omit to follow every page whatever the budget.
    */
   rateLimitReserve?: number;
+  /**
+   * The GitHub node ID of the repo being synced. The page and its follow-ups
+   * look the repo up by `owner/name`, so throw `RepoChangedError` when that
+   * name resolves to another repo. Without it, follow-ups are still held to
+   * the repo the page itself resolved to.
+   */
+  repoId?: string;
 }
 
 interface GraphqlBody<T> {
@@ -323,6 +342,8 @@ export class GithubClient {
     options: PullRequestsPageOptions = {},
   ): Promise<{
     page: NonNullable<PullRequestsPage['repository']>['pullRequests'];
+    /** The node ID `owner/name` resolved to for this page. */
+    repoId: string;
     rateLimit: RateLimit;
   }> {
     const data = await this.repoQuery<PullRequestsPage>(repo, PULL_REQUESTS_QUERY, {
@@ -330,6 +351,10 @@ export class GithubClient {
       cursor,
       states: options.states ?? null,
     });
+    const repoId = data.repository.id;
+    if (options.repoId !== undefined && repoId !== options.repoId) {
+      throw new RepoChangedError(repo);
+    }
     let rateLimit = data.rateLimit;
     try {
       for (const pr of data.repository.pullRequests.nodes) {
@@ -354,6 +379,7 @@ export class GithubClient {
               cursor: info.endCursor,
             },
           );
+          if (next.repository.id !== repoId) throw new RepoChangedError(repo);
           const timeline = next.repository.pullRequest?.timelineItems;
           if (!timeline)
             throw new GithubError(
@@ -374,7 +400,7 @@ export class GithubClient {
       if (error instanceof GithubRateLimitError) error.pointsSpent += rateLimit.cost;
       throw error;
     }
-    return { page: data.repository.pullRequests, rateLimit };
+    return { page: data.repository.pullRequests, repoId, rateLimit };
   }
 
   async repoMeta(

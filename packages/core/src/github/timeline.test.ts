@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { readyInfo } from '../derive/ready.ts';
 import { timelineGithub } from '../testing/timeline.ts';
-import { GithubRateLimitError } from './client.ts';
+import { GithubRateLimitError, RepoChangedError } from './client.ts';
 import { compact } from './compact.ts';
 import { PULL_REQUESTS_QUERY, PULL_REQUEST_TIMELINE_QUERY } from './query.ts';
 
@@ -75,5 +75,32 @@ describe('pull request timelines', () => {
     const result = await unbounded.client.pullRequestsPage(repo, 25, null);
     expect(compact(result.page.nodes[0]!).reviewRequests).toHaveLength(205);
     expect(unbounded.cursors).toEqual([null, '100', '200']);
+  });
+});
+
+describe('pull request pages for a pinned repository', () => {
+  it('returns the repository the name resolved to', async () => {
+    const { client } = timelineGithub({ events: 1 });
+    const result = await client.pullRequestsPage(repo, 25, null, { repoId: 'R_repo' });
+    expect(result.repoId).toBe('R_repo');
+  });
+
+  it('refuses a page once the name resolves to another repository', async () => {
+    const { client, cursors } = timelineGithub({ events: 125, repoId: () => 'R_other' });
+    const page = client.pullRequestsPage(repo, 25, null, { repoId: 'R_repo' });
+    await expect(page).rejects.toThrow(RepoChangedError);
+    await expect(page).rejects.toMatchObject({ retryable: false });
+    // Not even its review-request follow-ups are fetched.
+    expect(cursors).toEqual([null]);
+  });
+
+  it('refuses a follow-up that resolves to another repository than its page', async () => {
+    const { client, cursors } = timelineGithub({
+      events: 205,
+      repoId: (call) => (call === 1 ? 'R_repo' : 'R_other'),
+    });
+    // Without a pinned ID too: the page's own repository is the reference.
+    await expect(client.pullRequestsPage(repo, 25, null)).rejects.toThrow(RepoChangedError);
+    expect(cursors).toEqual([null, '100']);
   });
 });

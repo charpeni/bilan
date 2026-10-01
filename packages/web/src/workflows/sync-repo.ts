@@ -1,4 +1,10 @@
-import { buildPayload, GithubClient, RepoNotFoundError, syncPage } from '@bilan/core';
+import {
+  buildPayload,
+  GithubClient,
+  RepoChangedError,
+  RepoNotFoundError,
+  syncPage,
+} from '@bilan/core';
 import { beginSyncJob, D1Store, schema, upsertRepo } from '@bilan/store-d1';
 import { WorkflowEntrypoint } from 'cloudflare:workers';
 import { NonRetryableError } from 'cloudflare:workflows';
@@ -165,6 +171,8 @@ export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
               client,
               store,
               repo: { owner, name },
+              // Pages look the repo up by name; only ever store the repo resolved above.
+              repoId,
               cursor: pageCursor,
               pageSize: PAGE_SIZE,
               ...(states === undefined ? {} : { states }),
@@ -393,7 +401,8 @@ export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
  * for each step, so a sync longer than the token's remaining life keeps going.
  * A token that cannot be refreshed, or that GitHub rejects, fails the job at
  * once: retrying would not bring it back. Nor would it bring back a repo
- * GitHub says does not exist (or that this token cannot see).
+ * GitHub says does not exist (or that this token cannot see), or a name that
+ * now resolves to a different repo.
  */
 async function withClientFor<T>(
   env: Env,
@@ -406,7 +415,11 @@ async function withClientFor<T>(
     }
     return await useUserToken(env, source.userId, (token) => fn(new GithubClient({ token })));
   } catch (error) {
-    if (error instanceof ReauthRequiredError || error instanceof RepoNotFoundError) {
+    if (
+      error instanceof ReauthRequiredError ||
+      error instanceof RepoNotFoundError ||
+      error instanceof RepoChangedError
+    ) {
       throw new NonRetryableError(error.message);
     }
     throw error;

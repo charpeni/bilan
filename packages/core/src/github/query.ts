@@ -1,10 +1,12 @@
 /**
  * Pull requests newest-updated first, with just enough nested data for the
  * metrics. `$states` narrows to those states; omit it (or pass null) for all.
+ * The repository `id` tells the caller which repo the name resolved to.
  */
 export const PULL_REQUESTS_QUERY = `
 query($owner:String!, $name:String!, $page:Int!, $cursor:String, $states:[PullRequestState!]) {
   repository(owner:$owner, name:$name) {
+    id
     pullRequests(first:$page, after:$cursor, states:$states, orderBy:{field:UPDATED_AT, direction:DESC}) {
       pageInfo { hasNextPage endCursor }
       nodes {
@@ -49,6 +51,7 @@ query($owner:String!, $name:String!, $page:Int!, $cursor:String, $states:[PullRe
 export const PULL_REQUEST_TIMELINE_QUERY = `
 query($owner:String!, $name:String!, $number:Int!, $cursor:String) {
   repository(owner:$owner, name:$name) {
+    id
     pullRequest(number:$number) {
       timelineItems(first:100, after:$cursor, itemTypes:[REVIEW_REQUESTED_EVENT]) {
         pageInfo { hasNextPage endCursor }
@@ -144,12 +147,16 @@ export interface PullRequestNode {
   };
 }
 export interface PullRequestTimelinePage {
-  repository: { pullRequest: { timelineItems: PullRequestNode['timelineItems'] } | null } | null;
+  repository: {
+    id: string;
+    pullRequest: { timelineItems: PullRequestNode['timelineItems'] } | null;
+  } | null;
   rateLimit: RateLimit;
 }
 
 export interface PullRequestsPage {
   repository: {
+    id: string;
     pullRequests: {
       pageInfo: { hasNextPage: boolean; endCursor: string | null };
       nodes: PullRequestNode[];
