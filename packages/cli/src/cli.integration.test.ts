@@ -249,20 +249,47 @@ describe('CLI cache and report lifecycle', () => {
     expect(existsSync(join(cache, 'acme'))).toBe(false);
   });
 
-  it.each([null, {}, { known: 'src' }, { known: [42] }, { known: ['src/lib'] }, { known: [''] }])(
-    'rejects malformed area rules before syncing: %j',
-    async (rules) => {
-      const path = join(dir, 'areas.json');
-      writeFileSync(path, JSON.stringify(rules));
-      const fetch = vi.fn(async () => new Response('Unauthorized', { status: 401 }));
-      vi.stubGlobal('fetch', fetch);
-      await expect(
-        main(['acme/widgets', '--token', 'test-token', '--areas', path, '--out', out]),
-      ).rejects.toThrow(/--areas.*areas\.json/);
-      expect(fetch).not.toHaveBeenCalled();
-      expect(existsSync(cache)).toBe(false);
-    },
-  );
+  it('applies nested area rules from --areas', async () => {
+    const store = new FileStore(join(cache, 'acme/widgets.json'), 'acme/widgets');
+    await store.markStarted('2026-01-01T00:00:00Z');
+    await store.upsert([
+      rawPr({ number: 1, fileSample: ['packages/app/src/a.ts', 'packages/lib/b.ts'] }),
+      rawPr({ number: 2, fileSample: ['docs/c.md', 'tools/d.sh'] }),
+    ]);
+    await store.markSynced('2026-01-02T00:00:00Z', null, true, true);
+    const path = join(dir, 'areas.json');
+    writeFileSync(path, JSON.stringify({ known: ['packages/app/', 'packages', 'docs', 'docs'] }));
+    expect(await main(['acme/widgets', '--offline', '--areas', path, '--out', out])).toBe(0);
+    const payload = JSON.parse(readFileSync(out, 'utf8'));
+    expect(payload.areas).toEqual(['packages/app', 'packages', 'docs', 'other', 'root']);
+    expect(payload.prs.map((p: { ar: string[] }) => p.ar)).toEqual([
+      ['packages/app', 'packages'],
+      ['docs', 'other'],
+    ]);
+  });
+
+  it.each([
+    null,
+    {},
+    { known: 'src' },
+    { known: [42] },
+    { known: [''] },
+    { known: ['/src'] },
+    { known: ['src//lib'] },
+    { known: ['src/../lib'] },
+    { known: ['./src'] },
+    { known: ['src\\lib'] },
+  ])('rejects malformed area rules before syncing: %j', async (rules) => {
+    const path = join(dir, 'areas.json');
+    writeFileSync(path, JSON.stringify(rules));
+    const fetch = vi.fn(async () => new Response('Unauthorized', { status: 401 }));
+    vi.stubGlobal('fetch', fetch);
+    await expect(
+      main(['acme/widgets', '--token', 'test-token', '--areas', path, '--out', out]),
+    ).rejects.toThrow(/--areas.*areas\.json/);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(existsSync(cache)).toBe(false);
+  });
 
   it('exports a successfully synced empty repository, including offline', async () => {
     vi.stubGlobal(

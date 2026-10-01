@@ -1,5 +1,6 @@
 import {
   STALE_DAYS,
+  areaActivity,
   areaBreakdown,
   busFactor,
   contributorRows,
@@ -25,7 +26,7 @@ import {
 import { DASH, barChart, columnChart, heatmap, legend, timeChart } from './charts.ts';
 import { person, prLink, svgPerson } from './person.ts';
 import { table } from './table.ts';
-import { HOUR, compact, css, dur, el, fmtDate, num, pctFmt, plural } from './utils.ts';
+import { HOUR, compact, css, dur, el, fmtDate, fmtUtc, num, pctFmt, plural } from './utils.ts';
 
 import type { Bin } from './charts.ts';
 import type { DashboardContext } from './state.ts';
@@ -248,19 +249,21 @@ export function render(ctx: DashboardContext): void {
 
   /* 6. areas */
   {
-    const rows = areaBreakdown(merged).map(([label, value]) => ({
-      label,
-      value,
-      sub: 'Merged PRs',
-    }));
+    const rows = areaBreakdown(merged)
+      .slice(0, 20)
+      .map(([label, value]) => ({
+        label,
+        value,
+        sub: 'Merged PRs',
+      }));
     const c = card(
       'half',
       'Where the work lands',
-      'Merged PRs touching each top-level area. A PR touching two areas counts in both; area comes from a sample of up to 30 changed files.',
+      'Merged PRs in the 20 busiest areas. An area is a top-level folder, or a package of the folder most PRs share. A PR touching two areas counts in both; areas come from a sample of up to 30 changed files.',
     );
     const h = chartHost(c);
     grid.append(c);
-    queueMicrotask(() => barChart(h, { rows, color: S1(), tooltip: tip }));
+    queueMicrotask(() => barChart(h, { rows, color: S1(), paths: true, tooltip: tip }));
   }
 
   /* 7. merge timing heatmap */
@@ -291,10 +294,48 @@ export function render(ctx: DashboardContext): void {
     );
   }
 
+  /* 8. area activity over time */
+  {
+    // Weeks would run to hundreds of columns over a whole history.
+    const months = ctx.state.range === 'all';
+    const unit = months ? 'month' : 'week';
+    const { periods, rows } = areaActivity(w, unit);
+    const c = card(
+      '',
+      'Where the work moves',
+      `Merged PRs per ${unit} in the busiest areas, with each area's total in range. Color follows the square root of the count, so quieter areas still show beside the busiest. With an area selected, the other rows are areas its PRs also touched. The last column is the current, partial ${unit}.`,
+    );
+    const h = chartHost(c);
+    grid.append(c);
+    queueMicrotask(() =>
+      heatmap(h, {
+        cells: rows.map((r) => r.counts),
+        rowLabels: rows.map((r) => r.area),
+        colLabels: periods.map((t) =>
+          months
+            ? fmtUtc(t, { month: 'short', year: 'numeric' })
+            : `week of ${fmtUtc(t, { month: 'short', day: 'numeric', year: 'numeric' })}`,
+        ),
+        colAxis: periods.map((t) =>
+          fmtUtc(
+            t,
+            months ? { month: 'short', year: 'numeric' } : { month: 'short', day: 'numeric' },
+          ),
+        ),
+        colTitle: months ? 'Month' : 'Week of',
+        totals: rows.map((r) => r.total),
+        scale: 'sqrt',
+        paths: true,
+        title: 'Merged PRs',
+        tooltip: tip,
+      }),
+    );
+  }
+
   /* ---- per-person aggregation (authoring + reviewing in one row) ---- */
   const people = roster(w);
 
-  /* 8. contributor table */
+  /* 9. contributor table */
   {
     const c = card(
       '',
@@ -349,7 +390,7 @@ export function render(ctx: DashboardContext): void {
     table(h, cols, contributorRows(people), 'opened');
   }
 
-  /* 9. reviewer table */
+  /* 10. reviewer table */
   {
     const reviewers = reviewerRows(people, winReviews.length);
     const c = card(
@@ -388,7 +429,7 @@ export function render(ctx: DashboardContext): void {
     if (!reviewers.length) h.append(el('div', { class: 'empty', text: 'No reviews in range' }));
   }
 
-  /* 10. review concentration */
+  /* 11. review concentration */
   {
     const rows = topReviewers(people).map((r) => ({
       label: String(r.login),
@@ -413,7 +454,7 @@ export function render(ctx: DashboardContext): void {
     );
   }
 
-  /* 11. review depth by PR size */
+  /* 12. review depth by PR size */
   {
     const bands = reviewDepth(w);
     const c = card(
@@ -472,7 +513,7 @@ export function render(ctx: DashboardContext): void {
     }
   }
 
-  /* 12. collaboration pairs */
+  /* 13. collaboration pairs */
   {
     const rows = reviewPairs(winReviews).map((p) => ({
       label: `${p.reviewer} → ${p.author}`,
@@ -494,7 +535,7 @@ export function render(ctx: DashboardContext): void {
     queueMicrotask(() => barChart(h, { rows, color: S3(), tooltip: tip }));
   }
 
-  /* 13. area ownership / bus factor */
+  /* 14. area ownership / bus factor */
   {
     const rows = busFactor(merged).map((r) => ({
       label: r.area,
@@ -522,12 +563,13 @@ export function render(ctx: DashboardContext): void {
           { label: 'Merged PRs', value: num(r.total) },
           { label: `Top: ${r.top}`, value: pctFmt(r.topShare) },
         ],
+        paths: true,
         tooltip: tip,
       }),
     );
   }
 
-  /* 14. insights */
+  /* 15. insights */
   {
     const s = standouts(w, people);
     const candidates: (Insight | false | 0)[] = [
@@ -607,7 +649,7 @@ export function render(ctx: DashboardContext): void {
     grid.append(c);
   }
 
-  /* 15. oldest open PRs */
+  /* 16. oldest open PRs */
   {
     const rows = oldestOpen(stillOpen);
     const c = card(

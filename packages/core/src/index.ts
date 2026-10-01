@@ -56,6 +56,8 @@ export { headline } from './metrics/summary.ts';
 export type { Headline } from './metrics/summary.ts';
 export { cycleTimeTrend, openBacklog, throughput, weekBuckets } from './metrics/weekly.ts';
 export type { CycleTimeTrend, OpenBacklog, Throughput, WeekBuckets } from './metrics/weekly.ts';
+export { areaActivity } from './metrics/activity.ts';
+export type { AreaActivity, AreaActivityRow, Period } from './metrics/activity.ts';
 export { areaBreakdown, mergeHeatmap, mergeTimeBins, sizeBins } from './metrics/distributions.ts';
 export type { Bucket, EdgedBucket } from './metrics/distributions.ts';
 export {

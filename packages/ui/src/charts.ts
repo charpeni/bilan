@@ -1,4 +1,4 @@
-import { css, el, fmtDate, fmtDay, num, svgEl } from './utils.ts';
+import { css, el, fitPath, fmtDate, fmtDay, num, svgEl } from './utils.ts';
 
 import type { TipRow, Tooltip } from './tooltip.ts';
 
@@ -337,6 +337,25 @@ export function timeChart(
   });
 }
 
+/** Approximate advance of one character of a row label (12.5px Archivo), in px. */
+const ROW_CHAR = 7;
+
+/**
+ * Set a folder path in `text`, cut to `chars` characters: its name in a
+ * darker ink than its folders, so a column of paths reads by their ends.
+ */
+function pathLabel(text: SVGTextElement, path: string, chars: number): void {
+  const [dir, name] = fitPath(path, chars);
+  // Inline styles, as `.tick` would override fill attributes.
+  text.style.fill = 'var(--ink-2)';
+  if (dir) {
+    text.append(
+      Object.assign(svgEl('tspan', { style: 'fill: var(--muted)' }), { textContent: dir }),
+    );
+  }
+  text.append(name);
+}
+
 export interface BarRow {
   label: string;
   value: number;
@@ -356,13 +375,24 @@ export interface BarChartOptions<R extends BarRow> {
   max?: number | null;
   height?: number | null;
   tip?: ((r: R) => TipRow[]) | null;
+  /** The labels are folder paths: the gutter may grow, and they are cut from the front. */
+  paths?: boolean;
   tooltip: Tooltip;
 }
 
 /** Horizontal bars: one measure, ranked. Direct-labelled at the tip. */
 export function barChart<R extends BarRow>(
   host: HTMLElement,
-  { rows, color, fmt = num, max = null, height = null, tip = null, tooltip }: BarChartOptions<R>,
+  {
+    rows,
+    color,
+    fmt = num,
+    max = null,
+    height = null,
+    tip = null,
+    paths = false,
+    tooltip,
+  }: BarChartOptions<R>,
 ): void {
   if (!rows.length) {
     host.append(el('div', { class: 'empty', text: 'No data in range' }));
@@ -371,7 +401,9 @@ export function barChart<R extends BarRow>(
   const rowH = 26;
   const W = host.clientWidth || 700;
   const H = height ?? rows.length * rowH + 8;
-  const labelW = Math.min(190, Math.max(...rows.map((r) => r.label.length)) * 7 + 12);
+  // Paths keep their tails when cut, so they may take more of a wide chart.
+  const cap = paths ? Math.max(190, W * 0.4) : 190;
+  const labelW = Math.min(cap, Math.max(...rows.map((r) => r.label.length)) * ROW_CHAR + 12);
   const pad = { l: labelW, r: 52 };
   const top = max ?? Math.max(1, ...rows.map((r) => r.value));
   const svg = svgEl('svg', {
@@ -395,6 +427,7 @@ export function barChart<R extends BarRow>(
       fill: css('--ink-2'),
     });
     if (r.labelNodes) label.append(...r.labelNodes());
+    else if (paths) pathLabel(label, r.label, Math.floor((labelW - 12) / ROW_CHAR));
     else label.textContent = r.label;
     svg.append(label);
     const path = svgEl('path', {
@@ -552,9 +585,30 @@ export interface HeatmapOptions {
   colStep?: number;
   /** The tooltip's title for a cell; `row, col` by default. */
   tipTitle?: (rowLabel: string, colLabel: string) => string;
+  /**
+   * A title per column, set from its left edge: as many as fit, at a regular
+   * step that ends on the latest. Replaces the centred `colLabels` on the axis.
+   */
+  colAxis?: string[];
+  /** What the columns are (`Week of`), above the row labels. */
+  colTitle?: string;
+  /** A total per row, in a column at the right. */
+  totals?: number[];
+  /**
+   * How a count maps onto the ramp: linear, or by its square root, which
+   * keeps small counts visible beside one dominant row.
+   */
+  scale?: 'linear' | 'sqrt';
+  /** The row labels are folder paths: the gutter fits them, cut from the front past a share of the width. */
+  paths?: boolean;
 }
 
-/** Hour × day-of-week heatmap, sequential blue; an empty cell is plain `--heat-0`. */
+/** Advance of one character of an axis label (12px monospace), in px. */
+const TICK_CHAR = 7.2;
+/** Width of the totals column, in px. */
+const TOTAL_W = 48;
+
+/** Sequential-blue heatmap (hour × day of week, area × period); an empty cell is plain `--heat-0`. */
 export function heatmap(
   host: HTMLElement,
   {
@@ -568,11 +622,33 @@ export function heatmap(
     rowStep = 1,
     colStep = 1,
     tipTitle = (rl, cl) => `${rl}, ${cl}`,
+    colAxis,
+    colTitle,
+    totals,
+    scale = 'linear',
+    paths = false,
   }: HeatmapOptions,
 ): void {
+  if (!rowLabels.length || !colLabels.length) {
+    host.append(el('div', { class: 'empty', text: 'No data in range' }));
+    return;
+  }
   const W = host.clientWidth || 700;
-  const pad = { l: 44, t: 18, r: 8, b: 4 };
+  // The row labels' column also holds the columns' title, whole.
+  const titleW = (colTitle ?? '').length * TICK_CHAR + 12;
+  const gutter = paths
+    ? Math.max(
+        titleW,
+        Math.min(
+          Math.max(...rowLabels.map((l) => l.length)) * ROW_CHAR + 12,
+          Math.max(110, W * 0.3),
+        ),
+      )
+    : Math.max(44, titleW);
+  const pad = { l: gutter, t: 18, r: totals ? TOTAL_W : 8, b: 4 };
   const cw = (W - pad.l - pad.r) / colLabels.length;
+  // Gaps between cells only while the cells stay wide enough to read.
+  const inset = cw < 5 ? 0 : 1;
   const ch = rowHeight;
   const H = pad.t + rowLabels.length * ch + pad.b;
   const svg = svgEl('svg', {
@@ -582,46 +658,58 @@ export function heatmap(
     'aria-label': host.dataset.label,
   });
   host.append(svg);
+  const level = scale === 'sqrt' ? Math.sqrt : (v: number): number => v;
   const max = Math.max(1, ...cells.flat());
   const ramp = ['--seq-1', '--seq-2', '--seq-3', '--seq-4', '--seq-5', '--seq-6', '--seq-7'].map(
     css,
   );
-  colLabels.forEach((l, c) => {
-    if (c % colStep) return;
-    svg.append(
-      Object.assign(
-        svgEl('text', {
-          class: 'tick',
-          x: pad.l + c * cw + cw / 2,
-          y: 11,
-          'text-anchor': 'middle',
-        }),
-        { textContent: l },
-      ),
-    );
-  });
+  const tick = (attrs: Record<string, string | number>, text: string): void => {
+    svg.append(Object.assign(svgEl('text', { class: 'tick', ...attrs }), { textContent: text }));
+  };
+  if (colTitle) tick({ x: pad.l - 10, y: 11, 'text-anchor': 'end' }, colTitle);
+  if (colAxis) {
+    const width = (l: string): number => l.length * TICK_CHAR;
+    // Titles stop short of the totals' own title.
+    const right = totals ? W - 2 - width('Total') - 6 : W - pad.r;
+    const step = Math.max(1, Math.ceil((Math.max(...colAxis.map(width)) + 8) / cw));
+    let last = colAxis.length - 1;
+    while (last > 0 && pad.l + last * cw + inset + width(colAxis[last] ?? '') > right) last--;
+    for (let c = last % step; c <= last; c += step) {
+      tick({ x: pad.l + c * cw + inset, y: 11, 'text-anchor': 'start' }, colAxis[c] ?? '');
+    }
+  } else {
+    colLabels.forEach((l, c) => {
+      if (c % colStep) return;
+      tick({ x: pad.l + c * cw + cw / 2, y: 11, 'text-anchor': 'middle' }, l);
+    });
+  }
+  if (totals) tick({ x: W - 2, y: 11, 'text-anchor': 'end' }, 'Total');
   rowLabels.forEach((rl, r) => {
-    if (r % rowStep === 0) {
+    const y = pad.t + r * ch + ch / 2 + 4;
+    if (paths) {
+      const label = svgEl('text', { class: 'tick blabel', x: pad.l - 10, y, 'text-anchor': 'end' });
+      pathLabel(label, rl, Math.floor((pad.l - 12) / ROW_CHAR));
+      svg.append(label);
+    } else if (r % rowStep === 0) {
+      tick({ x: pad.l - 8, y, 'text-anchor': 'end' }, rl);
+    }
+    const total = totals?.[r];
+    if (total !== undefined) {
       svg.append(
-        Object.assign(
-          svgEl('text', {
-            class: 'tick',
-            x: pad.l - 8,
-            y: pad.t + r * ch + ch / 2 + 4,
-            'text-anchor': 'end',
-          }),
-          { textContent: rl },
-        ),
+        Object.assign(svgEl('text', { class: 'dlabel', x: W - 2, y, 'text-anchor': 'end' }), {
+          textContent: fmt(total),
+        }),
       );
     }
     colLabels.forEach((cl, c) => {
       const v = cells[r]?.[c] ?? 0;
-      const idx = v === 0 ? -1 : Math.min(ramp.length - 1, Math.floor((v / max) * ramp.length));
+      const idx =
+        v === 0 ? -1 : Math.min(ramp.length - 1, Math.floor((level(v) / level(max)) * ramp.length));
       const fill = idx < 0 ? css('--heat-0') : (ramp[idx] ?? '');
       const rect = svgEl('rect', {
-        x: pad.l + c * cw + 1,
+        x: pad.l + c * cw + inset,
         y: pad.t + r * ch + 1,
-        width: Math.max(1, cw - 2),
+        width: Math.max(1, cw - 2 * inset),
         height: ch - 2,
         fill,
       });

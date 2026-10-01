@@ -2,6 +2,14 @@ import { readFileSync } from 'node:fs';
 
 import type { AreaRules } from '@bilan/core';
 
+/** A folder path from the repository root: `docs`, `packages/app`; a trailing `/` is allowed. */
+const folder = (entry: unknown): entry is string =>
+  typeof entry === 'string' &&
+  entry
+    .replace(/\/$/, '')
+    .split('/')
+    .every((part) => part.length > 0 && part !== '.' && part !== '..' && !/[\\\0]/.test(part));
+
 export function readAreaRules(path: string | undefined): AreaRules | undefined {
   if (path === undefined) return undefined;
   let value: unknown;
@@ -15,20 +23,10 @@ export function readAreaRules(path: string | undefined): AreaRules | undefined {
   }
   const known =
     value !== null && typeof value === 'object' && 'known' in value ? value.known : undefined;
-  if (
-    !Array.isArray(known) ||
-    !known.every(
-      (entry: unknown): entry is string =>
-        typeof entry === 'string' &&
-        entry.length > 0 &&
-        !/[/\\\0]/.test(entry) &&
-        entry !== '.' &&
-        entry !== '..',
-    )
-  ) {
+  if (!Array.isArray(known) || !known.every(folder)) {
     throw new Error(
-      `Invalid --areas file "${path}": expected { "known": ["directory", ...] } with top-level directory names`,
+      `Invalid --areas file "${path}": expected { "known": ["folder", ...] } with folder paths from the repository root, such as "docs" or "packages/app"`,
     );
   }
-  return { known: [...new Set(known)] };
+  return { known: [...new Set(known.map((entry) => entry.replace(/\/$/, '')))] };
 }

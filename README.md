@@ -41,7 +41,7 @@ incremental.
 | `--no-cache`   | Ignore the local cache and fetch everything again                        |
 | `--offline`    | Render from the cache without contacting GitHub; rejects sync options    |
 | `--token T`    | GitHub token; otherwise `GITHUB_TOKEN`, `GH_TOKEN`, then `gh auth token` |
-| `--areas FILE` | Override how changed paths map to areas                                  |
+| `--areas FILE` | List the folders that are areas, nested ones included                    |
 
 `--no-cache` builds a new cache beside the old one (`<name>.json.fresh`) and
 only replaces it once the fresh sync finishes; a fresh sync stopped by the rate
@@ -52,6 +52,13 @@ repository runs at a time.
 `--offline` only renders what is cached, so it rejects the sync options
 `--no-cache`, `--full`, `--since`, `--max-prs` and `--token`; tokens in the
 environment are ignored.
+
+`--areas` replaces the inferred areas with a JSON file of folder paths from the
+repository root, nested ones included:
+`{ "known": ["docs", "packages/app", "packages/integrations/node"] }`. A changed
+file counts toward the deepest listed folder holding it, other nested files
+toward `other`, and files at the root toward `root`. Lockfiles, `.changeset/`
+and release or dependency pull requests still count toward no area.
 
 By default a sync covers the last 30 days of activity plus every open pull
 request; later runs only widen that coverage. GitHub reports each request's
@@ -201,6 +208,7 @@ local Wrangler state instead of production, or `--help` for the command options.
 | ------------------------ | --------------- | ---------------------------------------------------------------------------- |
 | PRs opened               | created         |                                                                              |
 | Merged / closed unmerged | merged / closed |                                                                              |
+| Merged PRs by area       | merged          | per area and week, or month over all time; counted in every area touched     |
 | Time in draft            | created         | opened → marked ready (draft-opened pull requests only)                      |
 | Time to first review     | ready           | ready → first review by someone other than the author                        |
 | Time to merge            | merged          | ready → merged                                                               |
@@ -210,12 +218,22 @@ local Wrangler state instead of production, or `--help` for the command options.
 | Approved with no threads | merged          | every review was an approval and no review thread was opened                 |
 | Time to approval         | merged          | ready → first approval, by size                                              |
 
+Areas are folders, read from up to 30 changed file paths per pull request; a
+pull request touching two areas counts in both. Each top-level folder is an
+area, except that a folder touched by more than half the pull requests, such as
+`packages/` in a monorepo, is split into its packages: the outermost folders,
+at most three deep, holding a sampled `package.json`, `Cargo.toml`, `go.mod` or
+`pyproject.toml`, or its subfolders when it holds none. A folder stays whole
+when one piece would still hold more than 90% of its pull requests. Lockfiles
+and `.changeset/` count toward no area, and neither does a pull request whose
+sampled files are only those, manifests and changelogs, as release and
+dependency pull requests are. Files at the repository root count as `root`.
+
 A pull request that opened as a draft becomes reviewable at its first
 ready-for-review event; later re-drafts are ignored. Each metric is scoped by
 its own anchor, so "last 30 days" means what happened in those 30 days rather
-than which pull requests were opened in them. Area attribution samples up to 30
-changed files per pull request, and up to 40 reviews are captured per pull
-request.
+than which pull requests were opened in them. Up to 40 reviews are captured per
+pull request.
 
 Review depth groups merged pull requests by size, in lines added + deleted:
 ≤50, 51–250, 251–500, 501–1k, and over 1k. Its thread count is GitHub's total
