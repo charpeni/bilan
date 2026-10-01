@@ -57,6 +57,13 @@
       "when": 1790722615541,
       "tag": "0007_sync_admission_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1790886794635,
+      "tag": "0008_hash_session_ids",
+      "breakpoints": true
     }
   ]
 }

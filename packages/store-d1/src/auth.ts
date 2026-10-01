@@ -3,7 +3,7 @@ import { and, eq, gt, lt } from 'drizzle-orm';
 import { sessions, users, userTokens } from './schema.ts';
 
 import type { Db } from './db.ts';
-import type { Session, User, UserToken } from './schema.ts';
+import type { User, UserToken } from './schema.ts';
 
 /** A signed-in user as the web app sees it: the `users` row behind an unexpired session. */
 export interface SessionUserRow {
@@ -64,18 +64,32 @@ export async function deleteUserToken(db: Db, userId: number): Promise<void> {
   await db.delete(userTokens).where(eq(userTokens.userId, userId));
 }
 
+/**
+ * The key a session is stored under: the hex SHA-256 of its id. The id itself
+ * lives only in the browser's cookie, so a copy of the table cannot be turned
+ * back into a cookie. Ids are 256 random bits, so a plain hash is enough.
+ */
+async function sessionKey(id: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(id));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+/** Store a session; `id` is the cookie value, stored only as its hash (see `sessionKey`). */
 export async function createSession(
   db: Db,
   session: { id: string; userId: number; expiresAt: string },
-): Promise<Session> {
-  return db.insert(sessions).values(session).returning().get();
+): Promise<void> {
+  await db
+    .insert(sessions)
+    .values({ ...session, id: await sessionKey(session.id) })
+    .run();
 }
 
 export async function deleteSession(db: Db, id: string): Promise<void> {
-  await db.delete(sessions).where(eq(sessions.id, id));
+  await db.delete(sessions).where(eq(sessions.id, await sessionKey(id)));
 }
 
-/** The user behind an unexpired session id, or undefined. */
+/** The user behind an unexpired session id (the cookie value), or undefined. */
 export async function getSessionUser(
   db: Db,
   sessionId: string,
@@ -90,7 +104,7 @@ export async function getSessionUser(
     })
     .from(sessions)
     .innerJoin(users, eq(sessions.userId, users.id))
-    .where(and(eq(sessions.id, sessionId), gt(sessions.expiresAt, now)))
+    .where(and(eq(sessions.id, await sessionKey(sessionId)), gt(sessions.expiresAt, now)))
     .get();
 }
 
