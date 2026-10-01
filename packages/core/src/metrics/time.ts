@@ -8,3 +8,9 @@ export function weekStart(t: number): number {
   d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
   return d.getTime();
 }
+
+/** Calendar-month bucket, in UTC like `weekStart`. */
+export function monthStart(t: number): number {
+  const d = new Date(t);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);
+}

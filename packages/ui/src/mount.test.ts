@@ -16,6 +16,7 @@ const CARD_TITLES = [
   'PR size',
   'Where the work lands',
   'When PRs get merged',
+  'Where the work moves',
   'Contributors',
   'Reviewers',
   'Top reviewers',
@@ -509,6 +510,53 @@ describe('mount', () => {
     box.checked = false;
     box.dispatchEvent(new Event('change'));
     expect(heroValue(root)).toBe('14');
+  });
+
+  it('shows where the work moves by week, by month over all time, and around an area', async () => {
+    setup();
+    const heat = (): ParentNode => cardNamed(root, 'Where the work moves') ?? root;
+    const rows = (): string[] => texts(heat(), 'svg text.blabel');
+    const totals = (): string[] => texts(heat(), 'svg text.dlabel');
+    click('90');
+    await flush();
+    expect(heat().querySelector('.desc')?.textContent).toMatch(/^Merged PRs per week/);
+    // Too narrow to title every week: every other one, ending on the latest.
+    const weeks = texts(heat(), 'svg text.tick:not(.blabel)');
+    expect(weeks.slice(0, 3)).toEqual(['Week of', 'Jan 19', 'Feb 2']);
+    expect(weeks.slice(-2)).toEqual(['Apr 13', 'Total']);
+    expect(rows()).toEqual(['api', 'web']);
+    expect(totals()).toEqual(['4', '3']);
+
+    // Months over a whole history, each column titled with its month.
+    click('all');
+    await flush();
+    expect(heat().querySelector('.desc')?.textContent).toMatch(/^Merged PRs per month/);
+    expect(texts(heat(), 'svg text.tick:not(.blabel)')).toEqual([
+      'Month',
+      'Jan 2026',
+      'Feb 2026',
+      'Mar 2026',
+      'Apr 2026',
+      'Total',
+    ]);
+    expect(heat().querySelectorAll('svg rect')).toHaveLength(2 * 4);
+    heat()
+      .querySelector('svg rect')
+      ?.dispatchEvent(new PointerEvent('pointermove', { clientX: 10, clientY: 10 }));
+    expect(root.querySelector('#tt')?.textContent).toMatch(/^api, Jan 2026Merged PRs2$/);
+
+    // A selected area leads, followed by the areas its PRs also touched.
+    const sel = root.querySelector<HTMLSelectElement>('#area-filter');
+    if (!sel) throw new Error('no area filter');
+    sel.value = 'web';
+    sel.dispatchEvent(new Event('change'));
+    await flush();
+    expect(rows()).toEqual(['web', 'api']);
+    expect(totals()).toEqual(['4', '1']);
+    sel.value = 'docs';
+    sel.dispatchEvent(new Event('change'));
+    await flush();
+    expect(heat().querySelector('.empty')?.textContent).toBe('No data in range');
   });
 
   it('applies the theme option and restores it on destroy', () => {

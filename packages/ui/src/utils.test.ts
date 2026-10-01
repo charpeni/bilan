@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { holdHeight } from './utils.ts';
+import { fitPath, holdHeight } from './utils.ts';
 
 const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -46,5 +46,27 @@ describe('holdHeight', () => {
     ).toThrow('boom');
     await flush();
     expect(node.style.minHeight).toBe('');
+  });
+});
+
+describe('fitPath', () => {
+  it('keeps a path that fits whole', () => {
+    expect(fitPath('packages/integrations/node', 30)).toEqual(['packages/integrations/', 'node']);
+    expect(fitPath('root', 30)).toEqual(['', 'root']);
+  });
+
+  it('drops leading folders before the name', () => {
+    expect(fitPath('packages/integrations/cloudflare', 25)).toEqual([
+      '…/integrations/',
+      'cloudflare',
+    ]);
+    expect(fitPath('packages/language-tools/language-server', 25)).toEqual([
+      '…/',
+      'language-server',
+    ]);
+  });
+
+  it('cuts a name that cannot fit on its own', () => {
+    expect(fitPath('packages/edge-preview-authenticated-proxy', 12)).toEqual(['', 'edge-previe…']);
   });
 });

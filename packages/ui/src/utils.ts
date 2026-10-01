@@ -60,10 +60,33 @@ export function dur(ms: number | null | undefined): string {
   return `${(ms / (30 * DAY)).toFixed(1)}mo`;
 }
 
+/**
+ * A folder path cut to `chars` characters, as `[folders, name]`: leading
+ * folders give way to `…/` first, so the distinctive end of the path stays.
+ */
+export function fitPath(path: string, chars: number): [string, string] {
+  const parts = path.split('/');
+  const name = parts.pop() ?? '';
+  for (let k = 0; k <= parts.length; k++) {
+    const dir =
+      (k ? '…/' : '') +
+      parts
+        .slice(k)
+        .map((p) => `${p}/`)
+        .join('');
+    if (dir.length + name.length <= chars) return [dir, name];
+  }
+  return ['', name.length <= chars ? name : `${name.slice(0, Math.max(1, chars - 1))}…`];
+}
+
 export const fmtDate = (t: number): string =>
   new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 export const fmtDay = (t: number): string =>
   new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
+/** Periods are UTC buckets, so they are named in UTC: `Sep`, `Sep 2026`, `Sep 14, 2026`. */
+export const fmtUtc = (t: number, options: Intl.DateTimeFormatOptions): string =>
+  new Date(t).toLocaleDateString(undefined, { ...options, timeZone: 'UTC' });
 
 export const css = (name: string): string =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();

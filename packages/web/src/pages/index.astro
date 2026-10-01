@@ -29,7 +29,7 @@ const pulse = firstExample
         {
           label: 'Contributors and areas',
           title: 'Who is contributing, and where',
-          text: 'Who opens pull requests and who reviews them, which top-level areas of the codebase are moving, and which areas rest on a single person.',
+          text: 'Who opens pull requests and who reviews them, which areas of the codebase are moving week by week, down to each package of a monorepo, and which areas rest on a single person.',
           v: h.opened.toLocaleString('en-US'),
           d: `pull requests opened by ${plural(h.authors, 'author')}`,
         },
@@ -100,12 +100,17 @@ const FLAGS: [string, string][] = [
   ['--offline', 'Render from the local cache without calling GitHub.'],
   ['--no-cache', 'Ignore the cache and fetch everything again.'],
   ['--token T', 'Use this token instead of the environment.'],
-  ['--areas FILE', 'Override how file paths map to areas.'],
+  ['--areas FILE', 'List the folders that count as areas, nested ones included.'],
 ];
 
 const ANCHORS: { metric: string; anchor: string; ready?: boolean; measures: string }[] = [
   { metric: 'PRs opened', anchor: 'created', measures: 'Counted when the PR is opened.' },
   { metric: 'Merged, closed unmerged', anchor: 'merged / closed', measures: 'Counted when it lands or is closed.' },
+  {
+    metric: 'Merged PRs by area',
+    anchor: 'merged',
+    measures: 'Per area and week, or month over all time; a PR counts in every area it touched.',
+  },
   { metric: 'Time in draft', anchor: 'created', measures: 'Opened → marked ready, for PRs opened as drafts.' },
   {
     metric: 'Time to first review',
