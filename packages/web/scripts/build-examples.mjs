@@ -1,11 +1,16 @@
 // Regenerate the built-in example dashboards served from `public/examples/`.
 //
 //   pnpm examples:build            (token from GITHUB_TOKEN, else `gh auth token`)
+//   pnpm examples:build owner/name (rebuild one of the examples below)
 //
 // Each example is a full-history sync into a throwaway file store, turned into
 // the same payload the web app serves from R2, gzipped next to an `index.json`
 // the landing page reads at build time. Runs on Node's own TypeScript support,
 // so the workspace sources are imported as they are.
+//
+// Every file written here is deployed as a static asset anyone can fetch, with
+// no access check. Only the repositories in `EXAMPLES` are built, and only
+// while GitHub reports them public.
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -49,6 +54,14 @@ function resolveToken() {
   }
 }
 
+/** Refuse a repository the operator's token can read but the public cannot. */
+async function assertPublic(client, repo) {
+  const { meta } = await client.repoMeta(repo);
+  if (meta.isPrivate) {
+    throw new Error(`${repo.owner}/${repo.name} is private; it cannot be published as an example`);
+  }
+}
+
 /** Walk the whole history, waiting out the rate limit when it runs dry. */
 async function fullSync(client, store, repo) {
   for (;;) {
@@ -85,6 +98,7 @@ async function buildExample(client, cacheDir, spec) {
   const repo = parseRepo(spec);
   const label = `${repo.owner}/${repo.name}`;
   const store = new FileStore(join(cacheDir, `${repo.owner}--${repo.name}.json`), label);
+  await assertPublic(client, repo);
   log(`syncing ${label} (full history)`);
   const result = await fullSync(client, store, repo);
   if (!result.complete || result.coverageSince !== null) {
@@ -93,6 +107,8 @@ async function buildExample(client, cacheDir, spec) {
   const [meta, prs] = await Promise.all([store.meta(), store.all()]);
   const payload = buildPayload(meta, prs);
   if (payload.syncedAt === null) throw new Error(`${label}: no syncedAt after the sync`);
+  // A full sync can take hours: check again that it is still public before writing it out.
+  await assertPublic(client, repo);
   const gz = gzipSync(JSON.stringify(payload), { level: 9 });
   const file = `${repo.owner}--${repo.name}.json.gz`;
   writeFileSync(join(outDir, file), gz);
@@ -113,6 +129,15 @@ async function buildExample(client, cacheDir, spec) {
 }
 
 async function main() {
+  const only = process.argv.slice(2);
+  const unknown = only.filter(
+    (spec) => !EXAMPLES.some((example) => example.toLowerCase() === spec.toLowerCase()),
+  );
+  if (unknown.length > 0) {
+    throw new Error(
+      `Not an example: ${unknown.join(', ')}. Add it to EXAMPLES first (examples: ${EXAMPLES.join(', ')}).`,
+    );
+  }
   const token = resolveToken();
   const client = new GithubClient({
     token,
@@ -132,7 +157,6 @@ async function main() {
   } catch {
     // First run: nothing to keep.
   }
-  const only = process.argv.slice(2);
   const targets = only.length > 0 ? only : EXAMPLES;
   const built = [];
   for (const spec of targets) built.push(await buildExample(client, cacheDir, spec));
