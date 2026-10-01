@@ -9,6 +9,7 @@ export const users = sqliteTable('users', {
 });
 
 export const sessions = sqliteTable('sessions', {
+  /** Hex SHA-256 of the session cookie's value, never the value itself; see `createSession`. */
   id: text('id').primaryKey(),
   userId: integer('user_id')
     .notNull()

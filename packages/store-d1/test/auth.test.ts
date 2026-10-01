@@ -1,4 +1,5 @@
 import { env } from 'cloudflare:test';
+import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -13,7 +14,7 @@ import {
 } from '../src/auth.ts';
 import { createDb } from '../src/db.ts';
 import { getRepoById, upsertRepo } from '../src/repos.ts';
-import { pullRequests, syncJobs } from '../src/schema.ts';
+import { pullRequests, sessions, syncJobs } from '../src/schema.ts';
 import { deleteRepo, listReposWithLastView, listRepoViews, touchRepoView } from '../src/views.ts';
 
 const now = '2026-05-01T12:00:00.000Z';
@@ -89,6 +90,19 @@ describe('sessions', () => {
     });
     expect(await getSessionUser(db, `s-${user.id}`, '2026-07-01')).toBeUndefined();
     expect(await getSessionUser(db, 'nope', now)).toBeUndefined();
+  });
+
+  it('stores only the SHA-256 of the session id, never the cookie value', async () => {
+    const { db, user } = await freshUser();
+    const id = `h-${user.id}`;
+    await createSession(db, { id, userId: user.id, expiresAt: '2026-06-01' });
+    const rows = await db.select().from(sessions).where(eq(sessions.userId, user.id)).all();
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(id));
+    const hex = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+    expect(rows.map((row) => row.id)).toEqual([hex]);
+    // The stored key is not a usable cookie value.
+    expect(await getSessionUser(db, hex, now)).toBeUndefined();
+    expect((await getSessionUser(db, id, now))?.id).toBe(user.id);
   });
 
   it('works without a stored token', async () => {
