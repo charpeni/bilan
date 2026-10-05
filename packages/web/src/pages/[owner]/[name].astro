@@ -211,6 +211,7 @@ const chipTitle =
           import { fmtCount, liveCount, splitAtCount } from '../../lib/count-up.ts';
           import { fmtAgo, fmtHistory, fmtInstant } from '../../lib/format.ts';
           import { SYNCED_AT_HEADER, watchAfterSyncResponse } from '../../lib/poll.ts';
+          import { keepScrollPlace } from '../../lib/scroll-place.ts';
           import { isStale } from '../../lib/stale.ts';
           import {
             describeSync,
@@ -246,6 +247,13 @@ const chipTitle =
             '180': '180d',
             all: 'all',
           };
+
+          /**
+           * The dashboard draws after the page has loaded, too late for the
+           * browser to put a reload back where the reader was: the page does
+           * it once the first dashboard is drawn (see `lib/scroll-place.ts`).
+           */
+          const restoreScroll = keepScrollPlace();
 
           let mounted: Mounted | undefined;
           /** The payload on screen, so a status line can say what it covers. */
@@ -554,6 +562,7 @@ const chipTitle =
               }
               hideNotice();
               render(payload);
+              restoreScroll();
               if (root.dataset.syncActive === '1') void followFirstSync();
               else if (root.dataset.autoRefresh === '1') void backgroundRefresh();
             } catch (error) {
