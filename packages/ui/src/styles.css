@@ -331,6 +331,10 @@ thead th .sort:focus-visible,
 .range-seg button[aria-pressed='true']::before {
   background: var(--accent);
 }
+/* `d`, the narrowest phones' short form of ` days` (`.ru`). */
+.range-seg .rd {
+  display: none;
+}
 .seg button.needs-load {
   color: var(--muted);
 }
@@ -1161,6 +1165,23 @@ ul.insights .ico {
     overflow: hidden;
     text-overflow: ellipsis;
     vertical-align: bottom;
+  }
+}
+/*
+ * The narrowest phones: five ranges, three of them with a "+", fit one row as
+ * `7d`, `30d`… A screen reader still hears "7 days".
+ */
+@media (max-width: 400px) {
+  .range-seg .ru {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .range-seg .rd {
+    display: inline;
   }
 }
 /* Touch: every range button, select, toggle, and header sort control is at least 44px tall. */

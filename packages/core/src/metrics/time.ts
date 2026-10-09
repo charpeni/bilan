@@ -9,6 +9,13 @@ export function weekStart(t: number): number {
   return d.getTime();
 }
 
+/** Calendar-day bucket, in UTC like `weekStart`. */
+export function dayStart(t: number): number {
+  const d = new Date(t);
+  d.setUTCHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
 /** Calendar-month bucket, in UTC like `weekStart`. */
 export function monthStart(t: number): number {
   const d = new Date(t);

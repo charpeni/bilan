@@ -1,4 +1,4 @@
-import { css, el, fitPath, fmtDate, fmtDay, num, svgEl } from './utils.ts';
+import { css, el, fitPath, fmtUtc, num, svgEl } from './utils.ts';
 
 import type { TipRow, Tooltip } from './tooltip.ts';
 
@@ -72,14 +72,16 @@ export interface Series {
   name: string;
   color: string;
   values: (number | null)[];
-  xLabel?: (x: number) => string;
   /** The line pattern; solid when omitted. */
   dash?: Dash;
 }
 
 export interface TimeChartOptions {
+  /** Bucket starts: UTC midnights, so they are named in UTC. */
   xs: number[];
   series: Series[];
+  /** The crosshair tooltip's title for a bucket; `Week of …` when omitted. */
+  xLabel?: ((x: number) => string) | undefined;
   yFmt?: (v: number) => string;
   mode?: 'line' | 'area';
   height?: number;
@@ -120,7 +122,7 @@ export function spreadLabels(ys: number[], gap: number, lo: number, hi: number):
  */
 export function timeChart(
   host: HTMLElement,
-  { xs, series, yFmt = num, mode = 'line', height = 230, tip }: TimeChartOptions,
+  { xs, series, xLabel, yFmt = num, mode = 'line', height = 230, tip }: TimeChartOptions,
 ): void {
   const W = host.clientWidth || 800;
   const H = height;
@@ -194,7 +196,7 @@ export function timeChart(
     svg.append(
       Object.assign(
         svgEl('text', { class: 'tick', x: X(i), y: H - pad.b + 16, 'text-anchor': anchor }),
-        { textContent: fmtDay(x) },
+        { textContent: fmtUtc(x, { month: 'short', day: 'numeric' }) },
       ),
     );
   }
@@ -315,10 +317,11 @@ export function timeChart(
       setNum(c, 'y', Y(v) - MARK / 2);
       setNum(c, 'opacity', 1);
     });
-    const xLabel = series[0]?.xLabel;
     tip.show(
       ev,
-      xLabel ? xLabel(x) : `Week of ${fmtDate(x)}`,
+      xLabel
+        ? xLabel(x)
+        : `Week of ${fmtUtc(x, { month: 'short', day: 'numeric', year: 'numeric' })}`,
       series.map((s) => {
         const v = s.values[i];
         return {

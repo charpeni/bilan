@@ -40,7 +40,7 @@ export type { BuildPayloadOptions } from './derive/payload.ts';
 export { median, percentile, sum } from './metrics/stats.ts';
 export { parseRepo } from './repo.ts';
 export { count, ranked, share } from './metrics/stats.ts';
-export { DAY, HOUR, weekStart } from './metrics/time.ts';
+export { DAY, HOUR, dayStart, weekStart } from './metrics/time.ts';
 export { derive, firstActivity, isMerged, isReady, lastActivity } from './metrics/derive.ts';
 export type { ClosedPr, MergedPr, MetricPr, ReadyPr } from './metrics/derive.ts';
 export { createFilterState, filterOptions, scope, windowed } from './metrics/scope.ts';
@@ -54,8 +54,14 @@ export type {
 } from './metrics/scope.ts';
 export { headline } from './metrics/summary.ts';
 export type { Headline } from './metrics/summary.ts';
-export { cycleTimeTrend, openBacklog, throughput, weekBuckets } from './metrics/weekly.ts';
-export type { CycleTimeTrend, OpenBacklog, Throughput, WeekBuckets } from './metrics/weekly.ts';
+export { cycleTimeTrend, openBacklog, throughput, timeBuckets } from './metrics/weekly.ts';
+export type {
+  CycleTimeTrend,
+  OpenBacklog,
+  Throughput,
+  TimeBuckets,
+  TimeUnit,
+} from './metrics/weekly.ts';
 export { areaActivity } from './metrics/activity.ts';
 export type { AreaActivity, AreaActivityRow, Period } from './metrics/activity.ts';
 export { areaBreakdown, mergeHeatmap, mergeTimeBins, sizeBins } from './metrics/distributions.ts';

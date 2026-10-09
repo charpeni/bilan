@@ -261,6 +261,17 @@ describe('mount', () => {
     expect(texts(root, '.card > h2')).toEqual(CARD_TITLES);
   });
 
+  it('reads the last 7 days day by day', () => {
+    setup();
+    click('7');
+    expect(pressed('7')).toBe('true');
+    expect(handle?.range()).toBe('7');
+    expect(texts(root, '.card > h2')).toEqual(CARD_TITLES);
+    expect(root.querySelector('.card .desc')?.textContent).toContain('bucketed by UTC day');
+    click('30');
+    expect(root.querySelector('.card .desc')?.textContent).toContain('bucketed by ISO week');
+  });
+
   it('honours initialRange when the payload covers it', () => {
     setup(payload(), { initialRange: '90' });
     expect(pressed('90')).toBe('true');

@@ -72,7 +72,7 @@ function readerText(root: HTMLElement): string {
 }
 
 /** Mount the fixture (optionally on another range), let the charts draw, and read it all back. */
-async function snapshot(range?: 'all'): Promise<string> {
+async function snapshot(range?: '7' | 'all'): Promise<string> {
   const root = document.createElement('div');
   document.body.append(root);
   const handle: Mounted = mount(root, fixturePayload(), { theme: 'light' });
@@ -93,6 +93,10 @@ describe('golden dashboard', () => {
 
   it('keeps every figure, label, and chart mark of the default view', async () => {
     await expect(await snapshot()).toMatchFileSnapshot('./__golden__/dashboard-30d.txt');
+  });
+
+  it('keeps every figure, label, and chart mark of the 7-day view', async () => {
+    await expect(await snapshot('7')).toMatchFileSnapshot('./__golden__/dashboard-7d.txt');
   });
 
   it('keeps every figure, label, and chart mark of the all-time view', async () => {
