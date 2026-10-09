@@ -77,9 +77,10 @@ const shell = (themeControl: boolean): string => `<div class="wrap">
 
   <div class="filters">
     <div class="seg range-seg" role="group" aria-label="Date range">
-      <button type="button" data-range="30" aria-pressed="false"><span class="rl">Last </span>30 days</button>
-      <button type="button" data-range="90" aria-pressed="false"><span class="rl">Last </span>90 days</button>
-      <button type="button" data-range="180" aria-pressed="false"><span class="rl">Last </span>180 days</button>
+      <button type="button" data-range="7" aria-pressed="false"><span class="rl">Last </span>7<span class="ru"> days</span><span class="rd" aria-hidden="true">d</span></button>
+      <button type="button" data-range="30" aria-pressed="false"><span class="rl">Last </span>30<span class="ru"> days</span><span class="rd" aria-hidden="true">d</span></button>
+      <button type="button" data-range="90" aria-pressed="false"><span class="rl">Last </span>90<span class="ru"> days</span><span class="rd" aria-hidden="true">d</span></button>
+      <button type="button" data-range="180" aria-pressed="false"><span class="rl">Last </span>180<span class="ru"> days</span><span class="rd" aria-hidden="true">d</span></button>
       <button type="button" data-range="all" aria-pressed="false">All time</button>
     </div>
     <select class="dim" id="area-filter" aria-label="Area"></select>

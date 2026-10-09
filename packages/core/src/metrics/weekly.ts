@@ -1,29 +1,37 @@
 import { firstActivity } from './derive.ts';
 import { median } from './stats.ts';
-import { DAY, HOUR, weekStart } from './time.ts';
+import { DAY, HOUR, dayStart, weekStart } from './time.ts';
 
 import type { Scope } from './scope.ts';
 
-/** ISO-week buckets from the start of the window (or of the data) to `last`. */
-export interface WeekBuckets {
+/** What a trend bucket spans: a UTC day, or an ISO week. */
+export type TimeUnit = 'day' | 'week';
+
+/** Buckets of one `TimeUnit` from the start of the window (or of the data) to `last`. */
+export interface TimeBuckets {
   start: number;
-  /** Bucket start timestamps, one per week. */
-  weeks: number[];
+  /** Length of one bucket, ms. */
+  size: number;
+  /** Bucket start timestamps, oldest first. */
+  starts: number[];
   /** Bucket index of a timestamp; may be out of range. */
   idxOf: (t: number) => number;
   inRange: (i: number) => boolean;
 }
 
-export function weekBuckets(s: Scope, last: number): WeekBuckets {
+export function timeBuckets(s: Scope, last: number, unit: TimeUnit = 'week'): TimeBuckets {
   const { from, authored } = s;
-  const start = from === -Infinity ? weekStart(firstActivity(authored)) : weekStart(from);
-  const weeks: number[] = [];
-  for (let w = start; w <= last; w += 7 * DAY) weeks.push(w);
+  const floor = unit === 'day' ? dayStart : weekStart;
+  const size = unit === 'day' ? DAY : 7 * DAY;
+  const start = floor(from === -Infinity ? firstActivity(authored) : from);
+  const starts: number[] = [];
+  for (let b = start; b <= last; b += size) starts.push(b);
   return {
     start,
-    weeks,
-    idxOf: (t) => Math.floor((weekStart(t) - start) / (7 * DAY)),
-    inRange: (i) => i >= 0 && i < weeks.length,
+    size,
+    starts,
+    idxOf: (t) => Math.floor((floor(t) - start) / size),
+    inRange: (i) => i >= 0 && i < starts.length,
   };
 }
 
@@ -37,13 +45,13 @@ export interface Throughput {
   closed: number[];
 }
 
-/** PRs opened, merged, and closed without merging per week. */
-export function throughput(s: Scope, wb: WeekBuckets): Throughput {
+/** PRs opened, merged, and closed without merging per bucket. */
+export function throughput(s: Scope, tb: TimeBuckets): Throughput {
   const { authored, inWin } = s;
-  const { weeks, idxOf, inRange } = wb;
-  const opened = weeks.map(() => 0);
-  const merged = weeks.map(() => 0);
-  const closed = weeks.map(() => 0);
+  const { starts, idxOf, inRange } = tb;
+  const opened = starts.map(() => 0);
+  const merged = starts.map(() => 0);
+  const closed = starts.map(() => 0);
   for (const p of authored) {
     let i = idxOf(p.c);
     if (inRange(i) && inWin(p.c)) bump(opened, i);
@@ -59,23 +67,23 @@ export function throughput(s: Scope, wb: WeekBuckets): Throughput {
 }
 
 export interface OpenBacklog {
-  /** PRs still open at the end of each week. */
+  /** PRs still open at the end of each bucket. */
   open: number[];
   /** Of those, the ones still drafts at that instant: never marked ready, or marked ready later. */
   drafts: number[];
 }
 
 /**
- * PRs still open at the end of each week, and how many of them were drafts
+ * PRs still open at the end of each bucket, and how many of them were drafts
  * then. Draft is read from the ready-for-review event alone (`r`, null when
- * never ready): a PR is a draft at the week's end when it was open and not
+ * never ready): a PR is a draft at the bucket's end when it was open and not
  * yet ready. Re-drafts are ignored, as in the rest of the metrics.
  */
-export function openBacklog(s: Scope, wb: WeekBuckets): OpenBacklog {
+export function openBacklog(s: Scope, tb: TimeBuckets): OpenBacklog {
   const open: number[] = [];
   const drafts: number[] = [];
-  for (const w of wb.weeks) {
-    const edge = w + 7 * DAY - 1;
+  for (const b of tb.starts) {
+    const edge = b + tb.size - 1;
     const atEdge = s.authored.filter((p) => p.c <= edge && (p.x === null || p.x > edge));
     open.push(atEdge.length);
     drafts.push(atEdge.filter((p) => p.r === null || p.r > edge).length);
@@ -83,24 +91,24 @@ export function openBacklog(s: Scope, wb: WeekBuckets): OpenBacklog {
   return { open, drafts };
 }
 
-/** Weekly median in hours; null for empty buckets so a line can skip them. */
+/** A bucket's median in hours; null for empty buckets so a line can skip them. */
 const hours = (b: number[]): number | null => {
   const m = b.length ? median(b) : null;
   return m === null ? null : m / HOUR;
 };
 
 export interface CycleTimeTrend {
-  /** Weekly median hours from ready to first review, by week of the review. */
+  /** Median hours from ready to first review, by bucket of the review. */
   toFirst: (number | null)[];
-  /** Weekly median hours from ready to merge, by week of the merge. */
+  /** Median hours from ready to merge, by bucket of the merge. */
   toMerge: (number | null)[];
 }
 
-export function cycleTimeTrend(s: Scope, wb: WeekBuckets): CycleTimeTrend {
+export function cycleTimeTrend(s: Scope, tb: TimeBuckets): CycleTimeTrend {
   const { authored, inWin } = s;
-  const { weeks, idxOf, inRange } = wb;
-  const mergeBuckets: number[][] = weeks.map(() => []);
-  const reviewBuckets: number[][] = weeks.map(() => []);
+  const { starts, idxOf, inRange } = tb;
+  const mergeBuckets: number[][] = starts.map(() => []);
+  const reviewBuckets: number[][] = starts.map(() => []);
   for (const p of authored) {
     if (p.m !== null && inWin(p.m) && p.toMerge !== null) {
       const i = idxOf(p.m);

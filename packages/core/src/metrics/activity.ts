@@ -1,12 +1,13 @@
 import { firstActivity } from './derive.ts';
 import { sum } from './stats.ts';
 import { monthStart } from './time.ts';
-import { weekBuckets } from './weekly.ts';
+import { timeBuckets } from './weekly.ts';
 
 import type { Windowed } from './scope.ts';
+import type { TimeUnit } from './weekly.ts';
 
-/** The heatmap's columns: ISO weeks, or calendar months for a whole history. */
-export type Period = 'week' | 'month';
+/** The heatmap's columns: the trend charts' days or weeks, or months for a whole history. */
+export type Period = TimeUnit | 'month';
 
 export interface AreaActivityRow {
   area: string;
@@ -47,15 +48,15 @@ function monthBuckets(w: Windowed): Periods {
 
 function periodsOf(w: Windowed, period: Period): Periods {
   if (period === 'month') return monthBuckets(w);
-  const wb = weekBuckets(w, w.last);
-  return { periods: wb.weeks, idxOf: wb.idxOf };
+  const tb = timeBuckets(w, w.last, period);
+  return { periods: tb.starts, idxOf: tb.idxOf };
 }
 
 /**
  * Merged PRs per area and period, for the `limit` areas with the most merged
- * PRs in the window. Weeks are the trend charts' (`weekBuckets`); months keep
- * a whole history to a readable number of columns. A PR touching two areas
- * counts in both.
+ * PRs in the window. Days and weeks are the trend charts' (`timeBuckets`);
+ * months keep a whole history to a readable number of columns. A PR touching
+ * two areas counts in both.
  */
 export function areaActivity(w: Windowed, period: Period, limit = 14): AreaActivity {
   const { periods, idxOf } = periodsOf(w, period);

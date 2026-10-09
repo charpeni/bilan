@@ -1,9 +1,9 @@
 import { DAY } from './utils.ts';
 
 /** The date-range buttons: days back from the snapshot, or everything. */
-export type Range = '30' | '90' | '180' | 'all';
+export type Range = '7' | '30' | '90' | '180' | 'all';
 
-export const RANGES: readonly Range[] = ['30', '90', '180', 'all'];
+export const RANGES: readonly Range[] = ['7', '30', '90', '180', 'all'];
 
 /** The product default: the depth every sync guarantees. */
 export const DEFAULT_RANGE: Range = '30';

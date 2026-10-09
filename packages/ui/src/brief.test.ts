@@ -46,6 +46,9 @@ describe('isCovered', () => {
     expect(isCovered(daysAgo(30, COVERAGE_SLACK + 1), LAST, '30')).toBe(false);
     expect(isCovered(daysAgo(28), LAST, '30')).toBe(false);
     expect(isCovered(daysAgo(90), LAST, '90')).toBe(true);
+    // A first sync's interim payload: the last 7 days, not yet 30.
+    expect(isCovered(daysAgo(7), LAST, '7')).toBe(true);
+    expect(isCovered(daysAgo(7), LAST, '30')).toBe(false);
     expect(isCovered(daysAgo(90), LAST, 'all')).toBe(false);
     expect(isCovered(null, LAST, 'all')).toBe(true);
     expect(isCovered('not a date', LAST, '30')).toBe(false);

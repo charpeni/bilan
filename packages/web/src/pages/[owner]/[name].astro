@@ -240,8 +240,9 @@ const chipTitle =
           const [, owner, name] = location.pathname.split('/');
           const base = `/api/repos/${owner}/${name}`;
 
-          /** Range button -> sync depth; `'30'` is always covered so it never gets here. */
+          /** Range button -> sync depth; `'7'` and `'30'` are within the default depth, so they never get here. */
           const DEPTH: Record<Range, '30d' | '90d' | '180d' | 'all'> = {
+            '7': '30d',
             '30': '30d',
             '90': '90d',
             '180': '180d',

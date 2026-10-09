@@ -81,8 +81,6 @@ export function fitPath(path: string, chars: number): [string, string] {
 
 export const fmtDate = (t: number): string =>
   new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-export const fmtDay = (t: number): string =>
-  new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
 /** Periods are UTC buckets, so they are named in UTC: `Sep`, `Sep 2026`, `Sep 14, 2026`. */
 export const fmtUtc = (t: number, options: Intl.DateTimeFormatOptions): string =>

@@ -18,8 +18,8 @@ import {
   sizeBins,
   standouts,
   throughput,
+  timeBuckets,
   topReviewers,
-  weekBuckets,
   windowed,
 } from '@bilan/core';
 
@@ -31,7 +31,14 @@ import { HOUR, compact, css, dur, el, fmtDate, fmtUtc, num, pctFmt, plural } fro
 import type { Bin } from './charts.ts';
 import type { DashboardContext } from './state.ts';
 import type { Col } from './table.ts';
-import type { ContributorRow, DepthBand, MetricPr, ReviewerRow } from '@bilan/core';
+import type {
+  ContributorRow,
+  DepthBand,
+  MetricPr,
+  Period,
+  ReviewerRow,
+  TimeUnit,
+} from '@bilan/core';
 
 const S1 = (): string => css('--s1');
 const S2 = (): string => css('--s2');
@@ -71,6 +78,40 @@ export const hoursFmt = (v: number): string => {
   if (v === 0) return '0';
   const years = v / (365 * 24);
   return years >= 1 ? `${years.toFixed(1)}y` : dur(v * HOUR);
+};
+
+/** How the trend charts' descriptions name a bucket. */
+const BUCKET_WORDS: Record<TimeUnit, { name: string; every: string; many: string }> = {
+  day: { name: 'UTC day', every: 'Daily', many: 'Days' },
+  week: { name: 'ISO week', every: 'Weekly', many: 'Weeks' },
+};
+
+interface PeriodNames {
+  /** The period on its own, in a tooltip. */
+  label: (t: number) => string;
+  /** The period under its column. */
+  tick: (t: number) => string;
+  /** What the columns are, above the row labels. */
+  title: string;
+}
+
+/** Periods are UTC buckets, so they are named in UTC. */
+const PERIOD_NAMES: Record<Period, PeriodNames> = {
+  day: {
+    label: (t) => fmtUtc(t, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
+    tick: (t) => fmtUtc(t, { month: 'short', day: 'numeric' }),
+    title: 'Day',
+  },
+  week: {
+    label: (t) => `week of ${fmtUtc(t, { month: 'short', day: 'numeric', year: 'numeric' })}`,
+    tick: (t) => fmtUtc(t, { month: 'short', day: 'numeric' }),
+    title: 'Week of',
+  },
+  month: {
+    label: (t) => fmtUtc(t, { month: 'short', year: 'numeric' }),
+    tick: (t) => fmtUtc(t, { month: 'short', year: 'numeric' }),
+    title: 'Month',
+  },
 };
 
 interface Insight {
@@ -128,17 +169,22 @@ export function render(ctx: DashboardContext): void {
   const grid = el('div', { class: 'grid' });
   app.append(grid);
 
-  /* ---- weekly buckets shared by the trend charts ---- */
-  const wb = weekBuckets(w, LAST);
-  const { weeks } = wb;
+  /* ---- time buckets shared by the trend charts ---- */
+  // Seven days would be two partial weeks, so that range is read day by day.
+  const bucket: TimeUnit = ctx.state.range === '7' ? 'day' : 'week';
+  const words = BUCKET_WORDS[bucket];
+  const tb = timeBuckets(w, LAST, bucket);
+  const xs = tb.starts;
+  // A day is named outright in the crosshair; a week keeps the chart's `Week of …`.
+  const xLabel = bucket === 'day' ? PERIOD_NAMES.day.label : undefined;
 
   /* 1. throughput */
   {
-    const t = throughput(w, wb);
+    const t = throughput(w, tb);
     const c = card(
       'twothirds',
       'Throughput',
-      'PRs opened, merged, and closed without merging, bucketed by ISO week. The last point is the current, partial week.',
+      `PRs opened, merged, and closed without merging, bucketed by ${words.name}. The last point is the current, partial ${bucket}.`,
     );
     legend(c, [
       { name: 'Opened', ...L1() },
@@ -149,7 +195,8 @@ export function render(ctx: DashboardContext): void {
     grid.append(c);
     queueMicrotask(() =>
       timeChart(h, {
-        xs: weeks,
+        xs,
+        xLabel,
         mode: 'line',
         series: [
           { name: 'Opened', ...L1(), values: t.opened },
@@ -163,11 +210,11 @@ export function render(ctx: DashboardContext): void {
 
   /* 2. open backlog */
   {
-    const backlog = openBacklog(w, wb);
+    const backlog = openBacklog(w, tb);
     const c = card(
       'third',
       'Open PR backlog',
-      'PRs still open at the end of each week, and how many of those were still drafts. Drafts are counted from the ready-for-review event, so they are part of the open line, not in addition to it.',
+      `PRs still open at the end of each ${bucket}, and how many of those were still drafts. Drafts are counted from the ready-for-review event, so they are part of the open line, not in addition to it.`,
     );
     legend(c, [
       { name: 'Open', ...L1() },
@@ -177,7 +224,8 @@ export function render(ctx: DashboardContext): void {
     grid.append(c);
     queueMicrotask(() =>
       timeChart(h, {
-        xs: weeks,
+        xs,
+        xLabel,
         mode: 'area',
         series: [
           { name: 'Open', ...L1(), values: backlog.open },
@@ -190,11 +238,11 @@ export function render(ctx: DashboardContext): void {
 
   /* 3. cycle-time trend */
   {
-    const trend = cycleTimeTrend(w, wb);
+    const trend = cycleTimeTrend(w, tb);
     const c = card(
       '',
       'Cycle time trend',
-      'Weekly median time from ready-for-review to first review, and to merge. Weeks with no data are skipped; the last point is the current, partial week.',
+      `${words.every} median time from ready-for-review to first review, and to merge. ${words.many} with no data are skipped; the last point is the current, partial ${bucket}.`,
     );
     legend(c, [
       { name: 'Ready → first review', ...L2() },
@@ -204,7 +252,8 @@ export function render(ctx: DashboardContext): void {
     grid.append(c);
     queueMicrotask(() =>
       timeChart(h, {
-        xs: weeks,
+        xs,
+        xLabel,
         mode: 'line',
         yFmt: hoursFmt,
         series: [
@@ -297,8 +346,8 @@ export function render(ctx: DashboardContext): void {
   /* 8. area activity over time */
   {
     // Weeks would run to hundreds of columns over a whole history.
-    const months = ctx.state.range === 'all';
-    const unit = months ? 'month' : 'week';
+    const unit: Period = ctx.state.range === 'all' ? 'month' : bucket;
+    const names = PERIOD_NAMES[unit];
     const { periods, rows } = areaActivity(w, unit);
     const c = card(
       '',
@@ -311,18 +360,9 @@ export function render(ctx: DashboardContext): void {
       heatmap(h, {
         cells: rows.map((r) => r.counts),
         rowLabels: rows.map((r) => r.area),
-        colLabels: periods.map((t) =>
-          months
-            ? fmtUtc(t, { month: 'short', year: 'numeric' })
-            : `week of ${fmtUtc(t, { month: 'short', day: 'numeric', year: 'numeric' })}`,
-        ),
-        colAxis: periods.map((t) =>
-          fmtUtc(
-            t,
-            months ? { month: 'short', year: 'numeric' } : { month: 'short', day: 'numeric' },
-          ),
-        ),
-        colTitle: months ? 'Month' : 'Week of',
+        colLabels: periods.map(names.label),
+        colAxis: periods.map(names.tick),
+        colTitle: names.title,
         totals: rows.map((r) => r.total),
         scale: 'sqrt',
         paths: true,
