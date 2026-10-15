@@ -1,7 +1,7 @@
 import { brief, change } from '@bilan/core';
 
 import { person, prUrl } from './person.ts';
-import { coversDays } from './range.ts';
+import { canCompare as canCompareRange } from './range.ts';
 import { DAY, dur, el, fmtDate, num, svgEl } from './utils.ts';
 
 import type { Range } from './range.ts';
@@ -122,7 +122,7 @@ export const BRIEF_COMPARE_DAYS = 60;
  * strict (no display slack): 59 days of coverage is a truncated previous period.
  */
 export const canCompare = (coverageSince: string | null, last: number): boolean =>
-  coversDays(coverageSince, last, BRIEF_COMPARE_DAYS);
+  canCompareRange(coverageSince, last, '30');
 
 export const COMPARE_NOTE = `Comparisons appear once ${BRIEF_COMPARE_DAYS} days are synced.`;
 
@@ -149,11 +149,11 @@ export function renderBrief(ctx: DashboardContext): BriefHandle {
   host.textContent = '';
   const frag = (f: Frag): Node | string => (typeof f === 'string' ? f : person(f.who, bots));
   const line = (l: Line): (Node | string)[] => (typeof l === 'string' ? [l] : l.map(frag));
-  const compare = canCompare(data.coverageSince, LAST);
+  const compare = !data.interrupted && canCompare(data.coverageSince, LAST);
   /** `text` only when the previous period is there to compare against. */
   const vs = (text: string): string => (compare ? text : '');
   /** Full history: the only state in which "never seen before" can be claimed. */
-  const fullHistory = data.coverageSince === null;
+  const fullHistory = data.coverageSince === null && !data.interrupted;
 
   const {
     cur: A,
@@ -407,19 +407,24 @@ export function renderBrief(ctx: DashboardContext): BriefHandle {
   );
   if (!compare) {
     const row = el('div', { class: 'brief-compare' }, [
-      el('p', { class: 'desc brief-compare-note', text: COMPARE_NOTE }),
+      el('p', {
+        class: 'desc brief-compare-note',
+        text: data.interrupted
+          ? 'Comparisons are unavailable during a partial sync. Refresh to finish syncing.'
+          : COMPARE_NOTE,
+      }),
     ]);
     // The smallest range button that reaches back 60 days; its busy state and
     // progress are shared with that button (see `mount`).
     const { requestMore } = ctx;
-    if (requestMore) {
+    if (requestMore && !data.interrupted) {
       const btn = el('button', {
         type: 'button',
         class: 'brief-load',
         'data-load-range': COMPARE_RANGE,
         text: `Sync ${COMPARE_RANGE} days`,
       });
-      btn.addEventListener('click', () => requestMore(COMPARE_RANGE));
+      btn.addEventListener('click', () => requestMore(COMPARE_RANGE, true));
       row.append(btn);
     }
     host.append(row);

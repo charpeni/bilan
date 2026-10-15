@@ -388,7 +388,7 @@ describe('mount', () => {
       const btn = root.querySelector<HTMLButtonElement>('.brief-load');
       expect(btn?.textContent).toBe('Sync 90 days');
       btn?.click();
-      expect(onLoadMore).toHaveBeenCalledWith('90');
+      expect(onLoadMore).toHaveBeenCalledWith('90', { preserveRange: true });
     });
 
     it('has no comparison action without a host callback', () => {

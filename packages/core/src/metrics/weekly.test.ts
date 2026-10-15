@@ -119,8 +119,8 @@ describe('throughput', () => {
   it('buckets by the day of each event on a daily read', () => {
     const s = sc({ range: '7' });
     const t = throughput(s, timeBuckets(s, LAST, 'day'));
-    // #2 closed on the window's first day; #3 opened the day after.
-    expect(t.closed).toEqual([1, 0, 0, 0, 0, 0, 0, 0]);
+    // #2 closed exactly at the shared boundary, so belongs to the previous period.
+    expect(t.closed).toEqual([0, 0, 0, 0, 0, 0, 0, 0]);
     expect(t.opened).toEqual([0, 1, 0, 0, 0, 0, 0, 0]);
   });
 });

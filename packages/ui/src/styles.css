@@ -286,6 +286,7 @@ header.page .spacer {
 select.dim:focus-visible,
 label.check:has(input:focus-visible),
 .brief-load:focus-visible,
+.period-load:focus-visible,
 thead th .sort:focus-visible,
 .wrap a:focus-visible {
   outline: none;
@@ -534,12 +535,12 @@ label.check:hover {
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 }
 /*
- * Each tile spans three shared rows (label, figure, note), so every figure in
+ * Each tile spans four shared rows (label, figure, change, note), so every figure in
  * a row sits on one baseline however its label wraps.
  */
 .tiles > .tile {
   display: grid;
-  grid-row: span 3;
+  grid-row: span 4;
   grid-template-rows: subgrid;
   row-gap: 0;
 }
@@ -586,6 +587,20 @@ label.check:hover {
   font: 400 12px/1.45 var(--font-mono);
   color: var(--ink-2);
   margin-top: 10px;
+}
+.tile .delta {
+  font: 400 12px/1.45 var(--font-mono);
+  color: var(--ink-2);
+  margin-top: 8px;
+}
+.tile .delta:empty {
+  margin-top: 0;
+}
+.tile .delta[data-trend='faster'] {
+  color: var(--good);
+}
+.tile .delta[data-trend='slower'] {
+  color: var(--warning);
 }
 
 /* ---- legend: a swatch drawn with the series' own dash pattern, then its name ---- */
@@ -954,7 +969,25 @@ ul.insights .ico {
 .brief-compare .desc {
   margin: 0;
 }
-.brief-load {
+.period-comparison {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: 16px;
+}
+.period-comparison .desc {
+  margin: 0;
+}
+.period-comparison > .desc:first-child {
+  flex-basis: 100%;
+}
+.period-comparison code {
+  font: 400 12px/1.5 var(--font-mono);
+  overflow-wrap: anywhere;
+}
+.brief-load,
+.period-load {
   font: inherit;
   font-size: 13px;
   font-weight: 500;
@@ -965,10 +998,12 @@ ul.insights .ico {
   padding: 0 12px;
   cursor: pointer;
 }
-.brief-load:hover {
+.brief-load:hover,
+.period-load:hover {
   background: var(--wash);
 }
-.brief-load[aria-busy='true'] {
+.brief-load[aria-busy='true'],
+.period-load[aria-busy='true'] {
   color: var(--muted);
   cursor: progress;
 }
@@ -1190,6 +1225,7 @@ ul.insights .ico {
   select.dim,
   label.check,
   .brief-load,
+  .period-load,
   .brief-toggle {
     min-height: 44px;
   }

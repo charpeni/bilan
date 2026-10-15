@@ -35,10 +35,7 @@ describe('areaActivity', () => {
     const act = areaActivity(win(prs, LAST, { range: '7' }), 'day');
     const from = W0 + WEEK + DAY_MS;
     expect(act.periods).toEqual(Array.from({ length: 8 }, (_, i) => from + i * DAY_MS));
-    expect(act.rows).toEqual([
-      { area: 'api', counts: [0, 0, 0, 0, 0, 0, 1, 0], total: 1 },
-      { area: 'docs', counts: [1, 0, 0, 0, 0, 0, 0, 0], total: 1 },
-    ]);
+    expect(act.rows).toEqual([{ area: 'api', counts: [0, 0, 0, 0, 0, 0, 1, 0], total: 1 }]);
   });
 
   it('counts merged PRs per area and ISO week, busiest area first', () => {

@@ -12,5 +12,5 @@ export interface DashboardContext {
   state: FilterState;
   tip: Tooltip;
   /** Ask the host for a deeper sync; set only when the host can do it (see `MountOptions.onLoadMore`). */
-  requestMore?: ((range: Range) => void) | undefined;
+  requestMore?: ((range: Range, preserveRange?: boolean) => void) | undefined;
 }
