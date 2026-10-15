@@ -24,11 +24,14 @@ import {
 } from '@bilan/core';
 
 import { DASH, barChart, columnChart, heatmap, legend, timeChart } from './charts.ts';
+import { comparisonText, periodComparison } from './comparison.ts';
 import { person, prLink, svgPerson } from './person.ts';
+import { canCompare } from './range.ts';
 import { table } from './table.ts';
 import { HOUR, compact, css, dur, el, fmtDate, fmtUtc, num, pctFmt, plural } from './utils.ts';
 
 import type { Bin } from './charts.ts';
+import type { ComparisonKind } from './comparison.ts';
 import type { DashboardContext } from './state.ts';
 import type { Col } from './table.ts';
 import type {
@@ -147,24 +150,73 @@ export function render(ctx: DashboardContext): void {
 
   /* ---- headline tiles ---- */
   const H = headline(w);
+  const previous =
+    !data.interrupted && canCompare(data.coverageSince, LAST, ctx.state.range)
+      ? windowed(scope(prs, bots, ctx.state, w.from), w.from)
+      : null;
+  const B = previous ? headline(previous) : null;
   const tiles = el('div', { class: 'tiles' });
   // The frame clips the tiles' outer separators, so a short last row is plain surface.
   const frame = el('div', { class: 'tiles-frame' }, [tiles]);
   // Seven equal readings: the brief's sentence above them provides the lead.
-  const tile = (k: string, v: string, d: string): void => {
+  const tile = (
+    k: string,
+    now: number | null,
+    before: number | null | undefined,
+    d: string,
+    kind: ComparisonKind = 'count',
+  ): void => {
     const t = el('div', { class: 'tile' }, [el('div', { class: 'k', text: k })]);
-    t.append(el('div', { class: 'v', text: v }));
+    t.append(el('div', { class: 'v', text: kind === 'count' ? num(now) : dur(now) }));
+    if (before !== undefined) {
+      t.append(
+        el('div', {
+          class: 'delta',
+          text: comparisonText(now, before, kind),
+          'data-trend':
+            kind === 'speed' && now !== null && before !== null && before > 0
+              ? now < before
+                ? 'faster'
+                : now > before
+                  ? 'slower'
+                  : undefined
+              : undefined,
+        }),
+      );
+    } else {
+      t.append(el('div', { class: 'delta' }));
+    }
     if (d) t.append(el('div', { class: 'd', text: d }));
     tiles.append(t);
   };
-  tile('PRs opened', H.opened.toLocaleString(), plural(H.authors, 'author'));
-  tile('Merged', H.merged.toLocaleString(), `${pctFmt(H.mergedShare)} of resolved`);
-  tile('Closed unmerged', H.rejected.toLocaleString(), `${H.stillOpen} still open`);
-  tile('Median time to merge', dur(H.medMerge), `p90 ${dur(H.p90Merge)} · from ready`);
-  tile('Median time to first review', dur(H.medFirst), `${pctFmt(H.reviewedShare)} ever reviewed`);
-  tile('Median time in draft', dur(H.medReady), `${pctFmt(H.draftShare)} opened as draft`);
-  tile('Reviews given', H.reviews.toLocaleString(), plural(H.reviewers, 'reviewer'));
-  app.append(frame);
+  tile('PRs opened', H.opened, B?.opened, plural(H.authors, 'author'));
+  tile('Merged', H.merged, B?.merged, `${pctFmt(H.mergedShare)} of resolved`);
+  tile('Closed unmerged', H.rejected, B?.rejected, `${H.stillOpen} still open`);
+  tile(
+    'Median time to merge',
+    H.medMerge,
+    B?.medMerge,
+    `p90 ${dur(H.p90Merge)} · from ready`,
+    'speed',
+  );
+  const reviewed = (items: typeof w.readied): string =>
+    `${items.filter((p) => p.toFirst !== null).length}/${items.length} reviewed`;
+  tile(
+    'Median time to first review',
+    H.medFirst,
+    B?.medFirst,
+    `${reviewed(w.readied)}${previous ? ` · was ${reviewed(previous.readied)}` : ''}`,
+    'speed',
+  );
+  tile(
+    'Median time in draft',
+    H.medReady,
+    B?.medReady,
+    `${pctFmt(H.draftShare)} opened as draft`,
+    'duration',
+  );
+  tile('Reviews given', H.reviews, B?.reviews, plural(H.reviewers, 'reviewer'));
+  app.append(periodComparison(ctx), frame);
 
   const grid = el('div', { class: 'grid' });
   app.append(grid);

@@ -1,14 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  BRIEF_COMPARE_DAYS,
-  COLLAPSED_PEEK,
-  canCompare,
-  collapsedHeight,
-  firstRowCount,
-  toggleText,
-} from './brief.ts';
-import { COVERAGE_SLACK, coversDays, isCovered } from './range.ts';
+import { COLLAPSED_PEEK, collapsedHeight, firstRowCount, toggleText } from './brief.ts';
+import { COVERAGE_SLACK, canCompare, comparisonRange, coversDays, isCovered } from './range.ts';
 import { DAY } from './utils.ts';
 
 const LAST = Date.UTC(2026, 3, 13, 11);
@@ -57,15 +50,32 @@ describe('isCovered', () => {
 
 describe('canCompare', () => {
   it('needs the whole previous 30-day period, with no slack', () => {
-    expect(BRIEF_COMPARE_DAYS).toBe(60);
-    expect(canCompare(null, LAST)).toBe(true);
-    expect(canCompare(daysAgo(60), LAST)).toBe(true);
-    expect(canCompare(daysAgo(61), LAST)).toBe(true);
+    expect(canCompare(null, LAST, '30')).toBe(true);
+    expect(canCompare(daysAgo(60), LAST, '30')).toBe(true);
+    expect(canCompare(daysAgo(61), LAST, '30')).toBe(true);
     // 59 days is a truncated previous period: the delta would be against 29 days.
-    expect(canCompare(daysAgo(59), LAST)).toBe(false);
-    expect(canCompare(daysAgo(60, 1), LAST)).toBe(false);
-    expect(canCompare(daysAgo(30), LAST)).toBe(false);
-    expect(canCompare('not a date', LAST)).toBe(false);
+    expect(canCompare(daysAgo(59), LAST, '30')).toBe(false);
+    expect(canCompare(daysAgo(60, 1), LAST, '30')).toBe(false);
+    expect(canCompare(daysAgo(30), LAST, '30')).toBe(false);
+    expect(canCompare('not a date', LAST, '30')).toBe(false);
+  });
+
+  it.each(['7', '30', '90', '180'])('requires two whole %s-day periods', (range) => {
+    const days = Number(range) * 2;
+    expect(canCompare(daysAgo(days), LAST, range)).toBe(true);
+    expect(canCompare(daysAgo(days, 1), LAST, range)).toBe(false);
+    expect(canCompare(null, LAST, range)).toBe(true);
+  });
+
+  it('never compares all time, even on full history', () => {
+    expect(canCompare(null, LAST, 'all')).toBe(false);
+  });
+
+  it('chooses sync depths with room for time spent syncing', () => {
+    expect(comparisonRange('7')).toBe('30');
+    expect(comparisonRange('30')).toBe('90');
+    expect(comparisonRange('90')).toBe('all');
+    expect(comparisonRange('180')).toBe('all');
   });
 });
 

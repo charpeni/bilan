@@ -8,7 +8,7 @@ import { el, fmtDate, holdHeight } from './utils.ts';
 
 import type { Range } from './range.ts';
 import type { DashboardContext } from './state.ts';
-import type { Payload } from '@bilan/core';
+import type { FilterState, Payload } from '@bilan/core';
 
 export type Theme = 'auto' | 'light' | 'dark';
 export type { Range } from './range.ts';
@@ -23,6 +23,8 @@ export interface MountOptions {
   themeControl?: boolean;
   /** Range pressed at mount; falls back to `'30'` when omitted or not covered by the payload. */
   initialRange?: Range;
+  /** Restore the selection after a sync. `initialRange`, when supplied, takes precedence. */
+  initialFilters?: FilterState;
   /**
    * Called when a range the payload does not cover is clicked; the host is
    * expected to sync deeper and mount again. Without it, the dashboard shows a
@@ -30,12 +32,14 @@ export interface MountOptions {
    * range button stays busy until it settles, and a rejection is shown next to
    * the range buttons (with a link when it is a `LoadMoreError` carrying one).
    */
-  onLoadMore?: (range: Range) => void | Promise<void>;
+  onLoadMore?: (range: Range, options?: { preserveRange: boolean }) => void | Promise<void>;
 }
 
 export interface Mounted {
   /** The range on screen, so a host that mounts again can keep it. */
   range(): Range;
+  /** A copy of the selection, for hosts that replace a snapshot after syncing. */
+  filters(): FilterState;
   /** Replace the text beside the range buttons while a load is running (progress from the host). */
   status(text: string): void;
   destroy(): void;
@@ -118,15 +122,13 @@ export function mount(root: HTMLElement, payload: Payload, options: MountOptions
     prs,
     bots: new Set(payload.bots),
     last: Number.isFinite(synced) ? synced : lastActivity(prs),
-    state: createFilterState(),
+    state: { ...createFilterState(), range: DEFAULT_RANGE, ...options.initialFilters },
     tip: createTooltip(must<HTMLElement>('#tt')),
   };
   const { state, bots, last } = ctx;
   const covered = (range: Range): boolean => isCovered(payload.coverageSince, last, range);
-  state.range =
-    options.initialRange !== undefined && covered(options.initialRange)
-      ? options.initialRange
-      : DEFAULT_RANGE;
+  const initialRange = options.initialRange ?? state.range;
+  state.range = isRange(initialRange) && covered(initialRange) ? initialRange : DEFAULT_RANGE;
 
   const html = document.documentElement;
   const prevTheme = html.dataset.theme;
@@ -161,6 +163,9 @@ export function mount(root: HTMLElement, payload: Payload, options: MountOptions
     }
     personSel.append(el('option', { value: '', text: 'Everyone' }));
     for (const who of opts.people) personSel.append(el('option', { value: who, text: who }));
+    areaSel.value = state.area;
+    personSel.value = state.person;
+    hideBots.checked = state.hideBots;
   }
 
   const press = (value: string, attr: string): void => {
@@ -171,7 +176,10 @@ export function mount(root: HTMLElement, payload: Payload, options: MountOptions
   press(theme, 'data-theme-set');
 
   const app = must<HTMLElement>('#app');
-  const draw = (): void => holdHeight(app, () => render(ctx));
+  const draw = (): void => {
+    holdHeight(app, () => render(ctx));
+    setBusy(loading);
+  };
 
   // Ranges the payload cannot back stay clickable and say so (a "+" and a
   // description), but never become the active range until the host loads them.
@@ -216,10 +224,12 @@ export function mount(root: HTMLElement, payload: Payload, options: MountOptions
     }
   };
   let destroyed = false;
-  const requestMore = (range: Range): void => {
+  const requestMore = (range: Range, preserveRange = false): void => {
     if (options.onLoadMore) {
       if (loading !== null) return;
-      const pending = options.onLoadMore(range);
+      const pending = preserveRange
+        ? options.onLoadMore(range, { preserveRange: true })
+        : options.onLoadMore(range);
       if (!(pending instanceof Promise)) return;
       setBusy(range);
       // Progress is reported by the host page (a notice pinned under the
@@ -321,6 +331,7 @@ export function mount(root: HTMLElement, payload: Payload, options: MountOptions
 
   return {
     range: (): Range => (isRange(state.range) ? state.range : DEFAULT_RANGE),
+    filters: (): FilterState => ({ ...state }),
     status(text: string): void {
       if (loading !== null) note(text, 'busy');
     },

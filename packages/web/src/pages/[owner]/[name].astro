@@ -331,6 +331,7 @@ const chipTitle =
 
           function render(payload: Payload, initialRange?: Range): void {
             const range = initialRange ?? mounted?.range();
+            const filters = mounted?.filters();
             // A refresh can land while the reader is far down the page: the
             // dashboard it replaces keeps its height until the new one is drawn.
             holdHeight(root, () => {
@@ -339,7 +340,8 @@ const chipTitle =
                 theme: currentTheme(),
                 themeControl: false,
                 ...(range === undefined ? {} : { initialRange: range }),
-                onLoadMore: (next) => loadMore(next),
+                ...(filters === undefined ? {} : { initialFilters: filters }),
+                onLoadMore: (next, options) => loadMore(next, options?.preserveRange),
               });
             });
             shown = payload;
@@ -408,7 +410,7 @@ const chipTitle =
           }
 
           /** Ask for a deeper sync; the dashboard shows the busy state and any error beside the range buttons. */
-          async function loadMore(range: Range): Promise<void> {
+          async function loadMore(range: Range, preserveRange = false): Promise<void> {
             if (!signedIn) {
               throw new LoadMoreError('Syncing more history needs a GitHub sign-in.', {
                 label: 'Sign in',
@@ -426,7 +428,7 @@ const chipTitle =
             try {
               const payload = await syncAndWait(DEPTH[range], (view) => progressNote(loadingText(range), view));
               hideNotice();
-              render(payload, range);
+              render(payload, preserveRange ? undefined : range);
             } finally {
               busy = false;
             }

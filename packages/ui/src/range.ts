@@ -47,6 +47,14 @@ export function isCovered(coverageSince: string | null, last: number, range: Ran
   return coversDays(coverageSince, last, Number(range), COVERAGE_SLACK);
 }
 
+/** A comparison needs both complete periods, without the range buttons' slack. */
+export const canCompare = (coverageSince: string | null, last: number, range: string): boolean =>
+  range !== 'all' && coversDays(coverageSince, last, Number(range) * 2);
+
+/** Leave room for time spent syncing; an exactly-sized sync can fall short. */
+export const comparisonRange = (range: string): Range =>
+  RANGES.find((r) => r === 'all' || Number(r) > Number(range) * 2) ?? 'all';
+
 /** The `--since` date (UTC `YYYY-MM-DD`) a CLI re-run needs to cover `range`. */
 export const rangeSinceDate = (range: Range, last: number): string | null =>
   range === 'all' ? null : new Date(rangeStart(range, last)).toISOString().slice(0, 10);

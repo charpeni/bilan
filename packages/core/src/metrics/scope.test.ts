@@ -109,10 +109,37 @@ describe('scope', () => {
   it('measures the window back from the last activity', () => {
     const s = scope(prs, bots, state({ range: '30' }), LAST);
     expect(s.from).toBe(LAST - 30 * DAY_MS);
-    expect(s.inWin(LAST - 30 * DAY_MS)).toBe(true);
+    expect(s.inWin(LAST - 30 * DAY_MS)).toBe(false);
+    expect(s.inWin(LAST - 30 * DAY_MS + 1)).toBe(true);
+    expect(s.inWin(LAST)).toBe(true);
+    expect(s.inWin(LAST + 1)).toBe(false);
     expect(s.inWin(LAST - 30 * DAY_MS - 1)).toBe(false);
     expect(s.inWin(null)).toBe(false);
     expect(s.inWin(undefined)).toBe(false);
+  });
+
+  it('assigns boundary events to exactly one of two adjacent periods', () => {
+    const boundary = LAST - 7 * DAY_MS;
+    const events = derive(
+      [boundary - 7 * DAY_MS, boundary, boundary + 1, LAST, LAST + 1].map((at, i) =>
+        payloadPr({
+          n: i + 1,
+          c: at,
+          r: at,
+          m: at,
+          x: at,
+          rv: [['bob', 'APPROVED', at]],
+        }),
+      ),
+    );
+    const current = windowed(scope(events, bots, state({ range: '7' }), LAST), LAST);
+    const previous = windowed(scope(events, bots, state({ range: '7' }), boundary), boundary);
+    for (const key of ['opened', 'merged', 'readied'] as const) {
+      expect(current[key].map((p) => p.n)).toEqual([3, 4]);
+      expect(previous[key].map((p) => p.n)).toEqual([2]);
+    }
+    expect(current.winReviews.map((r) => r.pr.n)).toEqual([3, 4]);
+    expect(previous.winReviews.map((r) => r.pr.n)).toEqual([2]);
   });
 });
 

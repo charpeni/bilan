@@ -204,6 +204,25 @@ local Wrangler state instead of production, or `--help` for the command options.
 
 ## What the numbers mean
 
+The 7-, 30-, 90-, and 180-day views compare headline stats with the immediately
+preceding period of the same length. Tiles show the previous value and the
+percentage change; review and merge times say whether they are faster or slower.
+PR counts stay neutral: less activity is not necessarily better or worse. First
+review time also shows how many ready PRs have received a review in each period.
+The briefing above the controls always summarises the latest 30 days, independently
+of the filters. The stats below follow the selected range, area, contributor, and
+bot filters.
+Dates use UTC; each period excludes its starting instant and includes its end,
+so an event on the shared boundary belongs only to the previous period.
+
+Comparisons require both complete periods: 14 days of history for a 7-day view,
+60 for 30, 180 for 90, and 360 for 180. When history is missing, the web dashboard
+offers a deeper sync and keeps the selected range and filters; standalone reports
+show a CLI command. The sync uses a supported depth beyond the required history
+to allow for time spent syncing (full history for 90- and 180-day comparisons).
+Interrupted snapshots and all-time views show no comparison. A missing duration
+sample shows as unavailable, and a count rising from zero is labelled “New”.
+
 | Metric                   | Window anchor   | Definition                                                                   |
 | ------------------------ | --------------- | ---------------------------------------------------------------------------- |
 | PRs opened               | created         |                                                                              |

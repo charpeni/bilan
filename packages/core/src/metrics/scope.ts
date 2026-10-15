@@ -55,7 +55,9 @@ export function scope(
   const base = prs.filter(
     (p) => (!state.hideBots || !p.bot) && (!state.area || p.ar.includes(state.area)),
   );
-  const inWin: InWindow = (t): t is number => t !== null && t !== undefined && t >= from;
+  // Adjacent periods share a boundary, but never an event: (from, last].
+  const inWin: InWindow = (t): t is number =>
+    t !== null && t !== undefined && t > from && t <= last;
   const focus = state.person || null;
   const authored = focus ? base.filter((p) => p.a === focus) : base;
   const skip: ReadonlySet<string> = state.hideBots ? bots : new Set();
