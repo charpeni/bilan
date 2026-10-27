@@ -34,7 +34,7 @@ declare global {
 
   namespace App {
     interface Locals extends Runtime {
-      /** Set by `src/middleware.ts` from the `bilan_session` cookie; null when signed out. */
+      /** Set by `src/middleware.ts` from the session cookie (`lib/session.ts`); null when signed out. */
       user: SessionUser | null;
     }
   }

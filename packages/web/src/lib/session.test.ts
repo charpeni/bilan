@@ -4,7 +4,11 @@ import {
   clearedCookieOptions,
   generateSessionId,
   isPlainHttp,
+  PLAIN_HTTP_SESSION_COOKIE,
+  readSessionCookie,
+  SESSION_COOKIE,
   SESSION_TTL_MS,
+  sessionCookieName,
   sessionCookieOptions,
   sessionExpiry,
 } from './session.ts';
@@ -52,5 +56,49 @@ describe('cookie options', () => {
     expect(isPlainHttp(new URL('http://127.0.0.1/'))).toBe(true);
     expect(isPlainHttp(new URL('http://192.168.4.244:8788/'))).toBe(true);
     expect(isPlainHttp(new URL('https://bilan.example/'))).toBe(false);
+  });
+});
+
+/** A minimal `AstroCookies.get` over fixed values. */
+function jar(values: Record<string, string>) {
+  return {
+    get: (name: string) => {
+      const value = values[name];
+      return value === undefined ? undefined : { value };
+    },
+  };
+}
+
+describe('session cookie name', () => {
+  const https = new URL('https://bilan.example/x');
+  const http = new URL('http://localhost:8788/x');
+
+  it('is __Host- over https and plain over http, where __Host- cannot be set', () => {
+    expect(SESSION_COOKIE).toBe('__Host-bilan_session');
+    expect(sessionCookieName(https)).toBe(SESSION_COOKIE);
+    expect(sessionCookieName(http)).toBe(PLAIN_HTTP_SESSION_COOKIE);
+  });
+
+  it('prefers the __Host- cookie over https', () => {
+    const cookies = jar({ [SESSION_COOKIE]: 'new', [PLAIN_HTTP_SESSION_COOKIE]: 'old' });
+    expect(readSessionCookie(https, cookies)).toEqual({ sessionId: 'new', legacy: false });
+  });
+
+  it('accepts a session from before the rename over https, flagged for moving', () => {
+    const cookies = jar({ [PLAIN_HTTP_SESSION_COOKIE]: 'old' });
+    expect(readSessionCookie(https, cookies)).toEqual({ sessionId: 'old', legacy: true });
+  });
+
+  it('reads only the plain name over http', () => {
+    expect(readSessionCookie(http, jar({ [PLAIN_HTTP_SESSION_COOKIE]: 'dev' }))).toEqual({
+      sessionId: 'dev',
+      legacy: false,
+    });
+    expect(readSessionCookie(http, jar({ [SESSION_COOKIE]: 'stray' }))).toBeNull();
+  });
+
+  it('is null without a session cookie', () => {
+    expect(readSessionCookie(https, jar({}))).toBeNull();
+    expect(readSessionCookie(https, jar({ [SESSION_COOKIE]: '' }))).toBeNull();
   });
 });

@@ -6,7 +6,13 @@ import { getDb } from './lib/db.ts';
 import { githubUnavailable, json } from './lib/http.ts';
 import { loginHref } from './lib/oauth.ts';
 import { secureResponse } from './lib/response-security.ts';
-import { SESSION_COOKIE } from './lib/session.ts';
+import {
+  clearedCookieOptions,
+  PLAIN_HTTP_SESSION_COOKIE,
+  readSessionCookie,
+  SESSION_COOKIE,
+  sessionCookieOptions,
+} from './lib/session.ts';
 import { GithubUnavailableError, ReauthRequiredError } from './lib/tokens.ts';
 
 /**
@@ -18,15 +24,24 @@ import { GithubUnavailableError, ReauthRequiredError } from './lib/tokens.ts';
  */
 const session = defineMiddleware(async (context, next) => {
   context.locals.user = null;
-  const sessionId = context.cookies.get(SESSION_COOKIE)?.value;
-  if (sessionId) {
-    const row = await getSessionUser(getDb(env), sessionId, new Date().toISOString());
+  const cookie = readSessionCookie(context.url, context.cookies);
+  if (cookie) {
+    const row = await getSessionUser(getDb(env), cookie.sessionId, new Date().toISOString());
     if (row) {
       context.locals.user = {
         id: row.id,
         login: row.login,
         avatarUrl: row.avatarUrl,
       };
+      // Move a session from before the `__Host-` name under it, keeping its expiry.
+      if (cookie.legacy) {
+        context.cookies.set(
+          SESSION_COOKIE,
+          cookie.sessionId,
+          sessionCookieOptions(context.url, row.expiresAt),
+        );
+        context.cookies.delete(PLAIN_HTTP_SESSION_COOKIE, clearedCookieOptions(context.url));
+      }
     }
   }
   try {
