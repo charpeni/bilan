@@ -1,0 +1,83 @@
+name: Preview
+
+# Each pull request from a branch of this repository gets its own Alchemy stage
+# (`pr-<number>`): empty D1, R2, KV, and Workflow, served on workers.dev and
+# never under bilan.dev, so a preview cannot set cookies production reads.
+# Closing the pull request destroys the stage.
+#
+# The `preview` environment holds CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID,
+# PREVIEW_GITHUB_CLIENT_ID and PREVIEW_GITHUB_CLIENT_SECRET (the separate
+# bilan-preview GitHub App, wildcard callback on the workers.dev subdomain), and
+# PREVIEW_KEY_SEED (derives each stage's TOKEN_ENCRYPTION_KEY). Its variables
+# are PREVIEW_GITHUB_APP_SLUG and WORKERS_SUBDOMAIN (`<account>.workers.dev`).
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize, closed]
+
+concurrency:
+  group: preview-${{ github.event.number }}
+  cancel-in-progress: false
+
+jobs:
+  preview:
+    # Fork pull requests never deploy: their code would run with these secrets.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      pull-requests: write
+    runs-on: ubuntu-latest
+    environment:
+      name: preview
+      url: ${{ github.event.action != 'closed' && format('https://bilan-pr-{0}.{1}', github.event.number, vars.WORKERS_SUBDOMAIN) || '' }}
+    env:
+      CI: 'true'
+      STAGE: pr-${{ github.event.number }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      GITHUB_CLIENT_ID: ${{ secrets.PREVIEW_GITHUB_CLIENT_ID }}
+      GITHUB_CLIENT_SECRET: ${{ secrets.PREVIEW_GITHUB_CLIENT_SECRET }}
+      GITHUB_APP_SLUG: ${{ vars.PREVIEW_GITHUB_APP_SLUG }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # No pnpm store cache: this job holds the Cloudflare credentials.
+      - name: Install pnpm, Node.js, and dependencies
+        uses: pnpm/setup@fbda4c85fc2e1e08721cd8763afea8f48d60f024 # v3.0.0
+        with:
+          node-version-file: '.nvmrc'
+
+      # The same key on every push to this pull request, so signed-in
+      # previews keep working, and a different one per pull request.
+      - name: Derive the stage's token encryption key
+        env:
+          PREVIEW_KEY_SEED: ${{ secrets.PREVIEW_KEY_SEED }}
+        run: |
+          key=$(printf '%s' "$STAGE" | openssl dgst -sha256 -hmac "$PREVIEW_KEY_SEED" -binary | base64)
+          echo "::add-mask::$key"
+          echo "TOKEN_ENCRYPTION_KEY=$key" >> "$GITHUB_ENV"
+
+      - name: Build workspace packages
+        if: github.event.action != 'closed'
+        run: pnpm exec turbo run build --filter=@bilan/web^...
+
+      - name: Deploy
+        if: github.event.action != 'closed'
+        run: pnpm exec alchemy deploy --stage "$STAGE" --yes --no-input
+
+      - name: Comment the preview URL
+        if: github.event.action != 'closed'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          URL: https://bilan-${{ env.STAGE }}.${{ vars.WORKERS_SUBDOMAIN }}
+        run: |
+          gh pr comment "${{ github.event.number }}" --repo "$GITHUB_REPOSITORY" \
+            --edit-last --create-if-none \
+            --body "Preview: $URL (commit ${{ github.event.pull_request.head.sha }})"
+
+      - name: Destroy
+        if: github.event.action == 'closed'
+        run: pnpm exec alchemy destroy --stage "$STAGE" --yes --no-input

@@ -4,6 +4,7 @@ dist/
 # generated files
 .astro/
 .wrangler/
+.alchemy/
 .turbo/
 /packages/cli/README.md
 /packages/cli/LICENSE

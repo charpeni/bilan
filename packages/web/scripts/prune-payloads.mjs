@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
-import { getPlatformProxy, unstable_readConfig as readConfig } from 'wrangler';
+import { getPlatformProxy } from 'wrangler';
 
 import { runPayloadPruning } from '../src/lib/payload-pruning.ts';
 
@@ -31,12 +31,23 @@ Prints candidate keys and compressed sizes, followed by a summary in bytes.`);
   await main();
 }
 
+/**
+ * Production's D1 and R2, as named in alchemy.run.ts's `prod` stage. Wrangler
+ * only uses them here to reach the two resources for this maintenance task.
+ */
+const PRODUCTION = {
+  database: {
+    binding: 'DB',
+    database_name: 'bilan',
+    database_id: 'a706a39a-208a-4e35-a8f0-cb7ed1c029a4',
+  },
+  bucket: { binding: 'PAYLOADS', bucket_name: 'bilan-payloads' },
+};
+
 async function main() {
   const webRoot = fileURLToPath(new URL('..', import.meta.url));
-  const config = readConfig({ config: join(webRoot, 'wrangler.jsonc') });
-  const database = config.d1_databases.find((binding) => binding.binding === 'DB');
-  const bucket = config.r2_buckets.find((binding) => binding.binding === 'PAYLOADS');
-  if (!database || !bucket) throw new Error('Expected DB and PAYLOADS bindings in wrangler.jsonc.');
+  const database = PRODUCTION.database;
+  const bucket = PRODUCTION.bucket;
 
   console.log(
     `${values.apply ? 'APPLY' : 'DRY RUN'} (${values.local ? 'local' : 'production'}): ${database.database_name} / ${bucket.bucket_name}`,
@@ -51,8 +62,10 @@ async function main() {
       configPath,
       JSON.stringify({
         name: 'bilan-payload-pruning',
-        account_id: config.account_id,
-        compatibility_date: config.compatibility_date,
+        ...(process.env.CLOUDFLARE_ACCOUNT_ID
+          ? { account_id: process.env.CLOUDFLARE_ACCOUNT_ID }
+          : {}),
+        compatibility_date: '2026-07-24',
         d1_databases: [{ ...database, remote: !values.local }],
         r2_buckets: [{ ...bucket, remote: !values.local }],
       }),

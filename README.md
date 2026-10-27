@@ -123,28 +123,23 @@ is released. If the engine cannot report its status, the reservation is kept.
    team reviewers), "Request user authorization during installation" enabled,
    expiring user tokens enabled, no webhook, and the callback URL of your
    deployment plus `http://localhost:8788/auth/github/callback` for local use.
-2. Put the app's slug in `GITHUB_APP_SLUG` in `packages/web/wrangler.jsonc`.
-3. Create the Cloudflare resources and record their ids in `wrangler.jsonc`:
+2. Copy `.env.example` to `.env` at the repository root and fill it in: the
+   app's client id, client secret, and slug, and a `TOKEN_ENCRYPTION_KEY`
+   (`openssl rand -base64 32`).
+3. Deploy. The infrastructure is declared in `alchemy.run.ts`
+   ([Alchemy](https://alchemy.run)): the D1 database (migrations are applied on
+   every deploy), the R2 bucket, the KV namespace, the sync Workflow, and two
+   Workers. `bilan` serves the Astro app; `bilan-sync` hosts the Workflow and
+   the nightly cron, since Astro owns the app Worker's entry.
 
    ```sh
-   cd packages/web
-   npx wrangler d1 create bilan
-   npx wrangler r2 bucket create bilan-payloads
-   npx wrangler kv namespace create CACHE
+   pnpm alchemy profile edit --add Cloudflare   # once: sign in to Cloudflare
+   pnpm run deploy --stage prod
    ```
 
-4. Set the secrets and deploy:
-
-   ```sh
-   npx wrangler secret put GITHUB_CLIENT_ID
-   npx wrangler secret put GITHUB_CLIENT_SECRET
-   openssl rand -base64 32 | npx wrangler secret put TOKEN_ENCRYPTION_KEY
-   npx wrangler d1 migrations apply bilan --remote
-   cd ../.. && pnpm run deploy
-   ```
-
-   The deploy runs through turbo, which builds the dashboard and its
-   dependencies before `wrangler deploy`.
+   The `prod` stage pins the production names (`bilan.dev`, the `bilan` D1
+   database, the `bilan-payloads` bucket); fork it before deploying your own.
+   Any other stage creates its own resources under generated names.
 
    `GITHUB_TOKEN`, a classic token with no scopes, is optional: it is used as a
    fallback for public repositories a user token cannot reach, and to confirm a
@@ -153,17 +148,25 @@ is released. If the engine cannot report its status, the reservation is kept.
    15 minutes after a signed-in viewer's check confirmed it. A token GitHub
    rejects (expired or revoked) is logged and treated as not configured.
 
-Every push to `main` that passes CI is deployed by the `Deploy` workflow,
-which applies pending D1 migrations and then runs `wrangler deploy`. It needs
-two repository secrets: `CLOUDFLARE_API_TOKEN` (the "Edit Cloudflare Workers"
-template plus D1 Edit) and `CLOUDFLARE_ACCOUNT_ID`.
-The deploy gate verifies that the triggering run was a push to the canonical
-repository's `main`, not a pull request or a fork's branch of the same name.
-Cloudflare credentials are available only to the migration and deploy steps.
+Every push to `main` that passes CI is deployed to the `prod` stage by the
+`Deploy` workflow. Its `production` environment holds `CLOUDFLARE_API_TOKEN`,
+`CLOUDFLARE_ACCOUNT_ID`, and the app's secrets (see the workflow); every deploy
+sets the Workers' secrets from them. The deploy gate verifies that the
+triggering run was a push to the canonical repository's `main`, not a pull
+request or a fork's branch of the same name. Cloudflare credentials are
+available only to the deploy step.
 
-For local development, copy `packages/web/.dev.vars.example` to `.dev.vars`,
-fill in the values, run `npx wrangler d1 migrations apply bilan --local`, then
-`pnpm --filter @bilan/web dev`. Workflows require the Workers Paid plan.
+Each pull request from a branch of this repository is deployed by the `Preview`
+workflow to its own stage, `pr-<number>`, with empty storage, at
+`https://bilan-pr-<number>.<account>.workers.dev`, and destroyed when the pull
+request closes. Previews sign in through a separate GitHub App whose callback
+URL matches any `workers.dev` subdomain of the account; fork pull requests are
+never deployed.
+
+For local development, fill in `.env` as above and run `pnpm dev`. It runs
+both Workers in workerd with local D1, R2, KV, and Workflows on
+`http://localhost:8788`, and needs no Cloudflare account. Workflows require
+the Workers Paid plan in production.
 
 The built-in examples are regenerated with `pnpm examples:build`, which needs
 a GitHub token.
@@ -181,7 +184,8 @@ left alone. The existing 90-day inactive private repository
 cleanup still removes those repositories and all their snapshots.
 
 To review the backlog from the repository root, authenticate with Wrangler
-for the Cloudflare account configured in `packages/web/wrangler.jsonc`, then run:
+(`wrangler login`, or `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`) for
+the production account, then run:
 
 ```sh
 pnpm --filter @bilan/web payloads:prune
@@ -266,7 +270,7 @@ Draft transitions are fetched separately from review requests, and review-reques
 ```sh
 pnpm install
 pnpm check          # oxfmt, oxlint, tsc, vitest across the workspace
-pnpm build          # bundles the dashboard, the CLI, and the web app
+pnpm build          # bundles the dashboard and the CLI (Alchemy builds the web app)
 node packages/cli/bin/bilan.mjs owner/name --open
 ```
 

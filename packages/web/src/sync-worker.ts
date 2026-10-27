@@ -1,12 +1,18 @@
-import { handle } from '@astrojs/cloudflare/handler';
-
 import { runPayloadPruning } from './lib/payload-pruning.ts';
 import { runRetention } from './lib/retention.ts';
 
+/**
+ * The `bilan-sync` Worker: hosts the sync Workflow and the nightly cron. The
+ * Astro Worker owns its own entry, so neither can live there; it reaches the
+ * Workflow through a cross-script binding (see `alchemy.run.ts`).
+ */
 export { SyncRepoWorkflow } from './workflows/sync-repo.ts';
 
 export default {
-  fetch: handle,
+  /** Nothing is served here; pages and APIs are on the Astro Worker. */
+  fetch() {
+    return new Response('Not found', { status: 404 });
+  },
 
   /**
    * Nightly: drop private repos nobody has opened in 90 days and sweep expired

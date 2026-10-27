@@ -1,8 +1,12 @@
 name: Deploy
 
-# Every push to main that passes CI is deployed to Cloudflare. Needs two
-# repository secrets: CLOUDFLARE_API_TOKEN (Edit Cloudflare Workers template
-# plus D1 Edit) and CLOUDFLARE_ACCOUNT_ID.
+# Every push to main that passes CI is deployed to Cloudflare with Alchemy
+# (`alchemy.run.ts`, stage `prod`), which also applies pending D1 migrations.
+# Secrets live on the `production` environment: CLOUDFLARE_API_TOKEN,
+# CLOUDFLARE_ACCOUNT_ID, TOKEN_ENCRYPTION_KEY, APP_GITHUB_CLIENT_ID,
+# APP_GITHUB_CLIENT_SECRET, and optionally APP_GITHUB_TOKEN (GitHub does not
+# allow secret names starting with GITHUB_). Every deploy sets the Workers'
+# secrets from them, so they must match what production runs with.
 on:
   workflow_run:
     workflows: [CI]
@@ -40,19 +44,16 @@ jobs:
         with:
           node-version-file: '.nvmrc'
 
-      - name: Build
-        run: pnpm exec turbo run build --filter=@bilan/web
-
-      - name: Apply D1 migrations
-        working-directory: packages/web
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: pnpm exec wrangler d1 migrations apply bilan --remote
+      - name: Build workspace packages
+        run: pnpm exec turbo run build --filter=@bilan/web^...
 
       - name: Deploy
-        working-directory: packages/web
         env:
+          CI: 'true'
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: pnpm exec wrangler deploy
+          TOKEN_ENCRYPTION_KEY: ${{ secrets.TOKEN_ENCRYPTION_KEY }}
+          GITHUB_CLIENT_ID: ${{ secrets.APP_GITHUB_CLIENT_ID }}
+          GITHUB_CLIENT_SECRET: ${{ secrets.APP_GITHUB_CLIENT_SECRET }}
+          GITHUB_TOKEN: ${{ secrets.APP_GITHUB_TOKEN }}
+        run: pnpm exec alchemy deploy --stage prod --yes --no-input

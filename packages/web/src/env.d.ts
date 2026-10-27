@@ -1,12 +1,11 @@
 import type { SessionUser } from './lib/session.ts';
 import type { SyncRepoParams } from './workflows/sync-repo.ts';
-import type { Runtime } from '@astrojs/cloudflare';
 
 declare global {
   /** Full git sha of the build, injected by astro.config.ts; empty outside a checkout. */
   const __BILAN_COMMIT__: string;
 
-  /** Bindings declared in wrangler.jsonc. Keep in sync when adding a binding. */
+  /** Bindings declared in alchemy.run.ts. Keep in sync when adding a binding. */
   interface Env {
     ASSETS: Fetcher;
     DB: D1Database;
@@ -33,7 +32,7 @@ declare global {
   }
 
   namespace App {
-    interface Locals extends Runtime {
+    interface Locals {
       /** Set by `src/middleware.ts` from the session cookie (`lib/session.ts`); null when signed out. */
       user: SessionUser | null;
     }
