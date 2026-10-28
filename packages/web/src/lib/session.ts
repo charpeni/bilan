@@ -34,7 +34,7 @@ export function sessionExpiry(now: number = Date.now()): string {
 
 /**
  * Cookies are Secure whenever the request came over https. Plain http only
- * happens in local development (`wrangler dev` on localhost or a LAN address);
+ * happens in local development (`alchemy dev` on localhost or a LAN address);
  * production on Workers is always https.
  */
 export function isPlainHttp(url: URL): boolean {

@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "build": "turbo run build",
-    "deploy": "turbo run deploy",
+    "dev": "turbo run build --filter=@bilan/web^... && alchemy dev",
+    "deploy": "turbo run build --filter=@bilan/web^... && alchemy deploy",
     "examples:build": "node packages/web/scripts/build-examples.mjs",
     "check": "pnpm format:check && pnpm lint && pnpm type-check && pnpm test",
     "format": "oxfmt",
@@ -12,10 +13,15 @@
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "test": "turbo run test",
-    "type-check": "turbo run type-check"
+    "type-check": "turbo run type-check && tsc -p tsconfig.json"
   },
   "devDependencies": {
+    "@alchemy.run/cloudflare": "2.0.0-beta.84",
+    "@alchemy.run/frontend-frameworks": "2.0.0-beta.84",
+    "@effect/platform-node": "4.0.6",
     "@types/node": "26.6.2",
+    "alchemy": "2.0.0-beta.84",
+    "effect": "4.0.6",
     "oxfmt": "0.70.0",
     "oxlint": "1.85.0",
     "turbo": "2.11.3",
