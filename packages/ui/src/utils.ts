@@ -60,6 +60,19 @@ export function dur(ms: number | null | undefined): string {
   return `${(ms / (30 * DAY)).toFixed(1)}mo`;
 }
 
+/** `text` cut to `chars` characters, its end giving way to `…`. */
+export const fitText = (text: string, chars: number): string =>
+  text.length <= chars ? text : `${text.slice(0, Math.max(1, chars - 1))}…`;
+
+/**
+ * Two names cut to share `chars` characters: the longer gives way first, so
+ * neither is cut shorter than the other while it has more to show.
+ */
+export function fitPair(a: string, b: string, chars: number): [string, string] {
+  const fitA = fitText(a, Math.max(Math.ceil(chars / 2), chars - b.length));
+  return [fitA, fitText(b, chars - fitA.length)];
+}
+
 /**
  * A folder path cut to `chars` characters, as `[folders, name]`: leading
  * folders give way to `…/` first, so the distinctive end of the path stays.
@@ -76,7 +89,7 @@ export function fitPath(path: string, chars: number): [string, string] {
         .join('');
     if (dir.length + name.length <= chars) return [dir, name];
   }
-  return ['', name.length <= chars ? name : `${name.slice(0, Math.max(1, chars - 1))}…`];
+  return ['', fitText(name, chars)];
 }
 
 export const fmtDate = (t: number): string =>
