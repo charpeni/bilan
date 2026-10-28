@@ -31,8 +31,11 @@ export const workerName = (base: string) =>
     prod ? base : `${base}-${stage.toLowerCase().replaceAll(/[^a-z0-9-]/g, '-')}`,
   );
 
-/** Shared by every Worker. */
-export const compatibility = { date: '2026-07-24', flags: ['nodejs_compat'] };
+/**
+ * Shared by every Worker. `Cloudflare.Telemetry()` (bilan-domain) needs
+ * 2026-07-28 or later, for `tracing.startActiveSpan`.
+ */
+export const compatibility = { date: '2026-08-25', flags: ['nodejs_compat'] };
 
 /**
  * Production's resources were created by Wrangler, so they carry no Alchemy
