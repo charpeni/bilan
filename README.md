@@ -151,6 +151,11 @@ dashboard, and reads the job again on each change instead of polling.
    database, the `bilan-payloads` bucket); fork it before deploying your own.
    Any other stage creates its own resources under generated names.
 
+   Alchemy keeps what it deployed in a state store on the Cloudflare account,
+   the `alchemy-state-store-bilan` Worker. The first `plan` or `deploy` from a
+   signed-in machine creates it. CI only uses an existing one: create it first
+   with `pnpm alchemy state bootstrap --backend cloudflare --name bilan`.
+
    `GITHUB_TOKEN`, a classic token with no scopes, is optional: it is used as a
    fallback for public repositories a user token cannot reach, and to confirm a
    repository is still public before showing its dashboard to signed-out
