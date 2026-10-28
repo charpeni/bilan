@@ -20,6 +20,9 @@ import {
   syncRepoWorkflow,
   workerName,
 } from './infra/resources.ts';
+
+/** Where `flatMigrations` copies the SQL files, relative to the repository root. */
+const MIGRATIONS_COPY = '.alchemy/d1-migrations';
 import DomainWorker from './packages/domain-worker/src/DomainWorker.ts';
 
 /**
@@ -131,11 +134,14 @@ function optionalSecret<const Name extends string>(name: Name) {
  */
 function flatMigrations(): string {
   const source = fileURLToPath(new URL('packages/store-d1/migrations', import.meta.url));
-  const target = fileURLToPath(new URL('.alchemy/d1-migrations', import.meta.url));
+  const target = fileURLToPath(new URL(MIGRATIONS_COPY, import.meta.url));
   rmSync(target, { recursive: true, force: true });
   mkdirSync(target, { recursive: true });
   for (const file of readdirSync(source)) {
     if (file.endsWith('.sql')) copyFileSync(join(source, file), join(target, file));
   }
-  return target;
+  // Relative, as Alchemy stores it in state: an absolute path differs between
+  // CI and each checkout, which made every local plan report the database as
+  // changed. Alchemy runs from the repository root, where it resolves this.
+  return MIGRATIONS_COPY;
 }
