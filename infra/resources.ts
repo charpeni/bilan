@@ -4,6 +4,7 @@ import * as Context from 'effect/Context';
 import * as Effect from 'effect/Effect';
 import * as Option from 'effect/Option';
 
+import type { SyncRepoParams } from '../packages/domain/src/RepoSync/SyncRepoParams.ts';
 import type { Input } from 'alchemy';
 
 /**
@@ -85,7 +86,7 @@ export const Cache = Cloudflare.KV.Namespace(
  */
 export const syncRepoWorkflow = (hostScript?: Input<string>) =>
   Effect.map(Stage, ({ prod }) =>
-    Cloudflare.Workflow('SyncRepo', {
+    Cloudflare.Workflow<SyncRepoParams>('SyncRepo', {
       className: 'SyncRepoWorkflow',
       ...(prod ? { workflowName: 'sync-repo' } : {}),
       ...(hostScript === undefined ? {} : { scriptName: hostScript }),

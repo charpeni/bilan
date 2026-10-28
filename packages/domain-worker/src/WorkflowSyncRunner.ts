@@ -1,24 +1,11 @@
-import * as Cloudflare from '@alchemy.run/cloudflare';
 import { SyncRunner } from '@bilan/domain/RepoSync/SyncRunner.external';
 import * as Effect from 'effect/Effect';
 
-import type { RepoId } from '@bilan/domain/RepoSync/RepoSync.id';
-import type { SyncRun } from '@bilan/domain/RepoSync/SyncRun';
-import type { Workflow } from '@cloudflare/workers-types';
+import { DomainEnv } from './env.ts';
 
-/**
- * What `SyncRepoWorkflow` takes: `SyncRepoParams` in
- * `packages/web/src/workflows/sync-repo.ts`. Keep the two in step.
- */
-type SyncRepoParams = {
-  repoId: string;
-  owner: string;
-  name: string;
-  mode: 'incremental' | 'full';
-  depth: string;
-  since?: string;
-  maxPrs?: number;
-} & ({ tokenSource: 'server' } | { tokenSource: 'user'; userId: number });
+import type { RepoId } from '@bilan/domain/RepoSync/RepoSync.id';
+import type { SyncRepoParams } from '@bilan/domain/RepoSync/SyncRepoParams';
+import type { SyncRun } from '@bilan/domain/RepoSync/SyncRun';
 
 const toParams = (repoId: RepoId, run: SyncRun): SyncRepoParams => ({
   repoId,
@@ -48,8 +35,7 @@ const message = (error: unknown) => (error instanceof Error ? error.message : St
  */
 export const WorkflowSyncRunner = SyncRunner.toLayer(
   Effect.gen(function* () {
-    const env = yield* Cloudflare.Workers.WorkerEnvironment;
-    const workflow = env.SYNC_REPO as Workflow<SyncRepoParams>;
+    const { SYNC_REPO: workflow } = yield* DomainEnv;
     return {
       start: ({ jobId, repoId, run }) =>
         Effect.promise(async () => {

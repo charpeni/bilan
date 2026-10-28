@@ -10,8 +10,9 @@ import * as Option from 'effect/Option';
 import * as Schema from 'effect/Schema';
 import * as Stream from 'effect/Stream';
 
-import { compatibility, Database, syncRepoWorkflow, workerName } from '../../../infra/resources.ts';
+import { compatibility, workerName } from '../../../infra/resources.ts';
 import { D1SyncJobStore } from './D1SyncJobStore.ts';
+import { DomainBindings } from './env.ts';
 import { SyncRoutes } from './routes.ts';
 import { SyncStatusEvents } from './statusEvents.ts';
 import { WorkflowSyncRunner } from './WorkflowSyncRunner.ts';
@@ -38,12 +39,7 @@ export default class DomainWorker extends Cloudflare.Worker<DomainWorker>()(
       main: import.meta.url,
       compatibility,
       workersDev: false,
-      env: {
-        DB: yield* Database,
-        // By name, not by output: bilan-sync binds this Worker too, so neither
-        // may wait for the other.
-        SYNC_REPO: yield* syncRepoWorkflow(yield* workerName('bilan-sync')),
-      },
+      env: yield* DomainBindings,
     };
   }),
   Effect.gen(function* () {

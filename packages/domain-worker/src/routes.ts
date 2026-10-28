@@ -10,7 +10,6 @@ import { JobId, RepoId } from '@bilan/domain/RepoSync/RepoSync.id';
 import { RepoSyncStatus, RepoSyncStatusState } from '@bilan/domain/RepoSync/RepoSyncStatus.view';
 import { RequestSync } from '@bilan/domain/RepoSync/RequestSync.command';
 import { SyncRun } from '@bilan/domain/RepoSync/SyncRun';
-import * as DateTime from 'effect/DateTime';
 import * as Effect from 'effect/Effect';
 import * as Option from 'effect/Option';
 import * as Schema from 'effect/Schema';
@@ -52,13 +51,34 @@ const Bodies = {
   release: Schema.Struct({ ...Job, reason: Schema.String }),
   started: Schema.Struct(Job),
   progress: Schema.Struct({ ...Job, prsFetched: Schema.Int, pointsSpent: Schema.Int }),
-  pause: Schema.Struct({ ...Job, until: Schema.String }),
+  pause: Schema.Struct({ ...Job, until: Schema.DateTimeUtcFromString }),
   finish: Schema.Struct({ ...Job, outcome: SyncOutcome, pointsSpent: Schema.Int }),
   fail: Schema.Struct({ ...Job, error: Schema.String, pointsSpent: Schema.Int }),
   status: Schema.Struct({ repoId: RepoId }),
 };
 
-const ok: Reply = { status: 200, body: { ok: true } };
+/** The body of each route, as callers send it (`packages/web/src/lib/domain.ts`). */
+export type SyncApi = {
+  readonly [Route in keyof typeof Bodies]: (typeof Bodies)[Route]['Encoded'];
+};
+
+/** A command the model refused: 409. */
+export type Refusal =
+  | {
+      readonly ok: false;
+      readonly rejected: SyncAlreadyRunning['_tag'];
+      readonly jobId: SyncAlreadyRunning['jobId'];
+    }
+  | {
+      readonly ok: false;
+      readonly rejected: NotCurrentJob['_tag'];
+      readonly current: NotCurrentJob['current'];
+    };
+
+/** What a command route answers with 200 or 409. */
+export type CommandReply = { readonly ok: true } | Refusal;
+
+const ok: Reply = { status: 200, body: { ok: true } satisfies CommandReply };
 const notFound: Reply = { status: 404, body: { ok: false, error: 'not found' } };
 const invalid = (detail: string): Reply => ({
   status: 400,
@@ -66,10 +86,9 @@ const invalid = (detail: string): Reply => ({
 });
 const refused = (rejection: SyncAlreadyRunning | NotCurrentJob): Reply => ({
   status: 409,
-  body:
-    rejection._tag === 'SyncAlreadyRunning'
-      ? { ok: false, rejected: rejection._tag, jobId: rejection.jobId }
-      : { ok: false, rejected: rejection._tag, current: rejection.current },
+  body: (rejection._tag === 'SyncAlreadyRunning'
+    ? { ok: false, rejected: rejection._tag, jobId: rejection.jobId }
+    : { ok: false, rejected: rejection._tag, current: rejection.current }) satisfies Refusal,
 });
 const encodeStatus = Schema.encodeUnknownSync(RepoSyncStatusState);
 
@@ -138,14 +157,8 @@ export const SyncRoutes = Effect.gen(function* () {
         );
       case '/sync/pause':
         return decode(Bodies.pause, body).pipe(
-          Effect.flatMap(({ repoId, jobId, until }) =>
-            Option.match(DateTime.make(until), {
-              onNone: () => Effect.fail(invalid('until is not a date')),
-              onSome: (at) =>
-                repos
-                  .send(repoId, new PauseSync({ jobId, until: DateTime.toUtc(at) }))
-                  .pipe(Effect.mapError(refused)),
-            }),
+          Effect.flatMap(({ repoId, ...b }) =>
+            repos.send(repoId, new PauseSync(b)).pipe(Effect.mapError(refused)),
           ),
           Effect.as(ok),
         );

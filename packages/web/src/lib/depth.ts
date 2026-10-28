@@ -1,5 +1,7 @@
-/** How far back a sync guarantees activity; `all` walks the whole history. */
-export type SyncDepth = '30d' | '90d' | '180d' | 'all';
+import type { SyncDepth } from '@bilan/domain/RepoSync/SyncRun';
+
+/** How far back a sync guarantees activity; `all` walks the whole history (the sync model's `SyncDepth`). */
+export type { SyncDepth };
 
 export const SYNC_DEPTHS: readonly SyncDepth[] = ['30d', '90d', '180d', 'all'];
 

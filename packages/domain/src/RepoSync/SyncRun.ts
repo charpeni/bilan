@@ -10,13 +10,16 @@ export const TokenSource = Schema.Union([
 ]);
 export type TokenSource = typeof TokenSource.Type;
 
+/** How far back a run guarantees activity; `all` walks the whole history. */
+export const SyncDepth = Schema.Literals(['30d', '90d', '180d', 'all']);
+export type SyncDepth = typeof SyncDepth.Type;
+
 /** What a run is asked to do: everything `SyncRunner.start` needs, in the model's words. */
 export const SyncRun = Schema.Struct({
   owner: Schema.String,
   name: Schema.String,
   mode: Schema.Literals(['incremental', 'full']),
-  /** How far back to guarantee activity, as the web app names it (`30d`, `all`, ...). */
-  depth: Schema.String,
+  depth: SyncDepth,
   /** ISO bound the run walks back to; null for full history. */
   since: Schema.NullOr(Schema.String),
   maxPrs: Schema.NullOr(Schema.Int),

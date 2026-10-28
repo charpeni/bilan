@@ -1,5 +1,5 @@
 import type { SessionUser } from './lib/session.ts';
-import type { SyncRepoParams } from './workflows/sync-repo.ts';
+import type { SyncRepoParams } from '@bilan/domain/RepoSync/SyncRepoParams';
 
 declare global {
   /** Full git sha of the build, injected by astro.config.ts; empty outside a checkout. */
@@ -24,7 +24,7 @@ declare global {
      */
     GITHUB_TOKEN?: string;
     /** Secret: base64 of 32 random bytes; AES-GCM key for per-user tokens at rest. */
-    TOKEN_ENCRYPTION_KEY?: string;
+    TOKEN_ENCRYPTION_KEY: string;
     /** Secret: the GitHub App's client id; login is disabled when unset. */
     GITHUB_CLIENT_ID?: string;
     GITHUB_CLIENT_SECRET?: string;
