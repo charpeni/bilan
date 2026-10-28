@@ -28,7 +28,20 @@ import { comparisonText, periodComparison } from './comparison.ts';
 import { person, prLink, svgPerson } from './person.ts';
 import { canCompare } from './range.ts';
 import { table } from './table.ts';
-import { HOUR, compact, css, dur, el, fmtDate, fmtUtc, num, pctFmt, plural } from './utils.ts';
+import {
+  HOUR,
+  compact,
+  css,
+  dur,
+  el,
+  fitPair,
+  fitText,
+  fmtDate,
+  fmtUtc,
+  num,
+  pctFmt,
+  plural,
+} from './utils.ts';
 
 import type { Bin } from './charts.ts';
 import type { ComparisonKind } from './comparison.ts';
@@ -525,7 +538,9 @@ export function render(ctx: DashboardContext): void {
   {
     const rows = topReviewers(people).map((r) => ({
       label: String(r.login),
-      labelNodes: () => [svgPerson(String(r.login), bots)],
+      labelNodes: (chars: number) => [
+        svgPerson(String(r.login), bots, fitText(String(r.login), chars)),
+      ],
       value: r.reviews,
       rec: r,
     }));
@@ -609,11 +624,15 @@ export function render(ctx: DashboardContext): void {
   {
     const rows = reviewPairs(winReviews).map((p) => ({
       label: `${p.reviewer} → ${p.author}`,
-      labelNodes: () => [
-        svgPerson(p.reviewer, bots),
-        document.createTextNode(' → '),
-        svgPerson(p.author, bots),
-      ],
+      labelNodes: (chars: number) => {
+        // The arrow takes three characters; the two logins share the rest.
+        const [reviewer, author] = fitPair(p.reviewer, p.author, chars - 3);
+        return [
+          svgPerson(p.reviewer, bots, reviewer),
+          document.createTextNode(' → '),
+          svgPerson(p.author, bots, author),
+        ];
+      },
       value: p.reviews,
       sub: 'Reviews',
     }));

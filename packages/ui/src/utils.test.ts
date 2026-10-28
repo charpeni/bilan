@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { fitPath, holdHeight } from './utils.ts';
+import { fitPair, fitPath, fitText, holdHeight } from './utils.ts';
 
 const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -46,6 +46,40 @@ describe('holdHeight', () => {
     ).toThrow('boom');
     await flush();
     expect(node.style.minHeight).toBe('');
+  });
+});
+
+describe('fitText', () => {
+  it('keeps text that fits, and cuts its end otherwise', () => {
+    expect(fitText('jamesopstad', 11)).toBe('jamesopstad');
+    expect(fitText('jamesopstad', 8)).toBe('jamesop…');
+  });
+});
+
+describe('fitPair', () => {
+  it('keeps a pair that fits whole', () => {
+    expect(fitPair('workers-devprod', 'petebacondarwin', 30)).toEqual([
+      'workers-devprod',
+      'petebacondarwin',
+    ]);
+  });
+
+  it('cuts the longer name first, leaving a short one whole', () => {
+    expect(fitPair('bob', 'carol-from-the-platform-team', 20)).toEqual([
+      'bob',
+      'carol-from-the-p…',
+    ]);
+    expect(fitPair('carol-from-the-platform-team', 'bob', 20)).toEqual([
+      'carol-from-the-p…',
+      'bob',
+    ]);
+  });
+
+  it('splits the room when both names are long', () => {
+    expect(fitPair('workers-devprod', 'petebacondarwin', 22)).toEqual([
+      'workers-de…',
+      'petebacond…',
+    ]);
   });
 });
 

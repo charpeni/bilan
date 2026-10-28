@@ -364,11 +364,11 @@ export interface BarRow {
   value: number;
   sub?: string;
   /**
-   * The label's content when it holds links (people): text nodes and SVG
-   * anchors whose text, concatenated, equals `label`. `label` still sizes the
-   * gutter and names the tooltip.
+   * The label's content when it holds links (people), cut to `chars`
+   * characters: text nodes and SVG anchors whose text, concatenated, equals
+   * `label` when it fits. `label` still sizes the gutter and names the tooltip.
    */
-  labelNodes?: () => Node[];
+  labelNodes?: (chars: number) => Node[];
 }
 
 export interface BarChartOptions<R extends BarRow> {
@@ -378,7 +378,7 @@ export interface BarChartOptions<R extends BarRow> {
   max?: number | null;
   height?: number | null;
   tip?: ((r: R) => TipRow[]) | null;
-  /** The labels are folder paths: the gutter may grow, and they are cut from the front. */
+  /** The labels are folder paths, cut from the front. */
   paths?: boolean;
   tooltip: Tooltip;
 }
@@ -404,9 +404,10 @@ export function barChart<R extends BarRow>(
   const rowH = 26;
   const W = host.clientWidth || 700;
   const H = height ?? rows.length * rowH + 8;
-  // Paths keep their tails when cut, so they may take more of a wide chart.
-  const cap = paths ? Math.max(190, W * 0.4) : 190;
+  // Long labels (paths, review pairs) may take more of a wide chart; past that, they are cut.
+  const cap = Math.max(190, W * 0.4);
   const labelW = Math.min(cap, Math.max(...rows.map((r) => r.label.length)) * ROW_CHAR + 12);
+  const chars = Math.floor((labelW - 12) / ROW_CHAR);
   const pad = { l: labelW, r: 52 };
   const top = max ?? Math.max(1, ...rows.map((r) => r.value));
   const svg = svgEl('svg', {
@@ -429,8 +430,8 @@ export function barChart<R extends BarRow>(
       'text-anchor': 'end',
       fill: css('--ink-2'),
     });
-    if (r.labelNodes) label.append(...r.labelNodes());
-    else if (paths) pathLabel(label, r.label, Math.floor((labelW - 12) / ROW_CHAR));
+    if (r.labelNodes) label.append(...r.labelNodes(chars));
+    else if (paths) pathLabel(label, r.label, chars);
     else label.textContent = r.label;
     svg.append(label);
     const path = svgEl('path', {

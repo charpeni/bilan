@@ -691,6 +691,22 @@ describe('mount', () => {
       );
     });
 
+    it('cuts long logins in a review pair to fit its gutter, keeping both people', async () => {
+      const long = 'carol-from-the-platform-infrastructure';
+      const data = JSON.parse(JSON.stringify(payload()).replaceAll('"carol"', `"${long}"`));
+      setup(data as Payload);
+      await flush();
+      const svg = cardNamed(root, 'Strongest review pairs')?.querySelector('svg');
+      // happy-dom measures 0, so the chart is drawn 700px wide: a 280px gutter, 38 characters.
+      expect(texts(svg ?? root, 'text.blabel').toSorted()).toEqual([
+        'alice → carol-from-the-platform-infra…',
+        'carol-from-the-platform-infrast… → bob',
+      ]);
+      expect([...(svg?.querySelectorAll('a') ?? [])].map((a) => a.getAttribute('href'))).toContain(
+        `https://github.com/${long}`,
+      );
+    });
+
     it('links the heading to the repository', () => {
       setup();
       const a = root.querySelector('#repo-title a');

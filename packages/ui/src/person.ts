@@ -22,16 +22,19 @@ export function person(login: string, bots: ReadonlySet<string>): Node {
   });
 }
 
-/** The same, inside an SVG `<text>` (bar chart labels). */
-export function svgPerson(login: string, bots: ReadonlySet<string>): Node {
-  if (isBot(login, bots)) return document.createTextNode(login);
+/**
+ * The same, inside an SVG `<text>` (bar chart labels), showing `text`: the
+ * login, or as much of it as the label has room for.
+ */
+export function svgPerson(login: string, bots: ReadonlySet<string>, text = login): Node {
+  if (isBot(login, bots)) return document.createTextNode(text);
   const a = svgEl('a', {
     class: 'quiet',
     href: profileUrl(login),
     target: '_blank',
     rel: 'noopener',
   });
-  a.textContent = login;
+  a.textContent = text;
   return a;
 }
 
