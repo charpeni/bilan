@@ -95,7 +95,13 @@ export class RepoSync extends Domain.Aggregate('RepoSync', {
         : [],
     ExpireAdmission: (s, cmd) =>
       s._tag === 'Admitting' && s.jobId === cmd.jobId
-        ? [new AdmissionExpired({ jobId: cmd.jobId })]
+        ? [
+            new AdmissionExpired({
+              jobId: cmd.jobId,
+              requestedBy: s.requestedBy,
+              mode: s.run.mode,
+            }),
+          ]
         : [],
     MarkSyncStarted: (s, cmd) => {
       const run = activeRun(s, cmd.jobId);

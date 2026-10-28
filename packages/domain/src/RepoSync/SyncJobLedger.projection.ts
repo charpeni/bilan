@@ -17,7 +17,9 @@ import type { SyncJobUpdate } from './SyncJobStore.ts';
 /**
  * Keeps `sync_jobs` in step with each run, so admission's quota counts and
  * the web app's job history read what the model decided. Admission inserts
- * the row; this only updates it. A paused run stays `running`, as it does on
+ * the row; this updates it, and inserts it only for a request that expired
+ * before admission did (`orInsert`), so that admission can no longer insert
+ * a row nothing would ever end. A paused run stays `running`, as it does on
  * the Workflow engine.
  */
 export class SyncJobLedger extends Domain.Projection('SyncJobLedger', {
@@ -39,7 +41,7 @@ export const SyncJobLedgerLive = SyncJobLedger.toLayer(
     const store = yield* SyncJobStore;
     return Effect.fn(function* (batch) {
       yield* store.apply(
-        batch.map(({ event, envelope }): SyncJobUpdate => {
+        batch.map(({ event, envelope, source }): SyncJobUpdate => {
           const at = DateTime.formatIso(envelope.at);
           switch (event._tag) {
             case 'SyncStarted':
@@ -75,6 +77,16 @@ export const SyncJobLedgerLive = SyncJobLedger.toLayer(
                 status: 'errored',
                 error: 'lost: never admitted',
                 finishedAt: at,
+                ...(event.requestedBy !== undefined && event.mode !== undefined
+                  ? {
+                      orInsert: {
+                        repoId: source.id,
+                        requestedBy: event.requestedBy,
+                        mode: event.mode,
+                        createdAt: at,
+                      },
+                    }
+                  : {}),
               };
           }
         }),

@@ -233,6 +233,38 @@ describe('D1Store', () => {
     expect((await getRepoById(db, repo.id))?.syncStartedAt).toBe('2026-05-04T00:00:00.000Z');
   });
 
+  it("a completion retried after a newer run started leaves that run's marker", async () => {
+    const { db, repo } = await freshRepo();
+    const first = new D1Store(db, repo.id, `acme/${repo.name}`, {
+      runStartedAt: '2026-05-01T00:00:00.000Z',
+    });
+    await first.markStarted('2026-05-01T00:00:00.000Z');
+    await first.markSynced('2026-05-01T00:05:00.000Z', '2026-04-01T00:00:00.000Z', true, true);
+    // The next run starts; then the first one's completion runs again.
+    await first.markStarted('2026-05-02T00:00:00.000Z');
+    await first.markSynced('2026-05-01T00:05:00.000Z', '2026-04-01T00:00:00.000Z', true, true);
+    expect(await first.meta()).toMatchObject({
+      syncStartedAt: '2026-05-02T00:00:00.000Z',
+      interrupted: true,
+      reconciledAt: '2026-05-01T00:00:00.000Z',
+    });
+  });
+
+  it('a fenced completion still promotes an older unfinished start', async () => {
+    const { db, repo } = await freshRepo();
+    const store = new D1Store(db, repo.id, `acme/${repo.name}`, {
+      runStartedAt: '2026-05-01T00:00:00.000Z',
+    });
+    // An earlier run left its start; this run reconciles from it.
+    await store.markStarted('2026-05-01T00:00:00.000Z');
+    await store.markSynced('2026-05-03T00:05:00.000Z', '2026-04-01T00:00:00.000Z', true, true);
+    expect(await store.meta()).toMatchObject({
+      syncStartedAt: null,
+      interrupted: false,
+      reconciledAt: '2026-05-01T00:00:00.000Z',
+    });
+  });
+
   it('a retried complete markSynced keeps reconciled_at', async () => {
     const { store, db, repo } = await freshRepo();
     await store.markStarted('2026-05-01T00:00:00.000Z');

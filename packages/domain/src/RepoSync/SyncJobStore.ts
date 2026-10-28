@@ -17,6 +17,18 @@ export interface SyncJobUpdate {
   readonly error?: string;
   /** ISO instant the run ended. */
   readonly finishedAt?: string;
+  /**
+   * Create the row first if admission has not inserted it. A request that
+   * expires before its row lands leaves this one behind, so the late insert
+   * finds the job id taken and admits nothing.
+   */
+  readonly orInsert?: {
+    readonly repoId: string;
+    readonly requestedBy: number;
+    readonly mode: 'incremental' | 'full';
+    /** ISO instant, also the row's `created_at`. */
+    readonly createdAt: string;
+  };
 }
 
 /**
@@ -34,20 +46,35 @@ export class SyncJobStore extends Context.Service<
 >()('Bilan/SyncJobStore') {}
 
 /** Updates folded per job, as `sync_jobs` would hold them. */
-export type SyncJobRow = Omit<SyncJobUpdate, 'jobId'>;
+export type SyncJobRow = Omit<SyncJobUpdate, 'jobId' | 'orInsert' | 'status'> & {
+  readonly status: 'queued' | NonNullable<SyncJobUpdate['status']>;
+};
 
-/** `sync_jobs` in memory, for stories: its Layer, and a reader for assertions. */
+/**
+ * `sync_jobs` in memory, for stories, kept like D1's: `admit` inserts a row
+ * unless its id is taken, as admission does, and an update changes only a
+ * row that exists, unless it carries `orInsert`. Its Layer, and a reader for
+ * assertions.
+ */
 export const memorySyncJobs = () => {
   const rows = new Map<string, SyncJobRow>();
   return {
     layer: Layer.succeed(SyncJobStore, {
       apply: (updates) =>
         Effect.sync(() => {
-          for (const { jobId, ...fields } of updates) {
-            rows.set(jobId, { ...rows.get(jobId), ...fields });
+          for (const { jobId, orInsert, ...fields } of updates) {
+            const row = rows.get(jobId) ?? (orInsert ? { status: 'errored' as const } : undefined);
+            if (row) rows.set(jobId, { ...row, ...fields });
           }
         }),
     }),
+    /** Admission's insert: false when the job id is taken. */
+    admit: (jobId: string) =>
+      Effect.sync(() => {
+        if (rows.has(jobId)) return false;
+        rows.set(jobId, { status: 'queued' });
+        return true;
+      }),
     get: (jobId: string) => Effect.sync(() => rows.get(jobId)),
   };
 };

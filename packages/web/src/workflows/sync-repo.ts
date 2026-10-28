@@ -147,7 +147,9 @@ export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
         },
       );
 
-      const store = new D1Store(db, repoId, repoLabel);
+      // A completion that runs again after a newer run started (its step
+      // retried) leaves that run's in-flight marker alone.
+      const store = new D1Store(db, repoId, repoLabel, { runStartedAt: startedAt });
       const sinceMs = since === undefined ? undefined : Date.parse(since);
       // Every stage but the last publishes an interim payload; the last stops the walk at `since`.
       const interimStages: InterimStage[] = stages
@@ -376,15 +378,6 @@ export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
             .set({ lastFullSyncAt: syncedAt })
             .where(eq(schema.repos.id, repoId));
         }
-        const finished = await reportFinished(env, {
-          ...job,
-          outcome: complete ? 'complete' : 'partial',
-          pointsSpent,
-        });
-        if (!finished.ok) {
-          // Given up on while this step ran: the payload is published all the same.
-          console.warn(`sync ${jobId}: finished after the model gave up on it`);
-        }
         return {
           syncedAt,
           prs: payload.prs.length,
@@ -394,6 +387,19 @@ export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
           openComplete,
           complete,
         };
+      });
+      // Its own step, so a lost reply retries only the report: never the
+      // publication above, which a newer run may already have followed.
+      await step.do('report-finished', PAGE_RETRIES, async () => {
+        const finished = await reportFinished(env, {
+          ...job,
+          outcome: complete ? 'complete' : 'partial',
+          pointsSpent,
+        });
+        if (!finished.ok) {
+          // Given up on while the run published: the payload stands all the same.
+          console.warn(`sync ${jobId}: finished after the model gave up on it`);
+        }
       });
     } catch (error) {
       // Tell the model the run ended; if it cannot be told, its stall check

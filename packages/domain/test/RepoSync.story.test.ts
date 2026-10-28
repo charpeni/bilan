@@ -49,6 +49,7 @@ const run: SyncRun = {
   tokenSource: { _tag: 'User', userId: 7189823 },
 };
 const requested = (jobId = j1) => new SyncRequested({ jobId, requestedBy: 7189823, run });
+const expired = new AdmissionExpired({ jobId: j1, requestedBy: 7189823, mode: 'incremental' });
 const at = (iso: string) => DateTime.makeUnsafe(iso);
 
 /** Request and admit `j1` at noon, and let the runner start it. */
@@ -145,12 +146,38 @@ it.effect('a request nobody admits or releases expires after two minutes', () =>
     clock('2026-10-28T12:01:59Z'),
     then(repo),
     clock('2026-10-28T12:02:00Z'),
-    then(repo, new AdmissionExpired({ jobId: j1 })),
+    then(repo, expired),
     view(RepoSyncStatus, repo, {
       phase: 'idle',
       last: { jobId: j1, outcome: 'expired' },
     }),
   ),
+);
+
+it.effect('admission that lands after the request expired finds its job taken', () =>
+  Effect.gen(function* () {
+    const jobs = memorySyncJobs();
+    const ledgerStory = Story.make(BilanSync, {
+      layer: BilanSyncHandlers.pipe(Layer.provide(jobs.layer)),
+      externalSystems: [SyncRunner],
+    });
+    // The caller asked, then took over two minutes to insert the row.
+    yield* ledgerStory(
+      clock('2026-10-28T12:00:00Z'),
+      when(repo, new RequestSync({ jobId: j1, requestedBy: 7189823, run })),
+      then(repo, requested()),
+      clock('2026-10-28T12:02:00Z'),
+      then(repo, expired),
+    );
+    // The ledger recorded the request, so the late insert admits nothing:
+    // no row is left queued, blocking the repository and its quotas.
+    expect(yield* jobs.admit(j1)).toBe(false);
+    expect(yield* jobs.get(j1)).toEqual({
+      status: 'errored',
+      error: 'lost: never admitted',
+      finishedAt: '2026-10-28T12:02:00.000Z',
+    });
+  }),
 );
 
 it.effect('a retried first step records nothing', () =>
@@ -292,6 +319,7 @@ it.effect('sync_jobs follows the run: running, then how it ended', () =>
       layer: BilanSyncHandlers.pipe(Layer.provide(jobs.layer)),
       externalSystems: [SyncRunner],
     });
+    yield* jobs.admit(j1);
     yield* ledgerStory(
       ...started,
       clock('2026-10-28T12:02:00Z'),
@@ -309,6 +337,7 @@ it.effect('sync_jobs follows the run: running, then how it ended', () =>
       layer: BilanSyncHandlers.pipe(Layer.provide(lost.layer)),
       externalSystems: [SyncRunner],
     });
+    yield* lost.admit(j1);
     yield* lostStory(
       ...started,
       clock('2026-10-28T12:11:00Z'),
