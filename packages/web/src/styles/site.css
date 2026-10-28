@@ -814,11 +814,14 @@ form + .pop-item,
   inset: 0 auto 0 0;
   width: 40%;
   background: var(--ink);
-  animation: slide 1.6s steps(10) infinite;
+  /* Constant speed: any easing, or stepping, reads as the page stuttering. */
+  animation: slide 1.6s linear infinite;
 }
+/* Each update glides to the new fraction, like the count above it (`lib/count-up.ts`). */
 .progress[data-determinate]::after {
   width: calc(var(--fraction) * 100%);
   animation: none;
+  transition: width 600ms cubic-bezier(0.33, 1, 0.68, 1);
 }
 /* Asleep until the rate limit resets: nothing moves, and the text says why. */
 .progress[data-state='waiting']::after {
@@ -2332,6 +2335,9 @@ table.flags {
     width: 100%;
     animation: none;
     opacity: 0.6;
+  }
+  .progress[data-determinate]::after {
+    transition: none;
   }
   /* The timeline is drawn at once. */
   .tl[data-animate] .tl-bar,
