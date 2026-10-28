@@ -47,9 +47,7 @@ export default Alchemy.Stack(
       'Payloads',
       prod ? { name: 'bilan-payloads' } : {},
     ).pipe(retainInProd);
-    // Created by `wrangler kv namespace create CACHE`; check the title with
-    // `wrangler kv namespace list` (id 5d8223fa9ec74ff3b172ff74b408a98f) before
-    // the first production deploy.
+    // Production's namespace (id 5d8223fa9ec74ff3b172ff74b408a98f) is titled CACHE.
     const cache = yield* Cloudflare.KV.Namespace('Cache', prod ? { title: 'CACHE' } : {});
 
     // Same name on both sides: the Workflow lives on `Sync` and `Website`
