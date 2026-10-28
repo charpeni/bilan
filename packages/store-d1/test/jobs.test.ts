@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { upsertUser } from '../src/auth.ts';
 import { createDb } from '../src/db.ts';
-import { admitSyncJob, SYNC_CAPACITY } from '../src/jobs.ts';
+import { admitSyncJob, applySyncJobChanges, SYNC_CAPACITY } from '../src/jobs.ts';
 import { upsertRepo } from '../src/repos.ts';
 import { syncJobs } from '../src/schema.ts';
 
@@ -117,5 +117,70 @@ describe('atomic sync admission', () => {
         createdAt: '2026-09-29T12:10:00.000Z',
       }),
     ).toBe(true);
+  });
+});
+
+const row = (id: string) => db.select().from(syncJobs).where(eq(syncJobs.id, id)).get();
+
+describe("the sync model's changes to sync_jobs", () => {
+  const ended = { status: 'errored', error: 'lost: never admitted', finishedAt: now } as const;
+
+  it('updates only the fields a change carries, and only a row that exists', async () => {
+    const job = await candidate();
+    expect(await admitSyncJob(db, job)).toBe(true);
+    await applySyncJobChanges(env.DB, [
+      { jobId: job.id, status: 'running', progressAt: now },
+      { jobId: job.id, pointsSpent: 12 },
+      { jobId: 'never-admitted', status: 'running' },
+    ]);
+    expect(await row(job.id)).toMatchObject({
+      status: 'running',
+      progressAt: now,
+      pointsSpent: 12,
+    });
+    expect(await row('never-admitted')).toBeUndefined();
+  });
+
+  it('records a request that expired before admission, and refuses its late admission', async () => {
+    const job = await candidate();
+    const orInsert = {
+      repoId: job.repoId,
+      requestedBy: job.requestedBy,
+      mode: job.mode,
+      createdAt: now,
+    };
+    await applySyncJobChanges(env.DB, [{ jobId: job.id, ...ended, orInsert }]);
+    expect(await row(job.id)).toMatchObject({ ...ended, repoId: job.repoId });
+
+    // Nothing is left queued, so the repository and its quotas stay free.
+    expect(await admitSyncJob(db, job)).toBe(false);
+    expect(await row(job.id)).toMatchObject({ status: 'errored' });
+    expect(await admitSyncJob(db, { ...job, id: `${job.id}-next` })).toBe(true);
+  });
+
+  it('ends an admitted row the same way, once, when it was inserted first', async () => {
+    const job = await candidate();
+    expect(await admitSyncJob(db, job)).toBe(true);
+    const orInsert = {
+      repoId: job.repoId,
+      requestedBy: job.requestedBy,
+      mode: job.mode,
+      createdAt: now,
+    };
+    await applySyncJobChanges(env.DB, [{ jobId: job.id, ...ended, orInsert }]);
+    await applySyncJobChanges(env.DB, [{ jobId: job.id, ...ended, orInsert }]);
+    expect(await db.select().from(syncJobs)).toHaveLength(1);
+    expect(await row(job.id)).toMatchObject(ended);
+  });
+
+  it('skips the insert for a deleted repository instead of failing the batch', async () => {
+    await applySyncJobChanges(env.DB, [
+      {
+        jobId: 'gone',
+        ...ended,
+        orInsert: { repoId: 'R_deleted', requestedBy: 1, mode: 'full', createdAt: now },
+      },
+    ]);
+    expect(await row('gone')).toBeUndefined();
   });
 });

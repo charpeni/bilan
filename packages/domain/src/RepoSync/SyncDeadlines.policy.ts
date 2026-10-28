@@ -22,13 +22,15 @@ export const STALL_WINDOW = '10 minutes';
 /** How long a run may last at most, pauses included. */
 export const RUN_LIMIT = '6 hours';
 
-type When = { readonly after: Duration.Input } | { readonly at: DateTime.Utc };
-
 /**
  * Whenever a request or a run waits on something outside the model, schedule
  * the deadline that gives up on it. Each deadline carries what it is about, so
  * `RepoSync` ignores one that no longer applies: nothing is ever cancelled.
  * Deterministic command ids make a redelivered event schedule the same command.
+ *
+ * Deadlines count from the event (`envelope.at`), not from when this policy
+ * runs: a policy delivered late, or retried, must not grant a run a fresh
+ * window.
  */
 export class SyncDeadlines extends Domain.Policy('SyncDeadlines', {
   from: RepoSync,
@@ -39,32 +41,36 @@ export const SyncDeadlinesLive = SyncDeadlines.toLayer(
   Effect.gen(function* () {
     const repos = yield* RepoSync;
     /** A fresh stall check, about the run as of the event at `beat`. */
-    const checkStall = (repo: RepoId, jobId: JobId, beat: number, when: When) =>
+    const checkStall = (repo: RepoId, jobId: JobId, beat: number, at: DateTime.Utc) =>
       repos.schedule(repo, new ExpireStalledSync({ jobId, beat }), {
-        ...when,
+        at,
         commandId: `stall:${jobId}:${beat}`,
       });
     return Effect.fn(function* ({ source, event, envelope }) {
+      const from = (window: Duration.Input) => DateTime.addDuration(envelope.at, window);
       switch (event._tag) {
         case 'SyncRequested':
           return yield* repos.schedule(source, new ExpireAdmission({ jobId: event.jobId }), {
-            after: ADMISSION_WINDOW,
+            at: from(ADMISSION_WINDOW),
             commandId: `admission:${event.jobId}`,
           });
         case 'SyncAdmitted':
           yield* repos.schedule(source, new ExpireSync({ jobId: event.jobId }), {
-            after: RUN_LIMIT,
+            at: from(RUN_LIMIT),
             commandId: `limit:${event.jobId}`,
           });
-          return yield* checkStall(source.id, event.jobId, envelope.seq, { after: STALL_WINDOW });
+          return yield* checkStall(source.id, event.jobId, envelope.seq, from(STALL_WINDOW));
         case 'SyncStarted':
         case 'SyncProgressed':
-          return yield* checkStall(source.id, event.jobId, envelope.seq, { after: STALL_WINDOW });
+          return yield* checkStall(source.id, event.jobId, envelope.seq, from(STALL_WINDOW));
         case 'SyncPaused':
           // Quiet until the rate limit resets, then held to the usual window.
-          return yield* checkStall(source.id, event.jobId, envelope.seq, {
-            at: DateTime.addDuration(event.until, STALL_WINDOW),
-          });
+          return yield* checkStall(
+            source.id,
+            event.jobId,
+            envelope.seq,
+            DateTime.addDuration(event.until, STALL_WINDOW),
+          );
       }
     });
   }),

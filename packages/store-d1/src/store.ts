@@ -23,11 +23,19 @@ export class D1Store implements SyncStore {
   private readonly db: Db;
   private readonly repoId: string;
   private readonly repo: string;
+  private readonly runStartedAt: string | undefined;
 
-  constructor(db: Db, repoId: string, repo: string) {
+  /**
+   * `runStartedAt` is the start the run reconciles from, as it stamped or found
+   * it with `markStarted`. A complete `markSynced` then only promotes and clears
+   * a marker no later than it: a completion retried after a newer run started
+   * leaves that run's marker in place.
+   */
+  constructor(db: Db, repoId: string, repo: string, options: { runStartedAt?: string } = {}) {
     this.db = db;
     this.repoId = repoId;
     this.repo = repo;
+    this.runStartedAt = options.runStartedAt;
   }
 
   async meta(): Promise<RepoMeta> {
@@ -115,7 +123,8 @@ export class D1Store implements SyncStore {
    * leaves all three as they were. A retried completion finds
    * `sync_started_at` already null and keeps `reconciled_at` as it is, so a
    * Workflow step that runs again after a later failure cannot erase the
-   * watermark.
+   * watermark. With `runStartedAt`, it also leaves a later run's marker alone
+   * (see the constructor).
    */
   async markSynced(
     at: string,
@@ -135,8 +144,18 @@ export class D1Store implements SyncStore {
         end`,
         ...(complete
           ? {
-              reconciledAt: sql`coalesce(${repos.syncStartedAt}, ${repos.reconciledAt})`,
-              syncStartedAt: null,
+              ...(this.runStartedAt === undefined
+                ? {
+                    reconciledAt: sql`coalesce(${repos.syncStartedAt}, ${repos.reconciledAt})`,
+                    syncStartedAt: null,
+                  }
+                : {
+                    reconciledAt: sql`case when ${repos.syncStartedAt} > ${this.runStartedAt}
+                      then ${repos.reconciledAt}
+                      else coalesce(${repos.syncStartedAt}, ${repos.reconciledAt}) end`,
+                    syncStartedAt: sql`case when ${repos.syncStartedAt} > ${this.runStartedAt}
+                      then ${repos.syncStartedAt} end`,
+                  }),
               ...(openPrsComplete ? { openPrsSyncedAt: at } : {}),
             }
           : {}),

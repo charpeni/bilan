@@ -2,6 +2,8 @@ import { drizzle } from 'drizzle-orm/d1';
 
 import * as schema from './schema.ts';
 
+import type { D1Database } from '@cloudflare/workers-types';
+
 export type Db = ReturnType<typeof createDb>;
 
 /** A drizzle handle over a D1 binding, with the bilan schema attached for relational queries. */

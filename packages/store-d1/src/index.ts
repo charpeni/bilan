@@ -12,8 +12,8 @@ export {
 } from './auth.ts';
 export type { SessionUserRow, StoredTokenInput } from './auth.ts';
 export { getRepoById, getRepoByName, upsertRepo } from './repos.ts';
-export { admitSyncJob, SYNC_CAPACITY } from './jobs.ts';
-export type { SyncAdmission } from './jobs.ts';
+export { admitSyncJob, applySyncJobChanges, SYNC_CAPACITY } from './jobs.ts';
+export type { SyncAdmission, SyncJobChange } from './jobs.ts';
 export { chunk, D1Store, IN_CHUNK } from './store.ts';
 export {
   deleteRepo,
