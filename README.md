@@ -281,6 +281,7 @@ node packages/cli/bin/bilan.mjs owner/name --open
 | `packages/ui`         | The dashboard as a framework-free module                                    |
 | `packages/store-file` | JSON-file sync store used by the CLI                                        |
 | `packages/store-d1`   | Drizzle schema, migrations, and D1 sync store for the web app               |
+| `packages/domain`     | Repository syncs as an `@alchemy.run/domain` model, specified by stories    |
 | `packages/web`        | The Astro app on Cloudflare Workers: login, sync workflow, dashboards       |
 | `packages/cli`        | The `bilan` command, published as `github-bilan`                            |
 
