@@ -20,6 +20,7 @@ import {
   syncRepoWorkflow,
   workerName,
 } from './infra/resources.ts';
+import DomainWorker from './packages/domain-worker/src/DomainWorker.ts';
 
 /**
  * bilan on Cloudflare, one stack per stage:
@@ -65,6 +66,10 @@ export default Alchemy.Stack(
       ...(yield* optionalSecret('GITHUB_TOKEN')),
     };
 
+    // The repository-sync model: the Website requests syncs from it, and the
+    // Workflow on bilan-sync reports to it.
+    const domain = yield* DomainWorker;
+
     // New in production, but it hosts the existing `sync-repo` Workflow.
     const sync = yield* Cloudflare.Worker('Sync', {
       name: yield* workerName('bilan-sync'),
@@ -73,7 +78,7 @@ export default Alchemy.Stack(
       // Retention and payload pruning only matter where real data lives.
       crons: prod ? ['0 6 * * *'] : [],
       workersDev: false,
-      env: { ...shared, SYNC_REPO: yield* syncRepoWorkflow() },
+      env: { ...shared, DOMAIN: domain, SYNC_REPO: yield* syncRepoWorkflow() },
     }).pipe(existingInProd);
 
     const website = yield* Cloudflare.Website.Astro('Website', {
@@ -87,7 +92,7 @@ export default Alchemy.Stack(
       sessionKVBindingName: false,
       // The GitHub App's local callback is http://localhost:8788/auth/github/callback.
       dev: { port: 8788, strictPort: true },
-      env: { ...shared, SYNC_REPO: yield* syncRepoWorkflow(sync.workerName) },
+      env: { ...shared, DOMAIN: domain, SYNC_REPO: yield* syncRepoWorkflow(sync.workerName) },
     }).pipe(existingInProd);
 
     return { url: website.url };

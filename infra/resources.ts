@@ -2,6 +2,7 @@ import * as Cloudflare from '@alchemy.run/cloudflare';
 import * as Alchemy from 'alchemy';
 import * as Context from 'effect/Context';
 import * as Effect from 'effect/Effect';
+import * as Option from 'effect/Option';
 
 import type { Input } from 'alchemy';
 
@@ -44,6 +45,7 @@ const retainInProd = Alchemy.RemovalPolicy.retain(isProd);
 /**
  * The directory of plain `.sql` migrations to apply, supplied by
  * `alchemy.run.ts` at deploy time, so no Worker bundle needs the file system.
+ * Absent at runtime.
  */
 export class D1Migrations extends Context.Service<D1Migrations, string>()('bilan/D1Migrations') {}
 
@@ -51,7 +53,13 @@ export const Database = Cloudflare.D1.Database(
   'DB',
   Effect.gen(function* () {
     const { prod } = yield* Stage;
-    return { ...(prod ? { name: 'bilan' } : {}), migrations: yield* D1Migrations };
+    // A Worker that binds the database evaluates this at runtime too, where
+    // there is nothing to migrate and no migrations directory.
+    const migrations = yield* Effect.serviceOption(D1Migrations);
+    return {
+      ...(prod ? { name: 'bilan' } : {}),
+      ...(Option.isSome(migrations) ? { migrations: migrations.value } : {}),
+    };
   }),
 ).pipe(retainInProd, existingInProd);
 
