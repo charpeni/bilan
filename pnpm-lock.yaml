@@ -167,13 +167,16 @@ overrides:
   sharp@0.35.2: 0.35.4
   '@esbuild-kit/core-utils>esbuild': 0.25.12
 
+patchedDependencies:
+  '@alchemy.run/domain@2.0.0-beta.84': cc10e3f86264d79fc5992f485c2854af943294200d6d52b9c42344a818b1cd4a
+
 importers:
 
   .:
     devDependencies:
       '@alchemy.run/cloudflare':
         specifier: 2.0.0-beta.84
-        version: 2.0.0-beta.84(8ac0cb4453ef38451646bc12b05c3792)
+        version: 2.0.0-beta.84(3c939f6ea9d48af0370ceb7db662b138)
       '@alchemy.run/frontend-frameworks':
         specifier: 2.0.0-beta.84
         version: 2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0))(@types/node@26.6.2)(astro@7.3.4(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)(@types/node@26.6.2)(tsx@4.23.15)(yaml@2.9.1))(effect@4.0.6)(typescript@6.0.3)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
@@ -226,7 +229,7 @@ importers:
     dependencies:
       '@alchemy.run/domain':
         specifier: 2.0.0-beta.84
-        version: 2.0.0-beta.84(alchemy@2.0.0-beta.84(@alchemy.run/frontend-frameworks@2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0))(@types/node@26.6.2)(astro@7.3.4(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)(@types/node@26.6.2)(tsx@4.23.15)(yaml@2.9.1))(effect@4.0.6)(typescript@6.0.3)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@5.0.1(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))))(effect@4.0.6)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(ws@8.22.0))(effect@4.0.6)
+        version: 2.0.0-beta.84(patch_hash=cc10e3f86264d79fc5992f485c2854af943294200d6d52b9c42344a818b1cd4a)(alchemy@2.0.0-beta.84(@alchemy.run/frontend-frameworks@2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0))(@types/node@26.6.2)(astro@7.3.4(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)(@types/node@26.6.2)(tsx@4.23.15)(yaml@2.9.1))(effect@4.0.6)(typescript@6.0.3)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@5.0.1(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))))(effect@4.0.6)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(ws@8.22.0))(effect@4.0.6)
       alchemy:
         specifier: 2.0.0-beta.84
         version: 2.0.0-beta.84(@alchemy.run/frontend-frameworks@2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0))(@types/node@26.6.2)(astro@7.3.4(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)(@types/node@26.6.2)(tsx@4.23.15)(yaml@2.9.1))(effect@4.0.6)(typescript@6.0.3)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@5.0.1(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))))(effect@4.0.6)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(ws@8.22.0)
@@ -234,6 +237,34 @@ importers:
         specifier: 4.0.6
         version: 4.0.6
     devDependencies:
+      '@effect/vitest':
+        specifier: 4.0.6
+        version: 4.0.6(effect@4.0.6)(vitest@5.0.1(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
+      vitest:
+        specifier: 5.0.1
+        version: 5.0.1(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+
+  packages/domain-worker:
+    dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: 2.0.0-beta.84
+        version: 2.0.0-beta.84(3c939f6ea9d48af0370ceb7db662b138)
+      '@alchemy.run/domain':
+        specifier: 2.0.0-beta.84
+        version: 2.0.0-beta.84(patch_hash=cc10e3f86264d79fc5992f485c2854af943294200d6d52b9c42344a818b1cd4a)(alchemy@2.0.0-beta.84(@alchemy.run/frontend-frameworks@2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0))(@types/node@26.6.2)(astro@7.3.4(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)(@types/node@26.6.2)(tsx@4.23.15)(yaml@2.9.1))(effect@4.0.6)(typescript@6.0.3)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@5.0.1(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))))(effect@4.0.6)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(ws@8.22.0))(effect@4.0.6)
+      '@bilan/domain':
+        specifier: workspace:*
+        version: link:../domain
+      alchemy:
+        specifier: 2.0.0-beta.84
+        version: 2.0.0-beta.84(@alchemy.run/frontend-frameworks@2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0))(@types/node@26.6.2)(astro@7.3.4(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)(@types/node@26.6.2)(tsx@4.23.15)(yaml@2.9.1))(effect@4.0.6)(typescript@6.0.3)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@5.0.1(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))))(effect@4.0.6)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(ws@8.22.0)
+      effect:
+        specifier: 4.0.6
+        version: 4.0.6
+    devDependencies:
+      '@cloudflare/workers-types':
+        specifier: 5.20260923.1
+        version: 5.20260923.1
       '@effect/vitest':
         specifier: 4.0.6
         version: 4.0.6(effect@4.0.6)(vitest@5.0.1(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
@@ -3933,7 +3964,7 @@ snapshots:
       - proxy-agent
       - typescript
 
-  '@alchemy.run/cloudflare@2.0.0-beta.84(8ac0cb4453ef38451646bc12b05c3792)':
+  '@alchemy.run/cloudflare@2.0.0-beta.84(3c939f6ea9d48af0370ceb7db662b138)':
     dependencies:
       '@alchemy.run/acme': 2.0.0-beta.84(alchemy@2.0.0-beta.84(@alchemy.run/frontend-frameworks@2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0))(@types/node@26.6.2)(astro@7.3.4(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)(@types/node@26.6.2)(tsx@4.23.15)(yaml@2.9.1))(effect@4.0.6)(typescript@6.0.3)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@5.0.1(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))))(effect@4.0.6)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(ws@8.22.0))(effect@4.0.6)
       '@alchemy.run/cloudflare-runtime': 2.0.0-beta.84(@distilled.cloud/cloudflare@1.0.0-rc.17(effect@4.0.6))(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0))(@types/node@26.6.2)(effect@4.0.6)(rolldown@1.2.13)(typescript@6.0.3)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
@@ -3950,7 +3981,7 @@ snapshots:
       rolldown: 1.2.13
       tinyglobby: 0.2.17
     optionalDependencies:
-      '@alchemy.run/domain': 2.0.0-beta.84(alchemy@2.0.0-beta.84(@alchemy.run/frontend-frameworks@2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0))(@types/node@26.6.2)(astro@7.3.4(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)(@types/node@26.6.2)(tsx@4.23.15)(yaml@2.9.1))(effect@4.0.6)(typescript@6.0.3)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@5.0.1(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))))(effect@4.0.6)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(ws@8.22.0))(effect@4.0.6)
+      '@alchemy.run/domain': 2.0.0-beta.84(patch_hash=cc10e3f86264d79fc5992f485c2854af943294200d6d52b9c42344a818b1cd4a)(alchemy@2.0.0-beta.84(@alchemy.run/frontend-frameworks@2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0))(@types/node@26.6.2)(astro@7.3.4(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)(@types/node@26.6.2)(tsx@4.23.15)(yaml@2.9.1))(effect@4.0.6)(typescript@6.0.3)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@5.0.1(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))))(effect@4.0.6)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(ws@8.22.0))(effect@4.0.6)
       '@alchemy.run/frontend-frameworks': 2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0))(@types/node@26.6.2)(astro@7.3.4(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)(@types/node@26.6.2)(tsx@4.23.15)(yaml@2.9.1))(effect@4.0.6)(typescript@6.0.3)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
       '@effect/platform-node': 4.0.6(effect@4.0.6)(redis@6.3.0)
       vite: 8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
@@ -3970,7 +4001,7 @@ snapshots:
       effect: 4.0.6
       rolldown: 1.2.13
 
-  '@alchemy.run/domain@2.0.0-beta.84(alchemy@2.0.0-beta.84(@alchemy.run/frontend-frameworks@2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0))(@types/node@26.6.2)(astro@7.3.4(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)(@types/node@26.6.2)(tsx@4.23.15)(yaml@2.9.1))(effect@4.0.6)(typescript@6.0.3)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@5.0.1(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))))(effect@4.0.6)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(ws@8.22.0))(effect@4.0.6)':
+  '@alchemy.run/domain@2.0.0-beta.84(patch_hash=cc10e3f86264d79fc5992f485c2854af943294200d6d52b9c42344a818b1cd4a)(alchemy@2.0.0-beta.84(@alchemy.run/frontend-frameworks@2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0))(@types/node@26.6.2)(astro@7.3.4(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)(@types/node@26.6.2)(tsx@4.23.15)(yaml@2.9.1))(effect@4.0.6)(typescript@6.0.3)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@5.0.1(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))))(effect@4.0.6)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(ws@8.22.0))(effect@4.0.6)':
     dependencies:
       alchemy: 2.0.0-beta.84(@alchemy.run/frontend-frameworks@2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0))(@types/node@26.6.2)(astro@7.3.4(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)(@types/node@26.6.2)(tsx@4.23.15)(yaml@2.9.1))(effect@4.0.6)(typescript@6.0.3)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@5.0.1(@types/node@26.6.2)(happy-dom@20.14.5)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))))(effect@4.0.6)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(ws@8.22.0)
       effect: 4.0.6

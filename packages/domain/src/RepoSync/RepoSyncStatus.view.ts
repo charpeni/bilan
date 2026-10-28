@@ -8,7 +8,7 @@ import { JobId } from './RepoSync.id.ts';
 export const RepoSyncStatusState = Schema.Struct({
   phase: Schema.Literals(['idle', 'admitting', 'queued', 'running', 'paused']),
   jobId: Schema.NullOr(JobId),
-  prsStored: Schema.Int,
+  prsFetched: Schema.Int,
   startedAt: Schema.NullOr(Schema.DateTimeUtc),
   pausedUntil: Schema.NullOr(Schema.DateTimeUtc),
   last: Schema.NullOr(LastSync),
@@ -28,7 +28,7 @@ export class RepoSyncStatus extends Domain.View('RepoSyncStatus', {
   initial: {
     phase: 'idle',
     jobId: null,
-    prsStored: 0,
+    prsFetched: 0,
     startedAt: null,
     pausedUntil: null,
     last: null,
@@ -36,13 +36,13 @@ export class RepoSyncStatus extends Domain.View('RepoSyncStatus', {
     lastEndedAt: null,
   },
   evolve: {
-    SyncRequested: (v, e) => ({ ...v, phase: 'admitting' as const, jobId: e.jobId, prsStored: 0 }),
+    SyncRequested: (v, e) => ({ ...v, phase: 'admitting' as const, jobId: e.jobId, prsFetched: 0 }),
     SyncAdmitted: (v) => ({ ...v, phase: 'queued' as const }),
     SyncStarted: (v, _, { at }) => ({ ...v, phase: 'running' as const, startedAt: at }),
     SyncProgressed: (v, e) => ({
       ...v,
       phase: 'running' as const,
-      prsStored: e.prsStored,
+      prsFetched: e.prsFetched,
       pausedUntil: null,
     }),
     SyncPaused: (v, e) => ({ ...v, phase: 'paused' as const, pausedUntil: e.until }),

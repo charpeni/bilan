@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { upsertUser } from '../src/auth.ts';
 import { createDb } from '../src/db.ts';
-import { admitSyncJob, beginSyncJob, SYNC_CAPACITY } from '../src/jobs.ts';
+import { admitSyncJob, SYNC_CAPACITY } from '../src/jobs.ts';
 import { upsertRepo } from '../src/repos.ts';
 import { syncJobs } from '../src/schema.ts';
 
@@ -38,21 +38,6 @@ async function finish(id: string, status = 'complete'): Promise<void> {
 }
 
 describe('atomic sync admission', () => {
-  it('fences a delayed workflow after its reservation has been retired and replaced', async () => {
-    const original = await candidate();
-    expect(await admitSyncJob(db, original)).toBe(true);
-    await finish(original.id, 'errored');
-    const replacement = { ...original, id: 'replacement' };
-    expect(await admitSyncJob(db, replacement)).toBe(true);
-    expect(await beginSyncJob(db, original.id, now)).toBeUndefined();
-    expect(await beginSyncJob(db, replacement.id, now)).toMatchObject({
-      id: 'replacement',
-      status: 'running',
-    });
-    expect(
-      (await db.select().from(syncJobs).where(eq(syncJobs.id, original.id)).get())?.status,
-    ).toBe('errored');
-  });
   it('reserves a repository exactly once under concurrent requests', async () => {
     const job = await candidate();
     const attempts = await Promise.all(

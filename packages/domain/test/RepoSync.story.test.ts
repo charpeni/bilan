@@ -74,9 +74,9 @@ it.effect('a run goes from request to its end, and the repository is free again'
   story(
     ...started,
     view(RepoSyncStatus, repo, { phase: 'running', jobId: j1 }),
-    when(repo, new RecordSyncProgress({ jobId: j1, prsStored: 25, pointsSpent: 12 })),
-    then(repo, new SyncProgressed({ jobId: j1, prsStored: 25, pointsSpent: 12 })),
-    view(RepoSyncStatus, repo, { phase: 'running', prsStored: 25 }),
+    when(repo, new RecordSyncProgress({ jobId: j1, prsFetched: 25, pointsSpent: 12 })),
+    then(repo, new SyncProgressed({ jobId: j1, prsFetched: 25, pointsSpent: 12 })),
+    view(RepoSyncStatus, repo, { phase: 'running', prsFetched: 25 }),
     when(repo, new FinishSync({ jobId: j1, outcome: 'complete', pointsSpent: 30 })),
     then(repo, new SyncFinished({ jobId: j1, outcome: 'complete', pointsSpent: 30 })),
     view(RepoSyncStatus, repo, {
@@ -178,8 +178,8 @@ it.effect('each report pushes the stall check back; ten silent minutes lose the 
   story(
     ...started,
     clock('2026-10-28T12:09:00Z'),
-    when(repo, new RecordSyncProgress({ jobId: j1, prsStored: 25, pointsSpent: 12 })),
-    then(repo, new SyncProgressed({ jobId: j1, prsStored: 25, pointsSpent: 12 })),
+    when(repo, new RecordSyncProgress({ jobId: j1, prsFetched: 25, pointsSpent: 12 })),
+    then(repo, new SyncProgressed({ jobId: j1, prsFetched: 25, pointsSpent: 12 })),
     // Ten minutes after the start: an older check, now stale.
     clock('2026-10-28T12:11:00Z'),
     then(repo),
@@ -216,8 +216,8 @@ it.effect('a run that resumes after its pause carries on', () =>
     when(repo, new PauseSync({ jobId: j1, until: at('2026-10-28T12:45:00Z') })),
     then(repo, new SyncPaused({ jobId: j1, until: at('2026-10-28T12:45:00Z') })),
     clock('2026-10-28T12:46:00Z'),
-    when(repo, new RecordSyncProgress({ jobId: j1, prsStored: 50, pointsSpent: 20 })),
-    then(repo, new SyncProgressed({ jobId: j1, prsStored: 50, pointsSpent: 20 })),
+    when(repo, new RecordSyncProgress({ jobId: j1, prsFetched: 50, pointsSpent: 20 })),
+    then(repo, new SyncProgressed({ jobId: j1, prsFetched: 50, pointsSpent: 20 })),
     view(RepoSyncStatus, repo, { phase: 'running', pausedUntil: null }),
     // The pause's own check is stale now.
     clock('2026-10-28T12:55:00Z'),
@@ -235,8 +235,8 @@ it.effect('a run is lost after six hours even while it keeps reporting', () =>
       const time = new Date(Date.parse('2026-10-28T12:10:00Z') + i * 9 * 60_000);
       return [
         clock(time.toISOString()),
-        when(repo, new RecordSyncProgress({ jobId: j1, prsStored: i, pointsSpent: i })),
-        then(repo, new SyncProgressed({ jobId: j1, prsStored: i, pointsSpent: i })),
+        when(repo, new RecordSyncProgress({ jobId: j1, prsFetched: i, pointsSpent: i })),
+        then(repo, new SyncProgressed({ jobId: j1, prsFetched: i, pointsSpent: i })),
       ] as const;
     }).flat(),
     clock('2026-10-28T18:00:00Z'),
@@ -263,7 +263,7 @@ it.effect('a lost run is refused when it reports again', () =>
 it.effect('a report about another job is refused with the current one', () =>
   story(
     ...started,
-    when(repo, new RecordSyncProgress({ jobId: j2, prsStored: 1, pointsSpent: 1 })),
+    when(repo, new RecordSyncProgress({ jobId: j2, prsFetched: 1, pointsSpent: 1 })),
     rejected(new NotCurrentJob({ current: j1 })),
     state(repo, (s) => expect(s._tag).toBe('Running')),
   ),
@@ -295,8 +295,8 @@ it.effect('sync_jobs follows the run: running, then how it ended', () =>
     yield* ledgerStory(
       ...started,
       clock('2026-10-28T12:02:00Z'),
-      when(repo, new RecordSyncProgress({ jobId: j1, prsStored: 25, pointsSpent: 12 })),
-      then(repo, new SyncProgressed({ jobId: j1, prsStored: 25, pointsSpent: 12 })),
+      when(repo, new RecordSyncProgress({ jobId: j1, prsFetched: 25, pointsSpent: 12 })),
+      then(repo, new SyncProgressed({ jobId: j1, prsFetched: 25, pointsSpent: 12 })),
     );
     expect(yield* jobs.get(j1)).toEqual({
       status: 'running',

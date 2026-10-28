@@ -11,3 +11,10 @@ overrides:
   undici@7.29.0: 7.29.1
   sharp@0.35.2: 0.35.4
   '@esbuild-kit/core-utils>esbuild': 0.25.12
+
+# @alchemy.run/cloudflare/Domain imports @alchemy.run/domain/internal, which
+# 2.0.0-beta.84's export map blocks ("./internal": null), so the model cannot be
+# hosted on Durable Objects. The patch removes that one line. Drop it with the
+# first release that includes alchemy-run/alchemy#2721 (issue #2603).
+patchedDependencies:
+  '@alchemy.run/domain@2.0.0-beta.84': patches/@alchemy.run__domain@2.0.0-beta.84.patch

@@ -5,10 +5,10 @@ import {
   RepoNotFoundError,
   syncPage,
 } from '@bilan/core';
-import { beginSyncJob, D1Store, schema, upsertRepo } from '@bilan/store-d1';
+import { D1Store, schema, upsertRepo } from '@bilan/store-d1';
 import { WorkflowEntrypoint } from 'cloudflare:workers';
 import { NonRetryableError } from 'cloudflare:workflows';
-import { and, eq, inArray } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 
 import { getDb } from '../lib/db.ts';
 import {
@@ -21,12 +21,20 @@ import {
   trustUnchangedFrom,
   trustUnchangedFromOpen,
 } from '../lib/depth.ts';
+import {
+  reportFailed,
+  reportFinished,
+  reportPause,
+  reportProgress,
+  reportStarted,
+} from '../lib/domain.ts';
 import { gzip } from '../lib/gzip.ts';
 import { payloadKey } from '../lib/payload-key.ts';
 import { serverToken } from '../lib/token-source.ts';
 import { ReauthRequiredError, useUserToken } from '../lib/tokens.ts';
 
 import type { OpenWalkStop, PriorCoverage, SyncDepth, SyncStage, WalkStop } from '../lib/depth.ts';
+import type { DomainReply } from '../lib/domain.ts';
 import type { WorkflowEvent, WorkflowStep } from 'cloudflare:workers';
 
 /**
@@ -38,6 +46,8 @@ import type { WorkflowEvent, WorkflowStep } from 'cloudflare:workers';
 export type SyncTokenSource = { tokenSource: 'server' } | { tokenSource: 'user'; userId: number };
 
 export type SyncRepoParams = SyncTokenSource & {
+  /** The repository the sync model admitted the run for (GitHub's node id). */
+  repoId: string;
   owner: string;
   name: string;
   mode: 'incremental' | 'full';
@@ -80,6 +90,10 @@ export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
   override async run(event: Readonly<WorkflowEvent<SyncRepoParams>>, step: WorkflowStep) {
     const { owner, name, mode, depth, since, maxPrs } = event.payload;
     const jobId = event.instanceId;
+    const job = { repoId: event.payload.repoId, jobId };
+    // Reported with the run's end, so they live outside the `try`.
+    let fetched = 0;
+    let pointsSpent = 0;
     const repoLabel = `${owner}/${name}`;
     const env = this.env;
     const db = getDb(env);
@@ -93,12 +107,9 @@ export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
         'resolve-repo',
         PAGE_RETRIES,
         async () => {
-          const reservation = await beginSyncJob(db, jobId, new Date().toISOString());
-          if (!reservation) {
-            throw new NonRetryableError('This sync reservation is no longer active');
-          }
+          assertCurrent(await reportStarted(env, job));
           const { meta } = await withClient((client) => client.repoMeta({ owner, name }));
-          if (meta.id !== reservation.repoId) {
+          if (meta.id !== job.repoId) {
             throw new NonRetryableError('The repository changed; start a new sync');
           }
           const repo = await upsertRepo(db, {
@@ -154,8 +165,6 @@ export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
       const trustFromOpen =
         mode === 'incremental' ? trustUnchangedFromOpen(prior, since) : -Infinity;
 
-      let fetched = 0;
-      let pointsSpent = 0;
       let pagesUsed = 0;
       let oldestReached: number | null = null;
       let stop: WalkStop = 'max-pages';
@@ -178,6 +187,15 @@ export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
               ...(states === undefined ? {} : { states }),
             }),
           );
+          // The run's heartbeat: a run silent for ten minutes is given up.
+          // Sent inside the step, so a replay of the run does not send it again.
+          assertCurrent(
+            await reportProgress(env, {
+              ...job,
+              prsFetched: fetched + r.fetched,
+              pointsSpent: pointsSpent + r.rateLimit.cost,
+            }),
+          );
           return {
             nextCursor: r.nextCursor,
             fetched: r.fetched,
@@ -191,12 +209,6 @@ export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
         pagesUsed++;
         fetched += result.fetched;
         pointsSpent += result.cost;
-        // Heartbeat for the status endpoint and the lost-job check: a run that
-        // stops beating while the engine still calls it "running" is treated as lost.
-        await db
-          .update(schema.syncJobs)
-          .set({ progressAt: new Date().toISOString(), pointsSpent })
-          .where(eq(schema.syncJobs.id, jobId));
         return result;
       };
       /** Gzip the payload to R2 under the key `GET /payload` reads for `syncedAt`. */
@@ -233,10 +245,7 @@ export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
           await publish(syncedAt, payload);
           await store.markSynced(syncedAt, coverage, false, false);
           // The status endpoint tells the stage from the rows (`syncStage`); keep the heartbeat beating.
-          await db
-            .update(schema.syncJobs)
-            .set({ progressAt: new Date().toISOString(), pointsSpent })
-            .where(eq(schema.syncJobs.id, jobId));
+          assertCurrent(await reportProgress(env, { ...job, prsFetched: fetched, pointsSpent }));
           return {
             syncedAt,
             prs: payload.prs.length,
@@ -249,6 +258,10 @@ export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
       /** GitHub's window resets on the hour; park the instance until then before the next page. */
       const parkIfLow = async (label: string, result: PageStepResult): Promise<void> => {
         if (result.remaining < RATE_LIMIT_RESERVE) {
+          // Said before sleeping, so the quiet is not taken for a stalled run.
+          await step.do(`pause-${label}`, PAGE_RETRIES, async () => {
+            assertCurrent(await reportPause(env, { ...job, until: result.resetAt }));
+          });
           await step.sleepUntil(`rate-limit-${label}`, new Date(result.resetAt));
         }
       };
@@ -363,10 +376,15 @@ export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
             .set({ lastFullSyncAt: syncedAt })
             .where(eq(schema.repos.id, repoId));
         }
-        await db
-          .update(schema.syncJobs)
-          .set({ status: complete ? 'complete' : 'partial', pointsSpent, finishedAt: syncedAt })
-          .where(eq(schema.syncJobs.id, jobId));
+        const finished = await reportFinished(env, {
+          ...job,
+          outcome: complete ? 'complete' : 'partial',
+          pointsSpent,
+        });
+        if (!finished.ok) {
+          // Given up on while this step ran: the payload is published all the same.
+          console.warn(`sync ${jobId}: finished after the model gave up on it`);
+        }
         return {
           syncedAt,
           prs: payload.prs.length,
@@ -378,21 +396,28 @@ export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
         };
       });
     } catch (error) {
-      await db
-        .update(schema.syncJobs)
-        .set({
-          status: 'errored',
-          error: error instanceof Error ? error.message : String(error),
-          finishedAt: new Date().toISOString(),
-        })
-        .where(
-          and(
-            eq(schema.syncJobs.id, jobId),
-            inArray(schema.syncJobs.status, ['queued', 'running']),
-          ),
-        );
+      // Tell the model the run ended; if it cannot be told, its stall check
+      // gives the run up within ten minutes anyway.
+      await reportFailed(env, {
+        ...job,
+        error: error instanceof Error ? error.message : String(error),
+        pointsSpent,
+      }).catch((reportError: unknown) => {
+        console.error(`sync ${jobId}: could not report the failure`, reportError);
+      });
       throw error;
     }
+  }
+}
+
+/**
+ * Stop the run when the model no longer counts it as the repository's current
+ * one (it was given up on, or another run replaced it): retrying cannot bring
+ * it back.
+ */
+function assertCurrent(reply: DomainReply): void {
+  if (!reply.ok) {
+    throw new NonRetryableError("This sync is no longer the repository's current run");
   }
 }
 

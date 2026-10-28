@@ -5,7 +5,6 @@ const mocks = vi.hoisted(() => ({
   checkRepoAccess: vi.fn(),
   getJob: vi.fn(),
   countStoredPrs: vi.fn(),
-  reconcileJob: vi.fn(),
   workflow: vi.fn(),
 }));
 
@@ -16,7 +15,6 @@ vi.mock('./access.ts', () => ({ accessDeps: () => ({}), checkRepoAccess: mocks.c
 vi.mock('./jobs.ts', () => ({
   getJob: mocks.getJob,
   countStoredPrs: mocks.countStoredPrs,
-  reconcileJob: mocks.reconcileJob,
 }));
 
 import { GET } from '../pages/api/sync/[id].ts';
@@ -69,7 +67,6 @@ describe('job progress authorization', () => {
       expect(await response.json()).toEqual({ message: 'unknown job' });
       expect(mocks.countStoredPrs).not.toHaveBeenCalled();
       expect(mocks.workflow).not.toHaveBeenCalled();
-      expect(mocks.reconcileJob).not.toHaveBeenCalled();
     },
   );
 

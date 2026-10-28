@@ -5,7 +5,7 @@ import { accessDeps, checkRepoAccess } from '../../../lib/access.ts';
 import { getDb } from '../../../lib/db.ts';
 import { githubUnavailable, json, loginRequired } from '../../../lib/http.ts';
 import { isSettledJobStatus, jobVisibility } from '../../../lib/job-visibility.ts';
-import { countStoredPrs, getJob, reconcileJob } from '../../../lib/jobs.ts';
+import { countStoredPrs, getJob } from '../../../lib/jobs.ts';
 import { syncProgress, syncStage } from '../../../lib/sync-progress.ts';
 
 import type { APIRoute } from 'astro';
@@ -22,7 +22,7 @@ export const GET: APIRoute = async ({ params, locals }) => {
   const db = getDb(env);
   const user = locals.user;
   if (!user) return loginRequired();
-  let job = await getJob(db, id);
+  const job = await getJob(db, id);
 
   const visibility = jobVisibility({ job, user });
   if (visibility === 'login-required') return loginRequired();
@@ -32,12 +32,6 @@ export const GET: APIRoute = async ({ params, locals }) => {
   const access = await checkRepoAccess(accessDeps(env), user, repo);
   if (access.kind === 'unavailable') return githubUnavailable();
   if (access.kind !== 'ok') return unknownJob();
-  // A row can say "running" long after its Workflow instance died; settle it
-  // here so the page stops polling and the next sync is not blocked.
-  if (job.status === 'queued' || job.status === 'running') {
-    if ((await reconcileJob(env, db, job)) === undefined) job = (await getJob(db, id)) ?? job;
-  }
-
   let workflow: { status: string; error?: { name: string; message: string } } | null = null;
   try {
     const status = await (await env.SYNC_REPO.get(id)).status();

@@ -23,7 +23,7 @@ export const LastSync = Schema.Struct({
 });
 
 /** A run past admission: `beat` is the seq of the event that last armed its stall check. */
-const Run = { jobId: JobId, beat: Schema.Int, prsStored: Schema.Int, pointsSpent: Schema.Int };
+const Run = { jobId: JobId, beat: Schema.Int, prsFetched: Schema.Int, pointsSpent: Schema.Int };
 
 export const RepoSyncState = Schema.Union([
   Schema.TaggedStruct('Idle', { last: Schema.NullOr(LastSync) }),
@@ -109,7 +109,7 @@ export class RepoSync extends Domain.Aggregate('RepoSync', {
         : [
             new SyncProgressed({
               jobId: cmd.jobId,
-              prsStored: cmd.prsStored,
+              prsFetched: cmd.prsFetched,
               pointsSpent: cmd.pointsSpent,
             }),
           ],
@@ -159,7 +159,7 @@ export class RepoSync extends Domain.Aggregate('RepoSync', {
       _tag: 'Queued' as const,
       jobId: e.jobId,
       beat: seq,
-      prsStored: 0,
+      prsFetched: 0,
       pointsSpent: 0,
     }),
     SyncReleased: (_, e) => ended(e.jobId, 'released'),
@@ -172,7 +172,7 @@ export class RepoSync extends Domain.Aggregate('RepoSync', {
             _tag: 'Running' as const,
             jobId: s.jobId,
             beat: seq,
-            prsStored: e.prsStored,
+            prsFetched: e.prsFetched,
             pointsSpent: e.pointsSpent,
           }
         : s,
@@ -182,7 +182,7 @@ export class RepoSync extends Domain.Aggregate('RepoSync', {
             _tag: 'Paused' as const,
             jobId: s.jobId,
             beat: seq,
-            prsStored: s.prsStored,
+            prsFetched: s.prsFetched,
             pointsSpent: s.pointsSpent,
             until: e.until,
           }

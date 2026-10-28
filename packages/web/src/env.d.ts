@@ -11,7 +11,10 @@ declare global {
     DB: D1Database;
     PAYLOADS: R2Bucket;
     CACHE: KVNamespace;
+    /** The `sync-repo` Workflow: hosted by bilan-sync; the Website only reads instance status. */
     SYNC_REPO: Workflow<SyncRepoParams>;
+    /** bilan-domain, the repository-sync model (`lib/domain.ts`). */
+    DOMAIN: Fetcher;
     /** URL slug of the GitHub App (`https://github.com/apps/<slug>`), for install links. */
     GITHUB_APP_SLUG: string;
     /**
