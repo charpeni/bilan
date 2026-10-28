@@ -5,7 +5,8 @@
  * probes and their outcomes stay as `poll.ts` defines them: an event only
  * says "look again". While the stream is down, waits fall back to the plain
  * interval; while it is up, a wait still ends after `LIVE_FALLBACK_MS`, in
- * case an event is missed.
+ * case an event is missed. The server ends the stream when the run ends, or
+ * after a few minutes, and the browser reconnects on its own.
  */
 
 /** The longest a wait lasts while the stream is connected. */

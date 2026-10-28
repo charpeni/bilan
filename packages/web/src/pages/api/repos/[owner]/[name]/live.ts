@@ -14,11 +14,13 @@ import {
 import type { APIRoute } from 'astro';
 
 /**
- * The repository's sync status as Server-Sent Events, pushed by the sync
- * model on every change (bilan-domain's `GET /sync/watch`). The page uses
- * each event as a cue to read the job or payload again, instead of polling
- * on a timer (`lib/live-sync.ts`). Answered only after the same access check
- * as the payload; a built-in example never syncs, so it has no stream.
+ * The repository's sync status as Server-Sent Events (bilan-domain's
+ * `GET /sync/watch`): an event, carrying only the phase, each time the
+ * status changes. The page uses each event as a cue to read the job or
+ * payload again (`lib/live-sync.ts`). The stream ends with the run, or after
+ * a few minutes, and the browser reconnects through this access check again,
+ * the same as the payload's. A built-in example never syncs, so it has no
+ * stream.
  */
 export const GET: APIRoute = async ({ params, request, locals }) => {
   const { owner, name } = params as { owner: string; name: string };
