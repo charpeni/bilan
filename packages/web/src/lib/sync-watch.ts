@@ -1,3 +1,4 @@
+import { liveSync } from './live-sync.ts';
 import {
   jobPollOutcome,
   jobProgress,
@@ -8,6 +9,7 @@ import {
   readPayloadProbe,
 } from './poll.ts';
 
+import type { LiveSyncDeps } from './live-sync.ts';
 import type { JobProbe, PollOutcome, SyncProgress, SyncWatch } from './poll.ts';
 
 /** Why a wait ended without a new payload. */
@@ -36,6 +38,12 @@ export interface SyncWatchDeps {
    * first-sync card uses it to hand over to the dashboard early.
    */
   untilFirstPayload?: boolean;
+  /**
+   * Follow the repository's live sync status (`<apiBase>/live`): each change
+   * ends the wait between probes early (`lib/live-sync.ts`). Ignored when
+   * `sleep` is given.
+   */
+  live?: boolean | LiveSyncDeps;
 }
 
 const defaultSleep = (ms: number): Promise<void> =>
@@ -83,7 +91,24 @@ export async function watchSync(
   baseline: string | null,
   deps: SyncWatchDeps,
 ): Promise<void> {
-  const sleep = deps.sleep ?? defaultSleep;
+  const live =
+    deps.sleep === undefined && deps.live
+      ? liveSync(`${deps.apiBase}/live`, deps.live === true ? {} : deps.live)
+      : null;
+  const sleep = deps.sleep ?? live?.wait ?? defaultSleep;
+  try {
+    await follow(initial, baseline, deps, sleep);
+  } finally {
+    live?.close();
+  }
+}
+
+async function follow(
+  initial: SyncWatch,
+  baseline: string | null,
+  deps: SyncWatchDeps,
+  sleep: (ms: number) => Promise<void>,
+): Promise<void> {
   let watch: SyncWatch | null = initial;
   while (watch !== null) {
     const { outcome, progress } = await probe(watch, deps);

@@ -186,3 +186,52 @@ describe('watchSync', () => {
     expect((error as SyncWatchError).message).toBe(STOPPED_MESSAGE);
   });
 });
+
+describe('watchSync following the live status', () => {
+  it('probes again as soon as the model reports a change, and closes the stream after', async () => {
+    const { fetch, calls } = fakeFetch([
+      { status: 200, body: { status: 'running', settled: false, prsStored: 10 } },
+      { status: 200, body: { status: 'complete', settled: true, prsStored: 40 } },
+    ]);
+    const listeners: Record<string, (() => void)[]> = {};
+    let closed = false;
+    const urls: string[] = [];
+    // The timer never fires: only a live event can end the wait.
+    const watching = watchSync({ kind: 'job', jobId: 'j1' }, null, {
+      apiBase: API,
+      fetch,
+      live: {
+        connect: (url) => {
+          urls.push(url);
+          return {
+            addEventListener: (type, listener) => (listeners[type] ??= []).push(listener),
+            close: () => {
+              closed = true;
+            },
+          };
+        },
+        setTimeout: () => 0,
+        clearTimeout: () => {},
+      },
+    });
+    listeners.open?.forEach((l) => l());
+    await vi.waitFor(() => expect(calls).toHaveLength(1));
+    listeners.message?.forEach((l) => l());
+    await watching;
+    expect(urls).toEqual([`${API}/live`]);
+    expect(calls).toHaveLength(2);
+    expect(closed).toBe(true);
+  });
+
+  it('never opens the stream when a sleep is given', async () => {
+    const { fetch } = fakeFetch([{ status: 200, body: { status: 'complete', settled: true } }]);
+    const connect = vi.fn();
+    await watchSync({ kind: 'job', jobId: 'j1' }, null, {
+      apiBase: API,
+      fetch,
+      sleep,
+      live: { connect },
+    });
+    expect(connect).not.toHaveBeenCalled();
+  });
+});
