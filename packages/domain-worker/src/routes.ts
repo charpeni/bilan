@@ -35,6 +35,7 @@ import type { SyncAlreadyRunning } from '@bilan/domain/RepoSync/RequestSync.comm
  * | `POST /sync/finish`    | `repoId, jobId, outcome, pointsSpent`     | not the current run     |
  * | `POST /sync/fail`      | `repoId, jobId, error, pointsSpent`       | not the current run     |
  * | `GET /sync/status`     | `?repoId=`                                | never                   |
+ * | `GET /sync/watch`      | `?repoId=`: Server-Sent Events, see `statusEvents.ts` | never   |
  *
  * Answers `{ ok: true }`; a refusal is `{ ok: false, rejected, ... }` with 409,
  * and a body that does not decode is 400.

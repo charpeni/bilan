@@ -398,6 +398,7 @@ const chipTitle =
             let liveness: Liveness | null = null;
             await watchSync(watch, baseline, {
               apiBase: base,
+              live: true,
               fetch: (input, init) => fetch(input, init),
               onProgress: (progress) => {
                 liveness = observe(liveness, progress.prsStored, Date.now());
@@ -524,6 +525,7 @@ const chipTitle =
             try {
               await watchSync(watch, baseline, {
                 apiBase: base,
+                live: true,
                 fetch: (input, init) => fetch(input, init),
                 onProgress: (progress) => {
                   liveness = observe(liveness, progress.prsStored, Date.now());
@@ -748,6 +750,7 @@ const chipTitle =
                 },
                 // A staged run's interim payload is enough to open the dashboard.
                 untilFirstPayload: true,
+                live: true,
               });
               detail.textContent = 'Opening the dashboard…';
               location.reload();

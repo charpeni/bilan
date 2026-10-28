@@ -120,7 +120,10 @@ admitted against those quotas, started on the Workflow, and reports each step
 back. A request not admitted within two minutes expires; a run silent for ten
 minutes is given up and stopped (a rate-limit pause is announced, and held to
 ten minutes after it ends); no run lasts past six hours. `sync_jobs` follows
-the model, so the quotas and the job history read what it decided.
+the model, so the quotas and the job history read what it decided. A page
+following a sync gets the model's status pushed as Server-Sent Events
+(`/api/repos/:owner/:name/live`), behind the same access check as the
+dashboard, and reads the job again on each change instead of polling.
 
 ### Running it yourself
 
