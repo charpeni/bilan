@@ -33,33 +33,18 @@ import { payloadKey } from '../lib/payload-key.ts';
 import { serverToken } from '../lib/token-source.ts';
 import { ReauthRequiredError, useUserToken } from '../lib/tokens.ts';
 
-import type { OpenWalkStop, PriorCoverage, SyncDepth, SyncStage, WalkStop } from '../lib/depth.ts';
+import type { OpenWalkStop, PriorCoverage, SyncStage, WalkStop } from '../lib/depth.ts';
 import type { DomainReply } from '../lib/domain.ts';
+import type { SyncRepoParams, SyncTokenSource } from '@bilan/domain/RepoSync/SyncRepoParams';
 import type { WorkflowEvent, WorkflowStep } from 'cloudflare:workers';
 
 /**
- * Which GitHub token the job runs on: the server's (cron, example repo, public
- * repos the app is not installed on) or a signed-in user's. A user token is
- * resolved again inside every step, since GitHub App tokens live 8 hours and a
- * deep sync can outlast that; see `withClient`.
+ * What the Workflow takes, shared with the sync model's runner
+ * (`@bilan/domain`). A user token is resolved again inside every step, since
+ * GitHub App tokens live 8 hours and a deep sync can outlast that; see
+ * `withClient`.
  */
-export type SyncTokenSource = { tokenSource: 'server' } | { tokenSource: 'user'; userId: number };
-
-export type SyncRepoParams = SyncTokenSource & {
-  /** The repository the sync model admitted the run for (GitHub's node id). */
-  repoId: string;
-  owner: string;
-  name: string;
-  mode: 'incremental' | 'full';
-  /** How far back the job was asked to guarantee activity; `since` is its bound, caught up. */
-  depth: SyncDepth;
-  /**
-   * ISO instant. Stop walking once a page is older than this, then fetch every
-   * open PR so the backlog is complete whatever the depth. Omit for full history.
-   */
-  since?: string;
-  maxPrs?: number;
-};
+export type { SyncRepoParams, SyncTokenSource };
 
 /** What one page step persists. Never the PR data: step results are capped at 1 MiB. */
 interface PageStepResult {

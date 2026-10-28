@@ -30,7 +30,7 @@ const run = {
   owner: 'charpeni',
   name: 'bilan',
   mode: 'incremental' as const,
-  depth: '30d',
+  depth: '30d' as const,
   since: null,
   maxPrs: null,
   tokenSource: { _tag: 'User' as const, userId: 7 },

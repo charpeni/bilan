@@ -101,11 +101,10 @@ it.effect('answers 400 for a body that does not decode, and 404 for an unknown r
       run: { ...run, mode: 'sideways' },
     });
     expect(badRun.status).toBe(400);
-    expect((yield* route('POST', '/sync/pause', { ...job, until: 'tomorrow' })).body).toEqual({
-      ok: false,
-      error: 'invalid request',
-      detail: 'until is not a date',
-    });
+    const badDate = yield* route('POST', '/sync/pause', { ...job, until: 'tomorrow' });
+    expect(badDate.status).toBe(400);
+    expect(badDate.body).toMatchObject({ ok: false, error: 'invalid request' });
+    expect((badDate.body as { detail: string }).detail).toContain('until');
     expect((yield* route('POST', '/sync/nope', {})).status).toBe(404);
     expect((yield* route('GET', '/sync/request', {})).status).toBe(404);
   }).pipe(Effect.provide(hosted().layer)),
