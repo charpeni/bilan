@@ -1,6 +1,4 @@
-import { and, eq, inArray, sql } from 'drizzle-orm';
-
-import { syncJobs } from './schema.ts';
+import { sql } from 'drizzle-orm';
 
 import type { Db } from './db.ts';
 
@@ -53,14 +51,4 @@ export async function admitSyncJob(db: Db, job: SyncAdmission): Promise<boolean>
     RETURNING id
   `);
   return admitted !== undefined;
-}
-
-/** Fence delayed workflow starts against a reservation that was already retired. */
-export function beginSyncJob(db: Db, id: string, now: string) {
-  return db
-    .update(syncJobs)
-    .set({ status: 'running', progressAt: now })
-    .where(and(eq(syncJobs.id, id), inArray(syncJobs.status, ['queued', 'running'])))
-    .returning()
-    .get();
 }

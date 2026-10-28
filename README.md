@@ -112,9 +112,15 @@ active jobs and 20 starts per account in a rolling 24 hours, and at most 20
 active jobs and 200 starts globally. Deepening history still consumes these
 budgets; failed attempts count toward the daily budget. A repeated sync of the
 same depth has a 10-minute cooldown. The limits live in
-`packages/store-d1/src/jobs.ts`. Abandoned reservations are reconciled before
-admission, and a stalled live workflow must be terminated before its capacity
-is released. If the engine cannot report its status, the reservation is kept.
+`packages/store-d1/src/jobs.ts`.
+
+Whether a repository is syncing is decided by one model, `packages/domain`,
+hosted on Durable Objects by the `bilan-domain` Worker: a run is requested,
+admitted against those quotas, started on the Workflow, and reports each step
+back. A request not admitted within two minutes expires; a run silent for ten
+minutes is given up and stopped (a rate-limit pause is announced, and held to
+ten minutes after it ends); no run lasts past six hours. `sync_jobs` follows
+the model, so the quotas and the job history read what it decided.
 
 ### Running it yourself
 
@@ -128,9 +134,10 @@ is released. If the engine cannot report its status, the reservation is kept.
    (`openssl rand -base64 32`).
 3. Deploy. The infrastructure is declared in `alchemy.run.ts`
    ([Alchemy](https://alchemy.run)): the D1 database (migrations are applied on
-   every deploy), the R2 bucket, the KV namespace, the sync Workflow, and two
+   every deploy), the R2 bucket, the KV namespace, the sync Workflow, and three
    Workers. `bilan` serves the Astro app; `bilan-sync` hosts the Workflow and
-   the nightly cron, since Astro owns the app Worker's entry.
+   the nightly cron, since Astro owns the app Worker's entry; `bilan-domain`
+   hosts the sync model, reached by the other two through service bindings.
 
    ```sh
    pnpm alchemy profile edit --add Cloudflare   # once: sign in to Cloudflare
@@ -165,7 +172,7 @@ URL matches any `workers.dev` subdomain of the account; fork pull requests are
 never deployed.
 
 For local development, fill in `.env` as above and run `pnpm dev`. It runs
-both Workers in workerd with local D1, R2, KV, and Workflows on
+all three Workers in workerd with local D1, R2, KV, and Workflows on
 `http://localhost:8788`, and needs no Cloudflare account. Workflows require
 the Workers Paid plan in production.
 
@@ -275,15 +282,16 @@ pnpm build          # bundles the dashboard and the CLI (Alchemy builds the web 
 node packages/cli/bin/bilan.mjs owner/name --open
 ```
 
-| Package               | Role                                                                        |
-| --------------------- | --------------------------------------------------------------------------- |
-| `packages/core`       | GitHub GraphQL client, sync engine, derive step, and metrics; Web APIs only |
-| `packages/ui`         | The dashboard as a framework-free module                                    |
-| `packages/store-file` | JSON-file sync store used by the CLI                                        |
-| `packages/store-d1`   | Drizzle schema, migrations, and D1 sync store for the web app               |
-| `packages/domain`     | Repository syncs as an `@alchemy.run/domain` model, specified by stories    |
-| `packages/web`        | The Astro app on Cloudflare Workers: login, sync workflow, dashboards       |
-| `packages/cli`        | The `bilan` command, published as `github-bilan`                            |
+| Package                  | Role                                                                        |
+| ------------------------ | --------------------------------------------------------------------------- |
+| `packages/core`          | GitHub GraphQL client, sync engine, derive step, and metrics; Web APIs only |
+| `packages/ui`            | The dashboard as a framework-free module                                    |
+| `packages/store-file`    | JSON-file sync store used by the CLI                                        |
+| `packages/store-d1`      | Drizzle schema, migrations, and D1 sync store for the web app               |
+| `packages/domain`        | Repository syncs as an `@alchemy.run/domain` model, specified by stories    |
+| `packages/domain-worker` | The `bilan-domain` Worker: the model on Durable Objects, and its sync API   |
+| `packages/web`           | The Astro app on Cloudflare Workers: login, sync workflow, dashboards       |
+| `packages/cli`           | The `bilan` command, published as `github-bilan`                            |
 
 Pushing a `vX.Y.Z` tag publishes the CLI to npm through the `Publish` workflow.
 The tag must match the version in `packages/cli/package.json` and point to a
