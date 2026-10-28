@@ -2,9 +2,6 @@
 
 The pulse of a GitHub repository.
 
-Powered by [Effect](https://effect.website) and [Alchemy](https://alchemy.run)
-on [Cloudflare](https://workers.cloudflare.com).
-
 bilan turns pull request history into a picture of what is actually happening
 in a repository: who is contributing, which parts of the codebase are moving,
 how reviews flow and who carries them, and where work gets stuck. It is also a
@@ -23,6 +20,9 @@ Two ways to use it:
 - **Web app**: sign in with GitHub on [bilan.dev](https://bilan.dev), open any
   repository you can read, and share the dashboard link with coworkers who can
   read it too.
+
+Powered by [Effect](https://effect.website) and [Alchemy](https://alchemy.run)
+on [Cloudflare](https://workers.cloudflare.com).
 
 ## CLI
 
