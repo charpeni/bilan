@@ -204,7 +204,17 @@ const chipTitle =
           data-signed-in={user ? '1' : '0'}
           data-login-href={loginHref}
           data-stale={stale ? '1' : '0'}
-        />
+        >
+          {/* The dashboard's own title block, until `mount` replaces it once the payload is in. */}
+          <div class="wrap">
+            <header class="page">
+              <div>
+                <h1>{label}</h1>
+                <div class="sub" id="dash-loading">Loading pull request activity…</div>
+              </div>
+            </header>
+          </div>
+        </div>
         <script>
           import { holdHeight, LoadMoreError, loadingText, mount } from '@bilan/ui';
 
@@ -571,6 +581,8 @@ const chipTitle =
               if (root.dataset.syncActive === '1') void followFirstSync();
               else if (root.dataset.autoRefresh === '1') void backgroundRefresh();
             } catch (error) {
+              // The notice says what went wrong; the heading no longer claims to be loading.
+              document.getElementById('dash-loading')?.remove();
               show(error instanceof Error ? error.message : String(error), 'error', {
                 label: 'Try again',
                 run: () => location.reload(),
