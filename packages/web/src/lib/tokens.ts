@@ -224,22 +224,56 @@ export async function deleteStoredToken(
   await db.delete(userTokens).where(and(eq(userTokens.userId, userId), holds));
 }
 
+/**
+ * Decrypt a stored token set, or null when it cannot be: encrypted under
+ * another `TOKEN_ENCRYPTION_KEY` (the key was replaced), or not in the stored
+ * form. Such a set can never be used again, so the caller treats it as absent
+ * and the viewer signs in again, which stores a set under the current key.
+ * A key that fails to import is a configuration error and is not caught here.
+ */
+export async function decryptStoredGrant(
+  key: CryptoKey,
+  row: Pick<
+    UserToken,
+    'encryptedToken' | 'encryptedRefreshToken' | 'expiresAt' | 'refreshExpiresAt'
+  >,
+): Promise<StoredGrant | null> {
+  try {
+    return {
+      accessToken: await decryptToken(key, row.encryptedToken),
+      refreshToken:
+        row.encryptedRefreshToken === null
+          ? null
+          : await decryptToken(key, row.encryptedRefreshToken),
+      expiresAt: row.expiresAt,
+      refreshExpiresAt: row.refreshExpiresAt,
+      encrypted: { accessToken: row.encryptedToken, refreshToken: row.encryptedRefreshToken },
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function tokenDeps(env: TokenEnv): TokenDeps {
   return {
     load: async (userId) => {
-      const row = await getUserToken(getDb(env), userId);
+      const db = getDb(env);
+      const row = await getUserToken(db, userId);
       if (!row) return null;
-      const key = await tokenKey(env);
-      return {
-        accessToken: await decryptToken(key, row.encryptedToken),
-        refreshToken:
-          row.encryptedRefreshToken === null
-            ? null
-            : await decryptToken(key, row.encryptedRefreshToken),
-        expiresAt: row.expiresAt,
-        refreshExpiresAt: row.refreshExpiresAt,
-        encrypted: { accessToken: row.encryptedToken, refreshToken: row.encryptedRefreshToken },
-      };
+      const grant = await decryptStoredGrant(await tokenKey(env), row);
+      if (!grant) {
+        console.warn(`user ${userId}: stored GitHub token is unreadable; asking for a new login`);
+        // Only the row that was read: a set stored since, under the current key, survives.
+        await db
+          .delete(schema.userTokens)
+          .where(
+            and(
+              eq(schema.userTokens.userId, userId),
+              eq(schema.userTokens.encryptedToken, row.encryptedToken),
+            ),
+          );
+      }
+      return grant;
     },
     save: async (userId, grant) => {
       const row = await storeUserToken(env, userId, grant);
