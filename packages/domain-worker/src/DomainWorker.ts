@@ -21,10 +21,17 @@ import { WorkflowSyncRunner } from './WorkflowSyncRunner.ts';
  * The repository-sync model on Durable Objects, with its adapters: runs go to
  * the `sync-repo` Workflow, and `sync_jobs` lives in D1. Both are plain
  * bindings on `env`, declared below and read at runtime.
+ *
+ * The model traces every command, decision, policy, projection, and runner
+ * call, tagged with `domain.correlation_id`; `Cloudflare.Telemetry()` sends
+ * those spans to Workers Observability, nested under Cloudflare's own.
  */
-const SyncLive = BilanSync.layer(BilanSyncHandlers).pipe(
-  Layer.provide(Layer.mergeAll(WorkflowSyncRunner, D1SyncJobStore)),
-  Layer.provide(DomainCloudflare.DurableObjects),
+const SyncLive = Layer.mergeAll(
+  BilanSync.layer(BilanSyncHandlers).pipe(
+    Layer.provide(Layer.mergeAll(WorkflowSyncRunner, D1SyncJobStore)),
+    Layer.provide(DomainCloudflare.DurableObjects),
+  ),
+  Cloudflare.Telemetry(),
 );
 
 /**
@@ -68,7 +75,11 @@ export default class DomainWorker extends Cloudflare.Worker<DomainWorker>()(
             : Object.fromEntries(url.searchParams);
         const reply = yield* routes(request.method, url.pathname, body);
         return yield* HttpServerResponse.json(reply.body, { status: reply.status });
-      }).pipe(Effect.orDie),
+      }).pipe(
+        // An unexpected failure answers 500; log what it was first.
+        Effect.tapCause((cause) => Effect.logError('bilan-domain request failed', cause)),
+        Effect.orDie,
+      ),
     };
   }).pipe(Effect.provide(SyncLive)),
 ) {}

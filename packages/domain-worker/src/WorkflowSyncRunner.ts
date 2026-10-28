@@ -1,4 +1,4 @@
-import { SyncRunner } from '@bilan/domain/RepoSync/SyncRunner.external';
+import { SyncRunner, SyncRunnerUnavailable } from '@bilan/domain/RepoSync/SyncRunner.external';
 import * as Effect from 'effect/Effect';
 
 import { DomainEnv } from './env.ts';
@@ -20,38 +20,46 @@ const toParams = (repoId: RepoId, run: SyncRun): SyncRepoParams => ({
     : { tokenSource: 'user' as const, userId: run.tokenSource.userId }),
 });
 
-/** Cloudflare's answer when an instance with that id was already created. */
-const ALREADY_CREATED = /already[ _.]?exists/i;
-/** Its answers when there is nothing left to stop. */
-const NOTHING_TO_STOP = /not[ _.]?found|not[ _.]?running|already|complete|errored|terminated/i;
-
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
+const unavailable = (error: unknown) => new SyncRunnerUnavailable({ reason: message(error) });
+
+/** Instance statuses with nothing left to stop. */
+const ENDED = new Set(['complete', 'errored', 'terminated']);
 
 /**
  * Runs a sync on the `sync-repo` Workflow hosted by bilan-sync, keyed by the
- * job id: the policies call `start` and `stop` at least once, so a second
- * `start` finds the instance already created, and a second `stop` finds it
- * already stopped. Any other failure is a defect, so the policy runs again.
+ * job id. The policies call `start` and `stop` at least once, so both look
+ * at the instance rather than at Cloudflare's error messages:
+ *
+ * - `start` that fails while an instance with the id exists was already
+ *   done by an earlier call;
+ * - `stop` terminates the instance only while it has not ended.
+ *
+ * Anything else is `SyncRunnerUnavailable`, which the policies retry, then
+ * settle.
  */
 export const WorkflowSyncRunner = SyncRunner.toLayer(
   Effect.gen(function* () {
     const { SYNC_REPO: workflow } = yield* DomainEnv;
     return {
       start: ({ jobId, repoId, run }) =>
-        Effect.promise(async () => {
-          try {
-            await workflow.create({ id: jobId, params: toParams(repoId, run) });
-          } catch (error) {
-            if (!ALREADY_CREATED.test(message(error))) throw error;
-          }
-        }),
+        Effect.tryPromise({
+          try: () => workflow.create({ id: jobId, params: toParams(repoId, run) }),
+          catch: unavailable,
+        }).pipe(
+          Effect.catchTag('SyncRunnerUnavailable', (error) =>
+            Effect.tryPromise({ try: () => workflow.get(jobId), catch: () => error }),
+          ),
+          Effect.asVoid,
+        ),
       stop: ({ jobId }) =>
-        Effect.promise(async () => {
-          try {
-            await (await workflow.get(jobId)).terminate();
-          } catch (error) {
-            if (!NOTHING_TO_STOP.test(message(error))) throw error;
-          }
+        Effect.tryPromise({
+          try: async () => {
+            const instance = await workflow.get(jobId);
+            const { status } = await instance.status();
+            if (!ENDED.has(status)) await instance.terminate();
+          },
+          catch: unavailable,
         }),
     };
   }),
