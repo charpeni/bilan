@@ -14,10 +14,16 @@ export type TokenSource = typeof TokenSource.Type;
 export const SyncDepth = Schema.Literals(['30d', '90d', '180d', 'all']);
 export type SyncDepth = typeof SyncDepth.Type;
 
-/** What a run is asked to do: everything `SyncRunner.start` needs, in the model's words. */
+/**
+ * What a run is asked to do, in the model's words. The repository is known
+ * by its id alone (the aggregate's key): the model's history outlives the
+ * repository's 90-day retention, so it keeps no name. The runner looks the
+ * name up when it starts a run.
+ */
 export const SyncRun = Schema.Struct({
-  owner: Schema.String,
-  name: Schema.String,
+  /** Recorded by runs requested before names were dropped; nothing reads them. */
+  owner: Schema.optional(Schema.String),
+  name: Schema.optional(Schema.String),
   mode: Schema.Literals(['incremental', 'full']),
   depth: SyncDepth,
   /** ISO bound the run walks back to; null for full history. */

@@ -47,8 +47,6 @@ const hosted = (runner: ReturnType<typeof failingRunner>['layer']) =>
   );
 
 const run: SyncRun = {
-  owner: 'charpeni',
-  name: 'bilan',
   mode: 'incremental',
   depth: '30d',
   since: null,

@@ -40,8 +40,6 @@ const repo = RepoSync.ref('R_bilan');
 const j1 = JobId.make('job-1');
 const j2 = JobId.make('job-2');
 const run: SyncRun = {
-  owner: 'charpeni',
-  name: 'bilan',
   mode: 'incremental',
   depth: '30d',
   since: '2026-09-28T12:00:00.000Z',

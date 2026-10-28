@@ -7,10 +7,16 @@ import type { RepoId } from '@bilan/domain/RepoSync/RepoSync.id';
 import type { SyncRepoParams } from '@bilan/domain/RepoSync/SyncRepoParams';
 import type { SyncRun } from '@bilan/domain/RepoSync/SyncRun';
 
-const toParams = (repoId: RepoId, run: SyncRun): SyncRepoParams => ({
+/** The repository's name, which the model does not keep (`SyncRun`). */
+interface RepoName {
+  owner: string;
+  name: string;
+}
+
+const toParams = (repoId: RepoId, { owner, name }: RepoName, run: SyncRun): SyncRepoParams => ({
   repoId,
-  owner: run.owner,
-  name: run.name,
+  owner,
+  name,
   mode: run.mode,
   depth: run.depth,
   ...(run.since === null ? {} : { since: run.since }),
@@ -31,8 +37,9 @@ const ENDED = new Set(['complete', 'errored', 'terminated']);
  * job id. The policies call `start` and `stop` at least once, so both look
  * at the instance rather than at Cloudflare's error messages:
  *
- * - `start` that fails while an instance with the id exists was already
- *   done by an earlier call;
+ * - `start` reads the repository's name from D1 (the model keeps ids only),
+ *   and when it fails while an instance with the id exists, an earlier call
+ *   already did it;
  * - `stop` terminates the instance only while it has not ended.
  *
  * Anything else is `SyncRunnerUnavailable`, which the policies retry, then
@@ -40,11 +47,18 @@ const ENDED = new Set(['complete', 'errored', 'terminated']);
  */
 export const WorkflowSyncRunner = SyncRunner.toLayer(
   Effect.gen(function* () {
-    const { SYNC_REPO: workflow } = yield* DomainEnv;
+    const { DB, SYNC_REPO: workflow } = yield* DomainEnv;
     return {
       start: ({ jobId, repoId, run }) =>
         Effect.tryPromise({
-          try: () => workflow.create({ id: jobId, params: toParams(repoId, run) }),
+          try: async () => {
+            // Admission upserted the row; retention may have deleted it since.
+            const repo = await DB.prepare('SELECT owner, name FROM repos WHERE id = ?')
+              .bind(repoId)
+              .first<RepoName>();
+            if (!repo) throw new Error(`repository ${repoId} is no longer stored`);
+            return workflow.create({ id: jobId, params: toParams(repoId, repo, run) });
+          },
           catch: unavailable,
         }).pipe(
           Effect.catchTag('SyncRunnerUnavailable', (error) =>
