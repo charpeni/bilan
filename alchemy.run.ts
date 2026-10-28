@@ -9,6 +9,18 @@ import * as Effect from 'effect/Effect';
 import * as Option from 'effect/Option';
 import * as Redacted from 'effect/Redacted';
 
+import {
+  Cache,
+  compatibility,
+  D1Migrations,
+  Database,
+  existingInProd,
+  Payloads,
+  Stage,
+  syncRepoWorkflow,
+  workerName,
+} from './infra/resources.ts';
+
 /**
  * bilan on Cloudflare, one stack per stage:
  *
@@ -32,42 +44,11 @@ export default Alchemy.Stack(
     state: process.env.ALCHEMY_DEV === 'true' ? Alchemy.localState() : Cloudflare.state(),
   },
   Effect.gen(function* () {
-    const { stage } = yield* Alchemy.Stack;
-    const prod = stage === 'prod';
-    // Readable preview hostnames: bilan-pr-42.<account>.workers.dev.
-    const workerName = (base: string) =>
-      prod ? { name: base } : /^pr-\d+$/.test(stage) ? { name: `${base}-${stage}` } : {};
-    const retainInProd = Alchemy.RemovalPolicy.retain(prod);
-    // Production's resources were created by Wrangler, so they carry no
-    // Alchemy ownership tags and would otherwise only be taken over with
-    // `--adopt`. Adoption is scoped to them instead of every deploy: the
-    // Website's is decided while deploying, not while planning (its props
-    // reference values resolved then), so a missing flag would fail midway.
-    const existingInProd = Alchemy.AdoptPolicy.adopt(prod);
-
-    const db = yield* Cloudflare.D1.Database('DB', {
-      ...(prod ? { name: 'bilan' } : {}),
-      migrations: flatMigrations(),
-    }).pipe(retainInProd, existingInProd);
-    // R2 refuses to delete a bucket that still holds objects. A preview's
-    // payloads are disposable, so closing its pull request empties the bucket
-    // first; production's is retained and never emptied.
-    const payloads = yield* Cloudflare.R2.Bucket(
-      'Payloads',
-      prod ? { name: 'bilan-payloads' } : { forceDestroy: true },
-    ).pipe(retainInProd, existingInProd);
-    // Production's namespace (id 5d8223fa9ec74ff3b172ff74b408a98f) is titled CACHE.
-    const cache = yield* Cloudflare.KV.Namespace('Cache', prod ? { title: 'CACHE' } : {}).pipe(
-      existingInProd,
-    );
-
-    // Same name on both sides: the Workflow lives on `Sync` and `Website`
-    // binds it across scripts. Without a fixed name both derive the same
-    // stage-scoped default from the host script and class.
-    const workflow = {
-      className: 'SyncRepoWorkflow',
-      ...(prod ? { workflowName: 'sync-repo' } : {}),
-    };
+    const { prod } = yield* Stage;
+    // Resources several Workers bind are declared in infra/resources.ts.
+    const db = yield* Database;
+    const payloads = yield* Payloads;
+    const cache = yield* Cache;
 
     const shared = {
       DB: db,
@@ -83,24 +64,20 @@ export default Alchemy.Stack(
       ...(yield* optionalSecret('GITHUB_CLIENT_SECRET')),
       ...(yield* optionalSecret('GITHUB_TOKEN')),
     };
-    const compatibility = { date: '2026-07-24', flags: ['nodejs_compat'] };
 
     // New in production, but it hosts the existing `sync-repo` Workflow.
     const sync = yield* Cloudflare.Worker('Sync', {
-      ...workerName('bilan-sync'),
+      name: yield* workerName('bilan-sync'),
       main: fileURLToPath(new URL('packages/web/src/sync-worker.ts', import.meta.url)),
       compatibility,
       // Retention and payload pruning only matter where real data lives.
       crons: prod ? ['0 6 * * *'] : [],
       workersDev: false,
-      env: {
-        ...shared,
-        SYNC_REPO: Cloudflare.Workflow('SyncRepo', workflow),
-      },
+      env: { ...shared, SYNC_REPO: yield* syncRepoWorkflow() },
     }).pipe(existingInProd);
 
     const website = yield* Cloudflare.Website.Astro('Website', {
-      ...workerName('bilan'),
+      name: yield* workerName('bilan'),
       ...(prod
         ? { domain: 'bilan.dev', workersDev: false }
         : { workersDev: { enabled: true, previewsEnabled: false } }),
@@ -110,17 +87,11 @@ export default Alchemy.Stack(
       sessionKVBindingName: false,
       // The GitHub App's local callback is http://localhost:8788/auth/github/callback.
       dev: { port: 8788, strictPort: true },
-      env: {
-        ...shared,
-        SYNC_REPO: Cloudflare.Workflow('SyncRepo', {
-          ...workflow,
-          scriptName: sync.workerName,
-        }),
-      },
+      env: { ...shared, SYNC_REPO: yield* syncRepoWorkflow(sync.workerName) },
     }).pipe(existingInProd);
 
     return { url: website.url };
-  }),
+  }).pipe(Effect.provideService(D1Migrations, flatMigrations())),
 );
 
 /**
