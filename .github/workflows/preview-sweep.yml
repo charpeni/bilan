@@ -1,0 +1,87 @@
+name: Preview sweep
+
+# Destroys every `pr-<number>` preview stage whose pull request is no longer
+# open. The Preview workflow destroys a stage when its pull request closes;
+# this catches stages that run missed or failed to remove. Weekly, or on
+# demand from the Actions tab. Uses the `preview` environment's secrets.
+on:
+  schedule:
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: preview-sweep
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    permissions:
+      contents: read
+      pull-requests: write
+    runs-on: ubuntu-latest
+    environment: preview
+    env:
+      CI: 'true'
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PREVIEW_KEY_SEED: ${{ secrets.PREVIEW_KEY_SEED }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # No pnpm store cache: this job holds the Cloudflare credentials.
+      - name: Install pnpm, Node.js, and dependencies
+        uses: pnpm/setup@fbda4c85fc2e1e08721cd8763afea8f48d60f024 # v3.0.0
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Destroy stages of closed pull requests
+        run: |
+          set -euo pipefail
+          # Each stage's key is derived as in the Preview workflow; alchemy.run.ts
+          # cannot load without one.
+          stage_key() {
+            printf '%s' "$1" | openssl dgst -sha256 -hmac "$PREVIEW_KEY_SEED" -binary | base64
+          }
+          export TOKEN_ENCRYPTION_KEY
+          TOKEN_ENCRYPTION_KEY=$(stage_key list)
+          echo "::add-mask::$TOKEN_ENCRYPTION_KEY"
+
+          # Entries are stage directories such as `bilan/pr-42/`. A failed
+          # listing must fail the job, not read as "no stages".
+          listing=$(pnpm exec alchemy state list bilan --no-input)
+          stages=$(printf '%s\n' "$listing" | sed 's:/$::; s:.*/::' | grep -E '^pr-[0-9]+$' || true)
+          if [ -z "$stages" ]; then
+            echo "No preview stages."
+            exit 0
+          fi
+
+          # A pull request closed this recently may still be destroying its
+          # own stage in the Preview workflow; the next sweep gets it.
+          grace=$(( $(date +%s) - 3600 ))
+          for stage in $stages; do
+            number=${stage#pr-}
+            pr=$(gh pr view "$number" --repo "$GITHUB_REPOSITORY" --json state,closedAt \
+              --jq '"\(.state) \(.closedAt // "")"' 2>/dev/null || echo "MISSING ")
+            read -r state closed_at <<< "$pr"
+            if [ "$state" = OPEN ]; then
+              echo "$stage: pull request open, kept"
+              continue
+            fi
+            if [ -n "$closed_at" ] && [ "$(date -d "$closed_at" +%s)" -gt "$grace" ]; then
+              echo "$stage: pull request closed under an hour ago, kept for now"
+              continue
+            fi
+
+            echo "$stage: pull request $state, destroying"
+            TOKEN_ENCRYPTION_KEY=$(stage_key "$stage")
+            echo "::add-mask::$TOKEN_ENCRYPTION_KEY"
+            pnpm exec alchemy destroy --stage "$stage" --yes --no-input
+            if [ "$state" != MISSING ]; then
+              gh pr comment "$number" --repo "$GITHUB_REPOSITORY" --edit-last --create-if-none \
+                --body "Preview removed: the \`$stage\` stage was destroyed by the weekly preview sweep."
+            fi
+          done
