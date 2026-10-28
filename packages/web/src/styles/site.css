@@ -709,7 +709,14 @@ form + .pop-item,
   font: 700 12px/1 var(--font-mono);
   vertical-align: 1px;
 }
-/* The dashboard page: the ui module's own top padding gives way to the site's offset. */
+/*
+ * The dashboard page: at least a screen tall, like a state sheet, so the
+ * footer stays below the fold while the payload loads. The ui module's own
+ * top padding gives way to the site's offset.
+ */
+.dash {
+  min-height: calc(100vh - var(--hdr-h));
+}
 .dash .wrap {
   max-width: calc(var(--sheet-max) + 2 * var(--pad));
   padding-top: 0;
