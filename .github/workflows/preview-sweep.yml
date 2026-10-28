@@ -62,16 +62,32 @@ jobs:
           # A pull request closed this recently may still be destroying its
           # own stage in the Preview workflow; the next sweep gets it.
           grace=$(( $(date +%s) - 3600 ))
+          # Only a pull request GitHub reports as closed or merged, over an hour
+          # ago, loses its stage. A failed lookup (an outage, a rate limit, an
+          # expired token) keeps the stage and fails the job after the loop.
+          unknown=0
           for stage in $stages; do
             number=${stage#pr-}
-            pr=$(gh pr view "$number" --repo "$GITHUB_REPOSITORY" --json state,closedAt \
-              --jq '"\(.state) \(.closedAt // "")"' 2>/dev/null || echo "MISSING ")
-            read -r state closed_at <<< "$pr"
-            if [ "$state" = OPEN ]; then
-              echo "$stage: pull request open, kept"
+            if ! pr=$(gh pr view "$number" --repo "$GITHUB_REPOSITORY" --json state,closedAt \
+              --jq '"\(.state) \(.closedAt // "")"'); then
+              echo "::warning::$stage: could not look up pull request #$number, kept"
+              unknown=$((unknown + 1))
               continue
             fi
-            if [ -n "$closed_at" ] && [ "$(date -d "$closed_at" +%s)" -gt "$grace" ]; then
+            read -r state closed_at <<< "$pr"
+            case "$state" in
+              CLOSED | MERGED) ;;
+              OPEN)
+                echo "$stage: pull request open, kept"
+                continue
+                ;;
+              *)
+                echo "::warning::$stage: pull request #$number is '$state', kept"
+                unknown=$((unknown + 1))
+                continue
+                ;;
+            esac
+            if [ -z "$closed_at" ] || [ "$(date -d "$closed_at" +%s)" -gt "$grace" ]; then
               echo "$stage: pull request closed under an hour ago, kept for now"
               continue
             fi
@@ -80,8 +96,11 @@ jobs:
             TOKEN_ENCRYPTION_KEY=$(stage_key "$stage")
             echo "::add-mask::$TOKEN_ENCRYPTION_KEY"
             pnpm exec alchemy destroy --stage "$stage" --yes --no-input
-            if [ "$state" != MISSING ]; then
-              gh pr comment "$number" --repo "$GITHUB_REPOSITORY" --edit-last --create-if-none \
-                --body "Preview removed: the \`$stage\` stage was destroyed by the weekly preview sweep."
-            fi
+            gh pr comment "$number" --repo "$GITHUB_REPOSITORY" --edit-last --create-if-none \
+              --body "Preview removed: the \`$stage\` stage was destroyed by the weekly preview sweep."
           done
+
+          if [ "$unknown" -gt 0 ]; then
+            echo "::error::$unknown preview stage(s) kept because their pull request could not be checked."
+            exit 1
+          fi

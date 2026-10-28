@@ -1,7 +1,8 @@
 name: Deploy
 
-# Every push to main that passes CI is deployed to Cloudflare with Alchemy
-# (`alchemy.run.ts`, stage `prod`), which also applies pending D1 migrations.
+# Every push to main that passes CI, and is still main's head when its CI
+# finishes, is deployed to Cloudflare with Alchemy (`alchemy.run.ts`, stage
+# `prod`), which also applies pending D1 migrations.
 # Secrets live on the `production` environment: CLOUDFLARE_API_TOKEN,
 # CLOUDFLARE_ACCOUNT_ID, TOKEN_ENCRYPTION_KEY, APP_GITHUB_CLIENT_ID,
 # APP_GITHUB_CLIENT_SECRET, and optionally APP_GITHUB_TOKEN (GitHub does not
@@ -18,12 +19,40 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  # A CI run can finish after a newer commit's, and an old run can be re-run
+  # from the Actions tab: either would deploy an older commit, and its older
+  # alchemy.run.ts, over production. Only main's current head is deployed;
+  # a newer commit's own run deploys it.
+  latest:
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'main' &&
       github.event.workflow_run.head_repository.full_name == github.repository
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    outputs:
+      current: ${{ steps.head.outputs.current }}
+    steps:
+      - name: Compare with main's head
+        id: head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          head=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          if [ "$head" = "$SHA" ]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Not deploying $SHA: main is now at $head, which deploys on its own."
+            echo "current=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  deploy:
+    needs: latest
+    if: needs.latest.outputs.current == 'true'
     permissions:
       contents: read
     runs-on: ubuntu-latest
