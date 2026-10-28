@@ -1,7 +1,10 @@
 import { GithubError, RepoNotFoundError } from '@bilan/core';
 import { describe, expect, it } from 'vitest';
 
+import { encryptToken, importTokenKey } from './crypto.ts';
+import { bytesToBase64, randomBytes } from './encoding.ts';
 import {
+  decryptStoredGrant,
   freshUserGrant,
   freshUserToken,
   GithubUnavailableError,
@@ -344,5 +347,57 @@ describe('withUserToken', () => {
     expect(isBadCredentials(notFound)).toBe(false);
     expect(isBadCredentials(new GithubError('boom', 502, true))).toBe(false);
     expect(isBadCredentials(new GithubError('nope', 401, false))).toBe(true);
+  });
+});
+
+/** A fresh random AES-256-GCM token key. */
+function newKey(): Promise<CryptoKey> {
+  return importTokenKey(bytesToBase64(randomBytes(32)));
+}
+
+describe('decryptStoredGrant', () => {
+  const expiry = { expiresAt: iso(T0 + HOUR), refreshExpiresAt: iso(T0 + 1000 * HOUR) };
+
+  it('decrypts a set stored under the current key, keeping its ciphertexts', async () => {
+    const key = await newKey();
+    const row = {
+      encryptedToken: await encryptToken(key, 'ghu_access'),
+      encryptedRefreshToken: await encryptToken(key, 'ghr_refresh'),
+      ...expiry,
+    };
+    expect(await decryptStoredGrant(key, row)).toEqual({
+      accessToken: 'ghu_access',
+      refreshToken: 'ghr_refresh',
+      ...expiry,
+      encrypted: { accessToken: row.encryptedToken, refreshToken: row.encryptedRefreshToken },
+    });
+  });
+
+  it('keeps a missing refresh token null', async () => {
+    const key = await newKey();
+    const row = {
+      encryptedToken: await encryptToken(key, 'ghu_access'),
+      encryptedRefreshToken: null,
+      expiresAt: null,
+      refreshExpiresAt: null,
+    };
+    expect((await decryptStoredGrant(key, row))?.refreshToken).toBeNull();
+  });
+
+  it('is null for a set stored under a replaced key, refresh token included', async () => {
+    const [old, current] = [await newKey(), await newKey()];
+    const both = {
+      encryptedToken: await encryptToken(old, 'ghu_access'),
+      encryptedRefreshToken: await encryptToken(old, 'ghr_refresh'),
+      ...expiry,
+    };
+    expect(await decryptStoredGrant(current, both)).toBeNull();
+    const refreshOnly = { ...both, encryptedToken: await encryptToken(current, 'ghu_access') };
+    expect(await decryptStoredGrant(current, refreshOnly)).toBeNull();
+  });
+
+  it('is null for a value that is not in iv.ciphertext form', async () => {
+    const row = { encryptedToken: 'garbage', encryptedRefreshToken: null, ...expiry };
+    expect(await decryptStoredGrant(await newKey(), row)).toBeNull();
   });
 });
