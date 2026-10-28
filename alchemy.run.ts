@@ -38,17 +38,25 @@ export default Alchemy.Stack(
     const workerName = (base: string) =>
       prod ? { name: base } : /^pr-\d+$/.test(stage) ? { name: `${base}-${stage}` } : {};
     const retainInProd = Alchemy.RemovalPolicy.retain(prod);
+    // Production's resources were created by Wrangler, so they carry no
+    // Alchemy ownership tags and would otherwise only be taken over with
+    // `--adopt`. Adoption is scoped to them instead of every deploy: the
+    // Website's is decided while deploying, not while planning (its props
+    // reference values resolved then), so a missing flag would fail midway.
+    const existingInProd = Alchemy.AdoptPolicy.adopt(prod);
 
     const db = yield* Cloudflare.D1.Database('DB', {
       ...(prod ? { name: 'bilan' } : {}),
       migrations: flatMigrations(),
-    }).pipe(retainInProd);
+    }).pipe(retainInProd, existingInProd);
     const payloads = yield* Cloudflare.R2.Bucket(
       'Payloads',
       prod ? { name: 'bilan-payloads' } : {},
-    ).pipe(retainInProd);
+    ).pipe(retainInProd, existingInProd);
     // Production's namespace (id 5d8223fa9ec74ff3b172ff74b408a98f) is titled CACHE.
-    const cache = yield* Cloudflare.KV.Namespace('Cache', prod ? { title: 'CACHE' } : {});
+    const cache = yield* Cloudflare.KV.Namespace('Cache', prod ? { title: 'CACHE' } : {}).pipe(
+      existingInProd,
+    );
 
     // Same name on both sides: the Workflow lives on `Sync` and `Website`
     // binds it across scripts. Without a fixed name both derive the same
@@ -74,6 +82,7 @@ export default Alchemy.Stack(
     };
     const compatibility = { date: '2026-07-24', flags: ['nodejs_compat'] };
 
+    // New in production, but it hosts the existing `sync-repo` Workflow.
     const sync = yield* Cloudflare.Worker('Sync', {
       ...workerName('bilan-sync'),
       main: fileURLToPath(new URL('packages/web/src/sync-worker.ts', import.meta.url)),
@@ -85,7 +94,7 @@ export default Alchemy.Stack(
         ...shared,
         SYNC_REPO: Cloudflare.Workflow('SyncRepo', workflow),
       },
-    });
+    }).pipe(existingInProd);
 
     const website = yield* Cloudflare.Website.Astro('Website', {
       ...workerName('bilan'),
@@ -105,7 +114,7 @@ export default Alchemy.Stack(
           scriptName: sync.workerName,
         }),
       },
-    });
+    }).pipe(existingInProd);
 
     return { url: website.url };
   }),
