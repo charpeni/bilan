@@ -159,7 +159,8 @@ available only to the deploy step.
 Each pull request from a branch of this repository is deployed by the `Preview`
 workflow to its own stage, `pr-<number>`, with empty storage, at
 `https://bilan-pr-<number>.<account>.workers.dev`, and destroyed when the pull
-request closes. Previews sign in through a separate GitHub App whose callback
+request closes; a weekly `Preview sweep` removes any stage left behind.
+Previews sign in through a separate GitHub App whose callback
 URL matches any `workers.dev` subdomain of the account; fork pull requests are
 never deployed.
 

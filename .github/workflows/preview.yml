@@ -3,7 +3,8 @@ name: Preview
 # Each pull request from a branch of this repository gets its own Alchemy stage
 # (`pr-<number>`): empty D1, R2, KV, and Workflow, served on workers.dev and
 # never under bilan.dev, so a preview cannot set cookies production reads.
-# Closing the pull request destroys the stage.
+# Closing the pull request destroys the stage; `preview-sweep.yml` catches any
+# stage that survives.
 #
 # The `preview` environment holds CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID,
 # PREVIEW_GITHUB_CLIENT_ID and PREVIEW_GITHUB_CLIENT_SECRET (the separate
@@ -81,3 +82,12 @@ jobs:
       - name: Destroy
         if: github.event.action == 'closed'
         run: pnpm exec alchemy destroy --stage "$STAGE" --yes --no-input
+
+      - name: Mark the preview removed
+        if: github.event.action == 'closed'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr comment "${{ github.event.number }}" --repo "$GITHUB_REPOSITORY" \
+            --edit-last --create-if-none \
+            --body "Preview removed: the \`$STAGE\` stage was destroyed when this pull request closed."
