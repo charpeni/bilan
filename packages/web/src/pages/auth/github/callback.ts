@@ -14,7 +14,7 @@ import {
 } from '../../../lib/oauth.ts';
 import {
   generateSessionId,
-  SESSION_COOKIE,
+  sessionCookieName,
   sessionCookieOptions,
   sessionExpiry,
 } from '../../../lib/session.ts';
@@ -69,6 +69,6 @@ export const GET: APIRoute = async ({ url, cookies, redirect }) => {
   const sessionId = generateSessionId();
   const expiresAt = sessionExpiry();
   await createSession(db, { id: sessionId, userId, expiresAt });
-  cookies.set(SESSION_COOKIE, sessionId, sessionCookieOptions(url, expiresAt));
+  cookies.set(sessionCookieName(url), sessionId, sessionCookieOptions(url, expiresAt));
   return redirect(next, 302);
 };

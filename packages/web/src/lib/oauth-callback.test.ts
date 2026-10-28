@@ -92,7 +92,7 @@ describe('OAuth callback browser binding', () => {
     expect(mocks.exchange).toHaveBeenCalledWith('real-code');
     expect(mocks.createSession).toHaveBeenCalledOnce();
     expect(cookies.set).toHaveBeenCalledWith(
-      'bilan_session',
+      '__Host-bilan_session',
       expect.any(String),
       expect.objectContaining({
         httpOnly: true,
