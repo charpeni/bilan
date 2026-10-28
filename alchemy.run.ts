@@ -42,7 +42,12 @@ export default Alchemy.Stack(
   {
     providers: Cloudflare.providers(),
     // `alchemy dev` needs no Cloudflare account, so its state stays on disk.
-    state: process.env.ALCHEMY_DEV === 'true' ? Alchemy.localState() : Cloudflare.state(),
+    // Elsewhere, bilan's own store (Worker `alchemy-state-store-bilan`), so
+    // other Alchemy apps on the account never share its state or credentials.
+    state:
+      process.env.ALCHEMY_DEV === 'true'
+        ? Alchemy.localState()
+        : Cloudflare.state({ name: 'bilan' }),
   },
   Effect.gen(function* () {
     const { prod } = yield* Stage;
