@@ -49,9 +49,12 @@ export default Alchemy.Stack(
       ...(prod ? { name: 'bilan' } : {}),
       migrations: flatMigrations(),
     }).pipe(retainInProd, existingInProd);
+    // R2 refuses to delete a bucket that still holds objects. A preview's
+    // payloads are disposable, so closing its pull request empties the bucket
+    // first; production's is retained and never emptied.
     const payloads = yield* Cloudflare.R2.Bucket(
       'Payloads',
-      prod ? { name: 'bilan-payloads' } : {},
+      prod ? { name: 'bilan-payloads' } : { forceDestroy: true },
     ).pipe(retainInProd, existingInProd);
     // Production's namespace (id 5d8223fa9ec74ff3b172ff74b408a98f) is titled CACHE.
     const cache = yield* Cloudflare.KV.Namespace('Cache', prod ? { title: 'CACHE' } : {}).pipe(
