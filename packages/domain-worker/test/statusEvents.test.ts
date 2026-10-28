@@ -27,8 +27,6 @@ const hosted = BilanSync.layer(BilanSyncHandlers).pipe(
 );
 
 const run = {
-  owner: 'charpeni',
-  name: 'bilan',
   mode: 'incremental' as const,
   depth: '30d' as const,
   since: null,

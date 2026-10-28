@@ -94,7 +94,10 @@ Access is checked per viewer against GitHub with the viewer's own token;
 allowed access and public visibility are cached for up to 15 minutes. Job
 progress requires repository access too, even for an old completed job. A
 private repository the viewer cannot read is indistinguishable from one that
-does not exist. Private data nobody has opened in 90 days is deleted.
+does not exist. Private data nobody has opened in 90 days is deleted. The sync
+model's own history (when each sync ran, which account asked, how it ended)
+outlives that deletion, so it records repositories and accounts by GitHub's
+ids only, never by name.
 
 Login is a GitHub App with read-only permissions (Pull requests, Metadata).
 User tokens expire after eight hours; bilan stores them encrypted and refreshes

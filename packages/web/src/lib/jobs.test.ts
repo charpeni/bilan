@@ -83,9 +83,8 @@ describe('starting a sync', () => {
       repoId: 'R_private',
       jobId: started.jobId,
       requestedBy: 7,
+      // No name: the model's history outlives the repository's retention.
       run: {
-        owner: 'acme',
-        name: 'private',
         mode: 'incremental',
         depth: '30d',
         since: started.since,

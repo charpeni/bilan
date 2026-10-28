@@ -39,16 +39,29 @@ const fakeWorkflow = () => {
   return { instances, state, binding };
 };
 
-const runnerWith = (workflow: ReturnType<typeof fakeWorkflow>) =>
+/** `repos` in D1, as far as the runner reads it: the name of a repository id. */
+const fakeDb = (repos: Record<string, { owner: string; name: string }>) => ({
+  prepare: () => ({
+    bind: (id: string) => ({ first: async () => repos[id] ?? null }),
+  }),
+});
+
+const runnerWith = (
+  workflow: ReturnType<typeof fakeWorkflow>,
+  repos: Record<string, { owner: string; name: string }> = {
+    R_bilan: { owner: 'charpeni', name: 'bilan' },
+  },
+) =>
   WorkflowSyncRunner.pipe(
     Layer.provide(
-      Layer.succeed(Cloudflare.Workers.WorkerEnvironment, { SYNC_REPO: workflow.binding }),
+      Layer.succeed(Cloudflare.Workers.WorkerEnvironment, {
+        DB: fakeDb(repos),
+        SYNC_REPO: workflow.binding,
+      }),
     ),
   );
 
 const run: SyncRun = {
-  owner: 'charpeni',
-  name: 'bilan',
   mode: 'full',
   depth: 'all',
   since: null,
@@ -57,7 +70,7 @@ const run: SyncRun = {
 };
 const job = { jobId: JobId.make('job-1'), repoId: RepoId.make('R_bilan'), run };
 
-it.effect('start creates the instance with the Workflow params, once', () => {
+it.effect('start creates the instance with the Workflow params, named from D1, once', () => {
   const workflow = fakeWorkflow();
   return Effect.gen(function* () {
     const runner = yield* SyncRunner;
@@ -95,6 +108,18 @@ it.effect('start fails as unavailable when the Workflow engine is', () => {
       reason: 'internal error; reference = 1234',
     });
   }).pipe(Effect.provide(runnerWith(workflow)));
+});
+
+it.effect('start fails as unavailable when the repository is no longer stored', () => {
+  const workflow = fakeWorkflow();
+  return Effect.gen(function* () {
+    const runner = yield* SyncRunner;
+    expect(yield* Effect.flip(runner.start(job))).toMatchObject({
+      _tag: 'SyncRunnerUnavailable',
+      reason: 'repository R_bilan is no longer stored',
+    });
+    expect(workflow.instances.size).toBe(0);
+  }).pipe(Effect.provide(runnerWith(workflow, {})));
 });
 
 it.effect('stop terminates a running instance and leaves an ended one', () => {

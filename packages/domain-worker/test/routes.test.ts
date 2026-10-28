@@ -34,8 +34,6 @@ const eventually = <A>(read: Effect.Effect<A>, assert: (value: A) => void) =>
   );
 
 const run = {
-  owner: 'charpeni',
-  name: 'bilan',
   mode: 'incremental',
   depth: '30d',
   since: null,

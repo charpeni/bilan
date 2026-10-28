@@ -159,9 +159,9 @@ export async function startSync(
   const requested = await requestSync(env, {
     ...job,
     requestedBy: userId,
+    // By id only: the model's history outlives the repository's retention,
+    // so it keeps no name (`SyncRun`).
     run: {
-      owner: ref.owner,
-      name: ref.name,
       mode,
       depth,
       since: since ?? null,
