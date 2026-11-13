@@ -87,6 +87,7 @@ function fakeDeps(options: { failPayloads?: string[]; keepRows?: string[] } = {}
       return Promise.resolve(!options.keepRows?.includes(repoId));
     },
     deleteExpiredSessions: () => Promise.resolve(2),
+    deleteUnusedTokens: () => Promise.resolve(1),
   };
   return { deps, calls };
 }
@@ -95,7 +96,11 @@ describe('sweepRetention', () => {
   it('removes payloads before the row, for every candidate', async () => {
     const { deps, calls } = fakeDeps();
     const result = await sweepRetention(deps, now);
-    expect(result).toEqual({ deletedRepos: ['R_a', 'R_b', 'R_c'], deletedSessions: 2 });
+    expect(result).toEqual({
+      deletedRepos: ['R_a', 'R_b', 'R_c'],
+      deletedSessions: 2,
+      deletedTokens: 1,
+    });
     expect(calls).toEqual([
       'payloads:R_a',
       'row:R_a',
@@ -139,10 +144,33 @@ describe('sweepRetention eligibility recheck', () => {
           return true;
         },
         deleteExpiredSessions: async () => 0,
+        deleteUnusedTokens: async () => 0,
       },
       Date.parse('2026-09-01T00:00:00Z'),
     );
     expect(calls).toEqual(['payloads:A', 'row:A']);
     expect(result.deletedRepos).toEqual(['A']);
+  });
+});
+
+describe('sweepRetention token sets', () => {
+  it('sweeps unused token sets as of the sweep time and reports how many went', async () => {
+    const at: string[] = [];
+    const result = await sweepRetention(
+      {
+        listRepos: async () => [],
+        isExpired: async () => false,
+        deletePayloads: async () => {},
+        deleteRepoIfExpired: async () => false,
+        deleteExpiredSessions: async () => 0,
+        deleteUnusedTokens: async (time) => {
+          at.push(time);
+          return 3;
+        },
+      },
+      now,
+    );
+    expect(at).toEqual(['2026-05-01T00:00:00.000Z']);
+    expect(result.deletedTokens).toBe(3);
   });
 });

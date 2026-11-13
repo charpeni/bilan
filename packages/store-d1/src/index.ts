@@ -3,8 +3,8 @@ export type { Db } from './db.ts';
 export {
   createSession,
   deleteExpiredSessions,
-  deleteSession,
-  deleteUserToken,
+  deleteUnusedUserTokens,
+  endSession,
   getSessionUser,
   getUserToken,
   upsertUser,
