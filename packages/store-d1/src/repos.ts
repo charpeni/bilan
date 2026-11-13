@@ -32,16 +32,19 @@ export async function getRepoById(db: Db, id: string): Promise<Repo | undefined>
 /**
  * Insert or refresh a repo row by GitHub node id. Sync bookkeeping columns
  * (`last_synced_at`, `last_full_sync_at`, `coverage_since`,
- * `open_prs_synced_at`, `sync_started_at`, `areas_override`) are left alone
- * unless explicitly provided, so a metadata refresh never clears them.
- * Coverage, the open-PR stamp and the in-flight stamp are never taken from
- * the caller at all: only `D1Store` may move them.
+ * `open_prs_synced_at`, `sync_started_at`, `sync_checkpoints`,
+ * `areas_override`) are left alone unless explicitly provided, so a metadata
+ * refresh never clears them. Coverage, the open-PR stamp, the in-flight stamp
+ * and the walk checkpoints are never taken from the caller at all: only
+ * `D1Store` may move them.
  */
 export async function upsertRepo(
   db: Db,
-  repo: Omit<NewRepo, 'coverageSince' | 'openPrsSyncedAt' | 'syncStartedAt'>,
+  repo: Omit<NewRepo, 'coverageSince' | 'openPrsSyncedAt' | 'syncStartedAt' | 'syncCheckpoints'>,
 ): Promise<Repo> {
-  const { id, ...rest } = repo;
+  // Dropped at run time too: a checkpoint vouches for rows a walk stored, so
+  // nothing but that walk may write one.
+  const { id, syncCheckpoints: _checkpoints, ...rest } = repo as NewRepo;
   // GitHub names are not stable: a repo can be renamed or transferred and a new
   // one created at the old `owner/name`. The row is keyed by node id, so move any
   // other row still holding this name out of the way; if that repo is synced again

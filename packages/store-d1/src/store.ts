@@ -1,9 +1,10 @@
+import { checkpointsOrNothing } from '@bilan/core';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 
 import { pullRequests, repos } from './schema.ts';
 
 import type { Db } from './db.ts';
-import type { RawPr, RepoMeta, SyncStore } from '@bilan/core';
+import type { RawPr, RepoMeta, SyncCheckpoints, SyncStore } from '@bilan/core';
 
 /** D1 allows 100 bound parameters per statement; leave headroom for the repo id. */
 export const IN_CHUNK = 90;
@@ -46,10 +47,12 @@ export class D1Store implements SyncStore {
         openPrsSyncedAt: repos.openPrsSyncedAt,
         syncStartedAt: repos.syncStartedAt,
         reconciledAt: repos.reconciledAt,
+        syncCheckpoints: repos.syncCheckpoints,
       })
       .from(repos)
       .where(eq(repos.id, this.repoId))
       .get();
+    const checkpoints = parseCheckpoints(row?.syncCheckpoints ?? null);
     return {
       repo: this.repo,
       syncedAt: row?.lastSyncedAt ?? null,
@@ -58,7 +61,19 @@ export class D1Store implements SyncStore {
       interrupted: (row?.syncStartedAt ?? null) !== null,
       syncStartedAt: row?.syncStartedAt ?? null,
       reconciledAt: row?.reconciledAt ?? null,
+      ...(checkpoints === undefined ? {} : { checkpoints }),
     };
+  }
+
+  /**
+   * Replaces both walks' checkpoints at once; only `sync_checkpoints` is
+   * touched, so coverage and the run markers stay as they were.
+   */
+  async saveCheckpoints(checkpoints: SyncCheckpoints): Promise<void> {
+    await this.db
+      .update(repos)
+      .set({ syncCheckpoints: JSON.stringify(checkpoints) })
+      .where(eq(repos.id, this.repoId));
   }
 
   async updatedAtByNumber(numbers: number[]): Promise<Map<number, string>> {
@@ -161,5 +176,15 @@ export class D1Store implements SyncStore {
           : {}),
       })
       .where(eq(repos.id, this.repoId));
+  }
+}
+
+/** A stored value that does not parse or validate only costs the next run its head start. */
+function parseCheckpoints(text: string | null): SyncCheckpoints | undefined {
+  if (text === null) return undefined;
+  try {
+    return checkpointsOrNothing(JSON.parse(text));
+  } catch {
+    return undefined;
   }
 }
