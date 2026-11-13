@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { DAY_MS, HOUR_MS, T0, payloadPr } from '../testing/fixtures.ts';
+import { COPILOT, DAY_MS, HOUR_MS, T0, botFirstPrs, payloadPr } from '../testing/fixtures.ts';
 import { derive } from './derive.ts';
 import { createFilterState, scope } from './scope.ts';
 import { dayStart, weekStart } from './time.ts';
@@ -176,5 +176,18 @@ describe('cycleTimeTrend', () => {
     const t = cycleTimeTrend(sc(), timeBuckets(sc(), LAST));
     expect(t.toFirst).toEqual([null, 1, null, null]);
     expect(t.toMerge).toEqual([null, 2, null, null]);
+  });
+});
+
+describe('cycleTimeTrend with bot reviewers', () => {
+  it('buckets the first human review while bots are hidden', () => {
+    const botPrs = derive(botFirstPrs());
+    const trend = (hideBots: boolean) => {
+      const s = scope(botPrs, new Set([COPILOT]), { ...createFilterState(), hideBots }, LAST);
+      return cycleTimeTrend(s, timeBuckets(s, LAST)).toFirst;
+    };
+    // Every PR was ready at T0; bob's review on #2 lands three days later, the same week.
+    expect(trend(true)[0]).toBe(72);
+    expect(trend(false)[0]).toBe(1 / 60);
   });
 });

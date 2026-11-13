@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { DAY_MS, HOUR_MS, T0, payloadPr } from '../testing/fixtures.ts';
+import { COPILOT, DAY_MS, HOUR_MS, T0, botFirstPrs, payloadPr } from '../testing/fixtures.ts';
 import { derive } from './derive.ts';
 import { createFilterState, scope, windowed } from './scope.ts';
 import { headline } from './summary.ts';
@@ -61,6 +61,18 @@ describe('headline', () => {
     expect(h.draftShare).toBe(0.25);
     expect(h.medReady).toBe(4 * HOUR_MS);
     expect(h.reviewedShare).toBe(0.5);
+  });
+
+  it('does not count a bot review as the first review while bots are hidden', () => {
+    const prs = derive(botFirstPrs());
+    const at = (hideBots: boolean) =>
+      headline(
+        windowed(scope(prs, new Set([COPILOT]), { ...createFilterState(), hideBots }, LAST), LAST),
+      );
+    // Only #2 has a human review, three days after it was ready.
+    expect(at(true)).toMatchObject({ medFirst: 3 * DAY_MS, reviews: 1, reviewers: 1 });
+    expect(at(true).reviewedShare).toBeCloseTo(1 / 3);
+    expect(at(false)).toMatchObject({ medFirst: 60e3, reviewedShare: 1, reviews: 4, reviewers: 2 });
   });
 
   it('is all nulls and zeros with nothing in range', () => {
