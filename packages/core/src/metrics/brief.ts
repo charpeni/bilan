@@ -149,13 +149,18 @@ export interface BriefAreaMove {
   area: string;
   now: number;
   before: number;
-  /** Relative change, -1..∞. */
-  d: number;
+  /** Relative change, -1 and up; `null` when the area had no merges before ("new"). */
+  d: number | null;
 }
 
 export interface BriefAreas {
-  up: BriefAreaMove;
-  down: BriefAreaMove;
+  /**
+   * The area that grew most: an area new this period (most merges first),
+   * else the largest relative rise. Null when no area rose.
+   */
+  up: BriefAreaMove | null;
+  /** The area with the largest relative fall. Null when no area fell. */
+  down: BriefAreaMove | null;
   /** Median ready -> first review per moving area, slowest first. */
   firstBy: { area: string; v: number }[];
 }
@@ -203,7 +208,7 @@ export interface Brief {
   reviewLoad: BriefReviewLoad;
   /** The busiest bot author, when it opened at least 5 PRs. */
   automation: BriefAutomation | null;
-  /** Null unless two distinct areas moved. */
+  /** Null unless an area with 20+ merges in either period rose or fell. */
   areas: BriefAreas | null;
   /** Null unless 3+, and at least half, of the large PRs merged were approved with no threads. */
   depth: BriefDepth | null;
@@ -273,11 +278,35 @@ export function brief(prs: readonly MetricPr[], bots: ReadonlySet<string>, last:
     const moves: BriefAreaMove[] = [...new Set([...A.areas.keys(), ...B.areas.keys()])]
       .map((a) => ({ area: a, now: A.areas.get(a) ?? 0, before: B.areas.get(a) ?? 0 }))
       .filter((x) => Math.max(x.now, x.before) >= 20)
-      .map((x) => ({ area: x.area, now: x.now, before: x.before, d: share(x.now, x.before) - 1 }))
-      .toSorted((x, y) => y.d - x.d);
-    const up = moves[0];
-    const down = moves[moves.length - 1];
-    if (!up || !down || up === down) return null;
+      .map((x) => ({
+        area: x.area,
+        now: x.now,
+        before: x.before,
+        d: x.before ? x.now / x.before - 1 : null,
+      }));
+    // Rose or fell by the rounded percentage the brief prints, so a move it
+    // would show as "flat" is neither. An area with nothing before (`d: null`)
+    // always rose: its growth is unbounded, so it outranks every percentage.
+    const pct = (x: BriefAreaMove) => change(x.now, x.before);
+    const byName = (x: BriefAreaMove, y: BriefAreaMove) => (x.area < y.area ? -1 : 1);
+    const up =
+      moves
+        .filter((x) => x.d === null || (pct(x) ?? 0) > 0)
+        .toSorted(
+          (x, y) =>
+            (x.d === null ? 0 : 1) - (y.d === null ? 0 : 1) ||
+            (y.d ?? 0) - (x.d ?? 0) ||
+            y.now - y.before - (x.now - x.before) ||
+            byName(x, y),
+        )[0] ?? null;
+    const down =
+      moves
+        .filter((x) => (pct(x) ?? 0) < 0)
+        .toSorted(
+          (x, y) =>
+            (x.d ?? 0) - (y.d ?? 0) || y.before - y.now - (x.before - x.now) || byName(x, y),
+        )[0] ?? null;
+    if (!up && !down) return null;
     const firstBy = moves
       .map((x) => ({
         area: x.area,

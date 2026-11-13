@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { COLLAPSED_PEEK, collapsedHeight, firstRowCount, toggleText } from './brief.ts';
+import { COLLAPSED_PEEK, areasItem, collapsedHeight, firstRowCount, toggleText } from './brief.ts';
 import { COVERAGE_SLACK, canCompare, comparisonRange, coversDays, isCovered } from './range.ts';
 import { DAY } from './utils.ts';
 
@@ -113,5 +113,46 @@ describe('toggleText', () => {
     expect(toggleText(false, 5)).toBe('Show 5 more');
     expect(toggleText(false, 0)).toBe('Show more');
     expect(toggleText(true, 5)).toBe('Show less');
+  });
+});
+
+describe('areasItem', () => {
+  const newpkg = { area: 'newpkg', before: 0, now: 25, d: null };
+  const api = { area: 'api', before: 20, now: 30, d: 0.5 };
+  const web = { area: 'web', before: 40, now: 20, d: -0.5 };
+  const firstBy = [
+    { area: 'web', v: 2 * DAY },
+    { area: 'api', v: DAY / 2 },
+  ];
+
+  it('titles a new area as new and puts the real fall underneath', () => {
+    expect(areasItem({ up: newpkg, down: web, firstBy: [] })).toMatchObject({
+      title: 'newpkg merges are new (0 → 25)',
+      body: ['web fell 50% (40 → 20).'],
+    });
+  });
+
+  it('titles a percentage rise and adds the first-review spread', () => {
+    expect(areasItem({ up: api, down: web, firstBy })).toMatchObject({
+      title: 'api merges up 50% (20 → 30)',
+      body: ['web fell 50% (40 → 20).', 'Slowest first review: web (2.0d). Fastest: api (12h).'],
+    });
+  });
+
+  it('drops the fall line when nothing fell', () => {
+    expect(areasItem({ up: api, down: null, firstBy: [] })).toMatchObject({
+      title: 'api merges up 50% (20 → 30)',
+      body: [],
+    });
+  });
+
+  it('titles the fall when nothing rose', () => {
+    expect(
+      areasItem({ up: null, down: { area: 'old', before: 20, now: 0, d: -1 }, firstBy: [] }),
+    ).toMatchObject({ title: 'old merges down 100% (20 → 0)', body: [] });
+  });
+
+  it('is null with neither side', () => {
+    expect(areasItem({ up: null, down: null, firstBy })).toBeNull();
   });
 });
