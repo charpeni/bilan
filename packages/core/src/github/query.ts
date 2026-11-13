@@ -24,6 +24,10 @@ query($owner:String!, $name:String!, $page:Int!, $cursor:String, $states:[PullRe
           totalCount
           nodes { author { login __typename } state submittedAt }
         }
+        latestOpinionatedReviews(first:40) {
+          totalCount
+          nodes { author { login __typename } state submittedAt }
+        }
         readyEvents: timelineItems(first:1, itemTypes:[READY_FOR_REVIEW_EVENT]) {
           nodes { ... on ReadyForReviewEvent { createdAt } }
         }
@@ -132,6 +136,15 @@ export interface PullRequestNode {
       state: 'APPROVED' | 'CHANGES_REQUESTED' | 'COMMENTED' | 'DISMISSED' | 'PENDING';
       submittedAt: string | null;
     }[];
+  };
+  /**
+   * Each reviewer's latest approval, change request, or dismissed review, as
+   * GitHub keeps it: unlike `reviews`, never cut short by a long thread of
+   * comments. Absent from pages fetched before it was asked for.
+   */
+  latestOpinionatedReviews?: {
+    totalCount: number;
+    nodes: PullRequestNode['reviews']['nodes'];
   };
   timelineItems: {
     pageInfo?: { hasNextPage: boolean; endCursor: string | null };

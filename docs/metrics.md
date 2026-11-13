@@ -57,7 +57,8 @@ A pull request that opened as a draft becomes reviewable at its first
 ready-for-review event; later re-drafts are ignored. Each metric is scoped by
 its own anchor, so "last 30 days" means what happened in those 30 days rather
 than which pull requests were opened in them. Up to 40 reviews are captured per
-pull request.
+pull request. Whether an open pull request stands approved does not depend on
+that cap: it is read from each reviewer's latest verdict as GitHub keeps it.
 
 Review depth groups merged pull requests by size, in lines added + deleted:
 ≤50, 51–250, 251–500, 501–1k, and over 1k. Its thread count is GitHub's total

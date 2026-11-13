@@ -52,6 +52,13 @@ export interface RawPr {
   reviewCount: number;
   /** Up to the first 40 reviews; `reviewCount` is the true total. */
   reviews: RawReview[];
+  /**
+   * Each reviewer's latest approval, change request, or dismissed review, as
+   * GitHub reports it (`latestOpinionatedReviews`): where every reviewer
+   * stands, however many reviews the PR has. Absent in rows stored before it
+   * was fetched, and when GitHub returned only part of the list.
+   */
+  verdicts?: RawReview[];
   /** Timestamps of ReadyForReviewEvent, in timeline order. */
   readyAt: string[];
   /** Timestamps of ConvertToDraftEvent, in timeline order. */
@@ -174,6 +181,13 @@ export interface PayloadPr {
   rc: number;
   /** reviews by someone other than the author, sorted by time */
   rv: PayloadReview[];
+  /**
+   * standing verdicts: each reviewer's latest approval, change request, or
+   * dismissed review, sorted by time (see `RawPr.verdicts`). Only on open PRs,
+   * the only ones asked whether they stand approved, and only when the store
+   * has them.
+   */
+  sv?: PayloadReview[];
   /** review requests with a resolved reviewer */
   rq: PayloadReviewRequest[];
 }

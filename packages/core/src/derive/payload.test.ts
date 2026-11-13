@@ -47,6 +47,35 @@ describe('buildPayload', () => {
     });
   });
 
+  it("carries each reviewer's latest verdict on open PRs only", () => {
+    const verdicts = [
+      {
+        author: 'carol',
+        authorType: 'User',
+        state: 'CHANGES_REQUESTED',
+        at: '2026-01-03T00:00:00Z',
+      },
+      { author: 'bob', authorType: 'User', state: 'APPROVED', at: '2026-01-02T00:00:00Z' },
+      { author: null, authorType: null, state: 'APPROVED', at: '2026-01-01T00:00:00Z' },
+    ] as const;
+    const open = { state: 'OPEN', mergedAt: null, closedAt: null } as const;
+    const payload = buildPayload(meta, [
+      rawPr({ number: 1, ...open, verdicts: [...verdicts] }),
+      // Merged: nothing asks whether it still stands approved.
+      rawPr({ number: 2, verdicts: [...verdicts] }),
+      // Stored before verdicts were fetched.
+      rawPr({ number: 3, ...open }),
+    ]);
+    const sv = (n: number) => payload.prs.find((p) => p.n === n)?.sv;
+    expect(sv(1)).toEqual([
+      ['bob', 'APPROVED', Date.parse('2026-01-02T00:00:00Z')],
+      ['carol', 'CHANGES_REQUESTED', Date.parse('2026-01-03T00:00:00Z')],
+    ]);
+    expect(sv(2)).toBeUndefined();
+    expect(sv(3)).toBeUndefined();
+    expect(payload.prs.every((p) => p.n === 1 || !('sv' in p))).toBe(true);
+  });
+
   it('drops self-reviews and reviews without a timestamp, and sorts the rest', () => {
     const payload = buildPayload(meta, [
       rawPr({

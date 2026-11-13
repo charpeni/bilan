@@ -4,6 +4,7 @@ import { count, median, ranked, share } from './stats.ts';
 import { DAY } from './time.ts';
 import { standingApproval } from './verdict.ts';
 
+import type { PayloadReview } from '../types.ts';
 import type { ClosedPr, MergedPr, MetricPr, ReadyPr } from './derive.ts';
 import type { InWindow, ReviewRow } from './scope.ts';
 
@@ -317,6 +318,9 @@ export function brief(prs: readonly MetricPr[], bots: ReadonlySet<string>, last:
     };
   })();
 
+  // A human's verdict GitHub reports past the first 40 reviews is a human
+  // review too, so a PR it approves is never also listed as waiting for one.
+  const byHuman = (reviews: readonly PayloadReview[]) => reviews.some(([w]) => !bots.has(w));
   const backlog = ((): BriefBacklog => {
     const open = H.filter((p) => p.open);
     const drafts = open.filter((p) => p.dr);
@@ -325,13 +329,16 @@ export function brief(prs: readonly MetricPr[], bots: ReadonlySet<string>, last:
     const waiting = open
       .filter(
         (p): p is ReadyPr =>
-          !p.dr && isReady(p) && !p.rv.some(([w]) => !bots.has(w)) && last - p.r > 2 * DAY,
+          !p.dr && isReady(p) && !byHuman(p.rv) && !byHuman(p.sv ?? []) && last - p.r > 2 * DAY,
       )
       .toSorted((a, b) => a.r - b.r);
     const approved = open
       .filter((p) => !p.dr)
       .map((p) => {
-        const at = standingApproval(p.rv, bots);
+        // GitHub's own latest verdicts when the store has them: `rv` holds
+        // only the first 40 reviews, and a change request or an approval given
+        // after those would be missed.
+        const at = standingApproval(p.sv ?? p.rv, bots);
         return at === null ? null : { pr: p, since: Math.max(0, last - at) };
       })
       .filter((x): x is { pr: MetricPr; since: number } => x !== null && x.since > 3 * DAY)

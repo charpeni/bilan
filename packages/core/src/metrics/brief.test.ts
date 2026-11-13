@@ -267,6 +267,45 @@ describe('brief', () => {
       expect(backlog.approved.map(({ pr }) => pr.n)).toEqual([1]);
       expect(backlog.waiting).toEqual([]);
     });
+
+    describe("with GitHub's latest verdict per reviewer (`sv`)", () => {
+      type Reviews = [string, ReviewState, number][];
+      /** A lone open PR #1 whose fetched reviews are `rv` and whose reviewers stand as `sv`. */
+      const standing = (rv: Reviews, sv: Reviews) =>
+        brief(derive([{ ...openPr(1, rv), sv }]), bots, LAST).backlog;
+
+      it('misses no change request given after the reviews that were fetched', () => {
+        const backlog = standing(
+          [['bob', 'APPROVED', ago(10)]],
+          [['bob', 'CHANGES_REQUESTED', ago(2)]],
+        );
+        expect(backlog.approved).toEqual([]);
+      });
+
+      it('finds an approval given after them, dated from when it was given', () => {
+        const backlog = standing(
+          [['carol', 'CHANGES_REQUESTED', ago(10)]],
+          [['carol', 'APPROVED', ago(5)]],
+        );
+        expect(backlog.approved.map(({ pr, since }) => [pr.n, since])).toEqual([[1, 5 * DAY_MS]]);
+      });
+
+      it('still leaves bots and dismissed reviews out', () => {
+        expect(standing([], [['dependabot[bot]', 'APPROVED', ago(10)]]).approved).toEqual([]);
+        expect(
+          standing([['bob', 'APPROVED', ago(10)]], [['bob', 'DISMISSED', ago(10)]]).approved,
+        ).toEqual([]);
+      });
+
+      it('counts a human verdict past the fetched reviews as a human review', () => {
+        const backlog = standing(
+          [['dependabot[bot]', 'COMMENTED', ago(12)]],
+          [['bob', 'APPROVED', ago(10)]],
+        );
+        expect(backlog.approved.map(({ pr }) => pr.n)).toEqual([1]);
+        expect(backlog.waiting).toEqual([]);
+      });
+    });
   });
 
   it('reads churn from the current window only', () => {

@@ -2,7 +2,7 @@ import { allAreas, areasOf, inferAreaRules } from './areas.ts';
 import { detectBots } from './bots.ts';
 import { readyInfo } from './ready.ts';
 
-import type { Payload, PayloadPr, PayloadReview, RawPr, RepoMeta } from '../types.ts';
+import type { Payload, PayloadPr, PayloadReview, RawPr, RawReview, RepoMeta } from '../types.ts';
 import type { AreaRules } from './areas.ts';
 
 export interface BuildPayloadOptions {
@@ -24,13 +24,15 @@ export function buildPayload(
   const prs: PayloadPr[] = rawPrs
     .map((pr): PayloadPr => {
       const { readyAt, openedAsDraft } = readyInfo(pr);
-      const reviews: PayloadReview[] = pr.reviews
-        .filter(
-          (r): r is typeof r & { author: string; at: string } =>
-            r.author !== null && r.at !== null && r.author !== pr.author,
-        )
-        .map((r): PayloadReview => [r.author, r.state, Date.parse(r.at)])
-        .toSorted((a, b) => a[2] - b[2]);
+      const byOthers = (reviews: readonly RawReview[]): PayloadReview[] =>
+        reviews
+          .filter(
+            (r): r is typeof r & { author: string; at: string } =>
+              r.author !== null && r.at !== null && r.author !== pr.author,
+          )
+          .map((r): PayloadReview => [r.author, r.state, Date.parse(r.at)])
+          .toSorted((a, b) => a[2] - b[2]);
+      const reviews = byOthers(pr.reviews);
       return {
         n: pr.number,
         t: pr.title,
@@ -52,6 +54,7 @@ export function buildPayload(
         th: pr.reviewThreads,
         rc: pr.reviewCount,
         rv: reviews,
+        ...(pr.state === 'OPEN' && pr.verdicts ? { sv: byOthers(pr.verdicts) } : {}),
         rq: pr.reviewRequests
           .filter((q): q is typeof q & { to: string } => q.to !== null)
           .map((q) => [q.to, Date.parse(q.at)]),

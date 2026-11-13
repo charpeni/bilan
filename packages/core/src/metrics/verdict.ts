@@ -10,7 +10,10 @@ import type { PayloadReview } from '../types.ts';
  * and a dismissed approval no longer counts. The PR is approved when at least
  * one reviewer stands on an approval and none on a change request.
  *
- * `rv` is sorted by time, as in the payload.
+ * `rv` is sorted by time, as in the payload: either every review (`rv`), or
+ * each reviewer's latest verdict as GitHub reports it (`sv`). The second is
+ * the one to prefer, since `rv` stops at the first 40 reviews and a verdict
+ * given after them is not in it.
  */
 export function standingApproval(
   rv: readonly PayloadReview[],
