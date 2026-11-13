@@ -52,7 +52,8 @@ ids only, never by name.
 
 Login is a GitHub App with read-only permissions (Pull requests, Metadata).
 User tokens expire after eight hours; bilan stores them encrypted and refreshes
-them, including mid-sync. Private repositories require the app to be installed
+them, including mid-sync. They are deleted once their user has no unexpired
+session and no sync queued or running: on sign-out, or by the nightly sweep. Private repositories require the app to be installed
 on the organization, once, by an owner; members can request it from the app's
 install page. Public repositories need no install.
 

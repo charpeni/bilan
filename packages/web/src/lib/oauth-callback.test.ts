@@ -91,6 +91,10 @@ describe('OAuth callback browser binding', () => {
     expect(response.headers.get('location')).toBe('/acme/repo');
     expect(mocks.exchange).toHaveBeenCalledWith('real-code');
     expect(mocks.createSession).toHaveBeenCalledOnce();
+    // Session first, so a concurrent sign-out never sees the new token without a session.
+    expect(mocks.createSession.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.storeUserToken.mock.invocationCallOrder[0]!,
+    );
     expect(cookies.set).toHaveBeenCalledWith(
       '__Host-bilan_session',
       expect.any(String),
