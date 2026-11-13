@@ -26,8 +26,8 @@ describe('headline', () => {
     const h = headline(win(prs));
     expect(h.merged).toBe(5);
     expect(h.medMerge).toBe(3 * DAY_MS);
-    // Nearest rank: index floor(4 * 0.9) = 3 of the sorted five.
-    expect(h.p90Merge).toBe(4 * DAY_MS);
+    // Nearest rank: the ceil(0.9 * 5) = 5th smallest of the five.
+    expect(h.p90Merge).toBe(10 * DAY_MS);
     expect(h.medFirst).toBe(2 * HOUR_MS);
     expect(h.reviewedShare).toBe(1);
   });
