@@ -20,6 +20,7 @@ export interface PersonRec {
   reviewsGiven: number;
   approvals: number;
   changesReq: number;
+  /** `COMMENTED` reviews. A dismissed review counts as given but has no verdict, so it is in none of the three. */
   commentsOnly: number;
   prsReviewed: Set<number>;
   authorsReviewed: Set<string>;
@@ -105,7 +106,7 @@ export function roster(w: Windowed): PersonRec[] {
     if (r.pr.a) rec.authorsReviewed.add(r.pr.a);
     if (r.st === 'APPROVED') rec.approvals++;
     else if (r.st === 'CHANGES_REQUESTED') rec.changesReq++;
-    else rec.commentsOnly++;
+    else if (r.st === 'COMMENTED') rec.commentsOnly++;
     if (firstReviews.has(r)) {
       const req = r.pr.rq.filter(([to, at]) => to === r.who && at <= r.at).map(([, at]) => at);
       const from0 = Math.max(r.pr.r ?? r.pr.c, req.length ? Math.max(...req) : 0);
@@ -182,6 +183,7 @@ export interface ReviewerRow {
   share: number;
   approvals: number;
   changesReq: number;
+  /** `COMMENTED` reviews; dismissed reviews have no verdict and are in none of the three. */
   commentsOnly: number;
   /** Share of this reviewer's reviews that requested changes. */
   pushback: number | null;

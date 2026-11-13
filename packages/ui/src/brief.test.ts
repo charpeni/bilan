@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { COLLAPSED_PEEK, collapsedHeight, firstRowCount, toggleText } from './brief.ts';
+import { COLLAPSED_PEEK, collapsedHeight, firstRowCount, ofAllPrs, toggleText } from './brief.ts';
 import { COVERAGE_SLACK, canCompare, comparisonRange, coversDays, isCovered } from './range.ts';
 import { DAY } from './utils.ts';
 
@@ -113,5 +113,18 @@ describe('toggleText', () => {
     expect(toggleText(false, 5)).toBe('Show 5 more');
     expect(toggleText(false, 0)).toBe('Show more');
     expect(toggleText(true, 5)).toBe('Show less');
+  });
+});
+
+describe('ofAllPrs', () => {
+  it('reads as 1 in N while the top bot opened under half of everything', () => {
+    // 40 of 120 opened.
+    expect(ofAllPrs({ oneIn: 3, ofAll: 40 / 120 })).toBe('about 1 in 3 of all PRs opened');
+  });
+
+  it('reads as a share once the top bot opened half or more', () => {
+    // dependabot 50, renovate 40, humans 10.
+    expect(ofAllPrs({ oneIn: 2, ofAll: 50 / 100 })).toBe('50% of all PRs opened');
+    expect(ofAllPrs({ oneIn: 1, ofAll: 95 / 100 })).toBe('95% of all PRs opened');
   });
 });

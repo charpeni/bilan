@@ -141,6 +141,37 @@ describe('roster', () => {
   });
 });
 
+describe('verdict mix', () => {
+  it('counts a dismissed review as given, with no verdict', () => {
+    const dismissed = derive([
+      payloadPr({
+        n: 1,
+        a: 'alice',
+        r: T0,
+        m: T0 + DAY_MS,
+        rv: [
+          ['bob', 'DISMISSED', T0 + 2 * HOUR_MS],
+          ['bob', 'APPROVED', T0 + 20 * HOUR_MS],
+        ],
+        rq: [],
+      }),
+    ]);
+    const people = roster(win(dismissed));
+    const [bob] = reviewerRows(people, 2);
+    expect(bob).toMatchObject({
+      login: 'bob',
+      reviews: 2,
+      prsReviewed: 1,
+      approvals: 1,
+      changesReq: 0,
+      commentsOnly: 0,
+      pushback: 0,
+      // The dismissed review is still bob's first response.
+      medTurnaround: 2 * HOUR_MS,
+    });
+  });
+});
+
 describe('contributorRows', () => {
   it('derives rates and medians per contributor', () => {
     const [alice, bob, carol] = contributorRows(roster(win(prs)));
