@@ -108,6 +108,8 @@ class Github {
           data: {
             repository: {
               id: 'R_repo',
+              owner: { login: 'acme' },
+              name: 'widgets',
               isPrivate: false,
               viewerPermission: 'READ',
               pullRequests: { totalCount: this.prs.size },
