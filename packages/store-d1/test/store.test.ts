@@ -49,6 +49,19 @@ async function freshRepo() {
   return { db, repo: row, store: new D1Store(db, row.id, `${row.owner}/${row.name}`) };
 }
 
+/** A repo stored as GitHub spells it, with mixed case. */
+async function casedRepo() {
+  const db = createDb(env.DB);
+  const n = ++seq;
+  const row = await upsertRepo(db, {
+    id: `R_case_${n}`,
+    owner: 'Acme',
+    name: `Widgets-${n}`,
+    totalPrs: 0,
+  });
+  return { db, row, n };
+}
+
 describe('chunk', () => {
   it('splits into pieces of at most `size`', () => {
     expect(chunk([1, 2, 3, 4, 5], 2)).toEqual([[1, 2], [3, 4], [5]]);
@@ -333,6 +346,66 @@ describe('upsertRepo', () => {
     expect(restored.name).toBe('renamed');
     expect(restored.lastSyncedAt).toBe('2026-05-01T00:00:00.000Z');
     expect((await getRepoByName(db, old.owner, old.name))?.id).toBe(newcomer.id);
+  });
+});
+
+describe('names in any letter case', () => {
+  it('getRepoByName finds the row however the name is cased', async () => {
+    const { db, row, n } = await casedRepo();
+    for (const [owner, name] of [
+      ['Acme', `Widgets-${n}`],
+      ['acme', `widgets-${n}`],
+      ['ACME', `WIDGETS-${n}`],
+    ] as const) {
+      expect((await getRepoByName(db, owner, name))?.id).toBe(row.id);
+    }
+    expect(await getRepoByName(db, 'acme', `widgets-${n}x`)).toBeUndefined();
+  });
+
+  it('a lookup in another case leaves the stored spelling alone, and an upsert stores the given one', async () => {
+    const { db, row, n } = await casedRepo();
+    // The canonical spelling GitHub answered with is written back as is: the
+    // row keeps one spelling, never the one a lookup was typed in.
+    const found = await getRepoByName(db, 'acme', `widgets-${n}`);
+    const refreshed = await upsertRepo(db, {
+      id: row.id,
+      owner: 'Acme',
+      name: `Widgets-${n}`,
+      totalPrs: 3,
+    });
+    expect(found).toMatchObject({ owner: 'Acme', name: `Widgets-${n}` });
+    expect(refreshed).toMatchObject({ id: row.id, owner: 'Acme', name: `Widgets-${n}` });
+    expect((await getRepoByName(db, 'ACME', `WIDGETS-${n}`))?.id).toBe(row.id);
+  });
+
+  it('a repo renamed only in case keeps its own row, under the new spelling', async () => {
+    const { db, row, n } = await casedRepo();
+    const renamed = await upsertRepo(db, { id: row.id, owner: 'acme', name: `widgets-${n}` });
+    expect(renamed).toMatchObject({ id: row.id, owner: 'acme', name: `widgets-${n}` });
+    expect((await getRepoById(db, row.id))?.owner).toBe('acme');
+  });
+
+  it('parks another repo holding the name in a different case', async () => {
+    const { db, row: old, n } = await casedRepo();
+    const newcomer = await upsertRepo(db, {
+      id: `${old.id}-new`,
+      owner: 'acme',
+      name: `widgets-${n}`,
+      totalPrs: 1,
+    });
+    expect(await getRepoById(db, old.id)).toMatchObject({ owner: STALE_OWNER, name: old.id });
+    expect((await getRepoByName(db, 'Acme', `Widgets-${n}`))?.id).toBe(newcomer.id);
+    // The parked row comes back under its real name when synced again.
+    const restored = await upsertRepo(db, { id: old.id, owner: 'Acme', name: `Moved-${n}` });
+    expect(restored).toMatchObject({ owner: 'Acme', name: `Moved-${n}` });
+    expect((await getRepoByName(db, 'acme', `widgets-${n}`))?.id).toBe(newcomer.id);
+  });
+
+  it('never resolves a parked row by its placeholder, in any case', async () => {
+    const { db, row: old, n } = await casedRepo();
+    await upsertRepo(db, { id: `${old.id}-new`, owner: 'Acme', name: `Widgets-${n}` });
+    expect(await getRepoByName(db, STALE_OWNER.toUpperCase(), old.id)).toBeUndefined();
+    expect(await getRepoByName(db, STALE_OWNER, old.id.toLowerCase())).toBeUndefined();
   });
 });
 

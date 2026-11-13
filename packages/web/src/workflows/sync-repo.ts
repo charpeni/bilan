@@ -98,10 +98,12 @@ export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
           if (meta.id !== job.repoId) {
             throw new NonRetryableError('The repository changed; start a new sync');
           }
+          // GitHub's spelling: a repo renamed since the run was requested
+          // keeps its row under the new name.
           const repo = await upsertRepo(db, {
             id: meta.id,
-            owner,
-            name,
+            owner: meta.owner.login,
+            name: meta.name,
             isPrivate: meta.isPrivate,
             totalPrs: meta.pullRequests.totalCount,
           });

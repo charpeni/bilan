@@ -51,7 +51,8 @@ const domainCalls = () =>
 const paths = () => domainCalls().map((call) => call.path);
 
 const env = { DOMAIN: { fetch: mocks.domain } } as unknown as Env;
-const ref = { owner: 'acme', name: 'private' };
+/** The URL's spelling: another letter case than GitHub's. */
+const ref = { owner: 'ACME', name: 'Private' };
 const options: StartSyncOptions = {
   requestedBy: 7,
   source: {
@@ -59,6 +60,8 @@ const options: StartSyncOptions = {
     userId: 7,
     meta: {
       id: 'R_private',
+      owner: { login: 'acme' },
+      name: 'private',
       isPrivate: true,
       viewerPermission: 'READ',
       pullRequests: { totalCount: 1 },
@@ -103,6 +106,24 @@ describe('starting a sync', () => {
     );
     expect(mocks.admit.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.domain.mock.invocationCallOrder[1]!,
+    );
+  });
+
+  it("stores GitHub's spelling of the name, never the one asked for", async () => {
+    await startSync(env, ref, options);
+    expect(mocks.upsert).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ id: 'R_private', owner: 'acme', name: 'private' }),
+    );
+    // A renamed repo synced by its old name keeps its row, under the new name.
+    const renamed = {
+      ...options.source,
+      meta: { ...options.source!.meta, owner: { login: 'Acme' }, name: 'vault' },
+    } as NonNullable<StartSyncOptions['source']>;
+    await startSync(env, { owner: 'acme', name: 'private' }, { requestedBy: 7, source: renamed });
+    expect(mocks.upsert).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({ id: 'R_private', owner: 'Acme', name: 'vault' }),
     );
   });
 
