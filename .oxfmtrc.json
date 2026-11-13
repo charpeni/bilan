@@ -13,5 +13,11 @@
       "unknown"
     ]
   },
-  "ignorePatterns": ["dist", ".astro", ".wrangler", "pnpm-lock.yaml"]
+  "ignorePatterns": [
+    "dist",
+    ".astro",
+    ".wrangler",
+    "pnpm-lock.yaml",
+    ".github/workflows/pullfrog.yml"
+  ]
 }
