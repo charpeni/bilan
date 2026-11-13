@@ -327,7 +327,7 @@ describe('brief areas', () => {
 
   it('is null when no area rose or fell', () => {
     expect(areasOf({ api: [20, 20], web: [5, 9] })).toBeNull();
-    // 200 -> 201 prints as "flat", so it is not a rise.
-    expect(areasOf({ api: [200, 201] })).toBeNull();
+    // 300 -> 301 (+0.33%) prints as "flat", so it is not a rise.
+    expect(areasOf({ api: [300, 301] })).toBeNull();
   });
 });
