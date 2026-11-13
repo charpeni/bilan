@@ -1,8 +1,12 @@
 import {
+  advanceWalk,
   buildPayload,
+  forgetsCheckpoint,
   GithubClient,
+  GithubRateLimitError,
   RepoChangedError,
   RepoNotFoundError,
+  startWalk,
   syncPage,
 } from '@bilan/core';
 import { D1Store, schema, upsertRepo } from '@bilan/store-d1';
@@ -36,6 +40,7 @@ import { ReauthRequiredError, useUserToken } from '../lib/tokens.ts';
 
 import type { OpenWalkStop, PriorCoverage, SyncStage, WalkStop } from '../lib/depth.ts';
 import type { DomainReply } from '../lib/domain.ts';
+import type { SyncCheckpoints, WalkProgress } from '@bilan/core';
 import type { SyncRepoParams, SyncTokenSource } from '@bilan/domain/RepoSync/SyncRepoParams';
 import type { WorkflowEvent, WorkflowStep } from 'cloudflare:workers';
 
@@ -59,8 +64,16 @@ interface PageStepResult {
   oldestUpdatedAt: number | null;
 }
 
+/** One of the run's two walks, and where it stands against the walk an earlier run left off. */
+interface WalkState {
+  key: keyof SyncCheckpoints;
+  progress: WalkProgress;
+}
+
 /** An interim stage: one with a bound to publish at. */
 type InterimStage = SyncStage & { since: string };
+
+const NO_CHECKPOINTS: SyncCheckpoints = { all: null, open: null };
 
 const PAGE_SIZE = 25;
 const RATE_LIMIT_RESERVE = 200;
@@ -89,7 +102,7 @@ export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
       withClientFor(env, event.payload, fn);
 
     try {
-      const { repoId, prior, startedAt, stages } = await step.do(
+      const { repoId, prior, startedAt, stages, ...resolved } = await step.do(
         'resolve-repo',
         PAGE_RETRIES,
         async () => {
@@ -131,9 +144,15 @@ export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
             prior: priorCoverage,
             startedAt: runStartedAt,
             stages: runStages,
+            // Where the walks a budget-cut run left off go on from (see `advanceWalk`).
+            checkpoints: stored.checkpoints ?? NO_CHECKPOINTS,
           };
         },
       );
+      // The walks' checkpoints as saved so far. Only ever moved from step
+      // results, so a replay of the run sees the same; an instance that
+      // resolved its repo before checkpoints existed starts with none.
+      let checkpoints: SyncCheckpoints = resolved.checkpoints ?? NO_CHECKPOINTS;
 
       // A completion that runs again after a newer run started (its step
       // retried) leaves that run's in-flight marker alone.
@@ -159,24 +178,51 @@ export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
       let oldestReached: number | null = null;
       let stop: WalkStop = 'max-pages';
 
+      /**
+       * Fetch and store one page of `walk` as a step, and save the walk's
+       * checkpoint in the same step, after the page is stored: a retry fetches
+       * the same cursor and saves what it stored. The step persists the raw
+       * page; `advance` works out the same `advanceWalk` outside it, so the
+       * loop goes on from the cached result on replay.
+       */
       const fetchPage = async (
         label: string,
         pageCursor: string | null,
+        walk: WalkState,
         states?: ['OPEN'],
       ): Promise<PageStepResult> => {
+        // Fixed for this step, retries included: the loop only moves them once it returns.
+        const { key, progress } = walk;
+        const saved = checkpoints;
+        const saveCheckpoint = (checkpoint: SyncCheckpoints[typeof key]) =>
+          store.saveCheckpoints({ ...saved, [key]: checkpoint });
         const result = await step.do(label, PAGE_RETRIES, async (): Promise<PageStepResult> => {
-          const r = await withClient((client) =>
-            syncPage({
-              client,
-              store,
-              repo: { owner, name },
-              // Pages look the repo up by name; only ever store the repo resolved above.
-              repoId,
-              cursor: pageCursor,
-              pageSize: PAGE_SIZE,
-              ...(states === undefined ? {} : { states }),
-            }),
-          );
+          const r = await withClient(async (client) => {
+            try {
+              return await syncPage({
+                client,
+                store,
+                repo: { owner, name },
+                // Pages look the repo up by name; only ever store the repo resolved above.
+                repoId,
+                cursor: pageCursor,
+                pageSize: PAGE_SIZE,
+                ...(states === undefined ? {} : { states }),
+              });
+            } catch (error) {
+              // A saved cursor GitHub no longer takes must not fail every later
+              // run: forget it, so the next one walks down from the newest page.
+              if (
+                !(error instanceof GithubRateLimitError) &&
+                forgetsCheckpoint(progress, pageCursor)
+              ) {
+                await saveCheckpoint(null);
+              }
+              throw error;
+            }
+          });
+          const { checkpoint } = advanceWalk(progress, r, startedAt);
+          if (checkpoint !== undefined) await saveCheckpoint(checkpoint);
           // The run's heartbeat: a run silent for ten minutes is given up.
           // Sent inside the step, so a replay of the run does not send it again.
           assertCurrent(
@@ -200,6 +246,19 @@ export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
         fetched += result.fetched;
         pointsSpent += result.cost;
         return result;
+      };
+      /** Take a fetched page into `walk`, as the page step did before saving its checkpoint. */
+      const advance = (walk: WalkState, result: PageStepResult): string | null => {
+        const next = advanceWalk(
+          walk.progress,
+          { oldestUpdatedAt: result.oldestUpdatedAt ?? Infinity, nextCursor: result.nextCursor },
+          startedAt,
+        );
+        walk.progress = next.progress;
+        if (next.checkpoint !== undefined) {
+          checkpoints = { ...checkpoints, [walk.key]: next.checkpoint };
+        }
+        return next.next;
       };
       /** Gzip the payload to R2 under the key `GET /payload` reads for `syncedAt`. */
       const publish = async (syncedAt: string, payload: ReturnType<typeof buildPayload>) => {
@@ -259,17 +318,22 @@ export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
       // Main pass: every PR by updatedAt desc, until `since` (or one of the
       // other stops). A staged first sync publishes an interim payload once a
       // page dips below each interim bound and walks on from the same cursor.
+      // A walk an earlier run left off (cut by the page budget, `maxPrs` or a
+      // failure) is joined once a page reaches below where that run began:
+      // the walk then goes on from its cursor, and everything down to what it
+      // reached counts as reached (see `advanceWalk`).
+      const main: WalkState = { key: 'all', progress: startWalk(checkpoints.all, startedAt) };
       let cursor: string | null = null;
       let unchangedStreak = 0;
       let nextInterim = 0;
       for (let page = 1; ; page++) {
         if (pagesUsed >= MAX_PAGES) break;
-        const result = await fetchPage(`page-${page}`, cursor);
-        if (result.oldestUpdatedAt !== null) {
-          oldestReached = Math.min(oldestReached ?? Infinity, result.oldestUpdatedAt);
-        }
+        const result = await fetchPage(`page-${page}`, cursor, main);
+        const next = advance(main, result);
+        const reached = main.progress.oldestReached;
+        oldestReached = Number.isFinite(reached) ? reached : null;
 
-        if (result.nextCursor === null) {
+        if (next === null) {
           stop = 'exhausted';
           break;
         }
@@ -284,21 +348,20 @@ export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
           stop = 'max-prs';
           break;
         }
-        // Pages are ordered by updatedAt desc: once one dips below `since`, so does the rest.
-        const oldest = result.oldestUpdatedAt ?? -Infinity;
-        if (sinceMs !== undefined && oldest < sinceMs) {
+        // Pages are ordered by updatedAt desc: once the walk dips below `since`, so does the rest.
+        if (sinceMs !== undefined && reached < sinceMs) {
           stop = 'since';
           break;
         }
         // Below an interim bound too: publish, then walk on from this page's cursor.
         while (nextInterim < interimStages.length) {
           const stage = interimStages[nextInterim];
-          if (stage === undefined || oldest >= Date.parse(stage.since)) break;
+          if (stage === undefined || reached >= Date.parse(stage.since)) break;
           await publishInterim(nextInterim, stage);
           nextInterim++;
         }
         await parkIfLow(`page-${page}`, result);
-        cursor = result.nextCursor;
+        cursor = next;
       }
 
       // Open-PR pass: a bounded walk leaves older open PRs behind, and the
@@ -308,13 +371,15 @@ export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
       // set; see `openPrsComplete`.
       let openStop: OpenWalkStop | null = null;
       if (sinceMs !== undefined && stop !== 'exhausted' && stop !== 'max-prs') {
+        const open: WalkState = { key: 'open', progress: startWalk(checkpoints.open, startedAt) };
         let openCursor: string | null = null;
         let openStreak = 0;
         openStop = 'max-pages';
         for (let page = 1; ; page++) {
           if (pagesUsed >= MAX_PAGES) break;
-          const result = await fetchPage(`open-${page}`, openCursor, ['OPEN']);
-          if (result.nextCursor === null) {
+          const result = await fetchPage(`open-${page}`, openCursor, open, ['OPEN']);
+          const next = advance(open, result);
+          if (next === null) {
             openStop = 'exhausted';
             break;
           }
@@ -330,7 +395,7 @@ export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
             break;
           }
           await parkIfLow(`open-${page}`, result);
-          openCursor = result.nextCursor;
+          openCursor = next;
         }
       }
 

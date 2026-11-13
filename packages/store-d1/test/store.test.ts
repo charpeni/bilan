@@ -1,14 +1,16 @@
 import { env } from 'cloudflare:test';
+import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 
 import { upsertUser } from '../src/auth.ts';
 import { createDb } from '../src/db.ts';
 import { getRepoById, getRepoByName, STALE_OWNER, upsertRepo } from '../src/repos.ts';
-import { pullRequests } from '../src/schema.ts';
+import { pullRequests, repos } from '../src/schema.ts';
 import { chunk, D1Store, IN_CHUNK } from '../src/store.ts';
 import { listReposWithLastView, listRepoViews, touchRepoView } from '../src/views.ts';
 
-import type { RawPr } from '@bilan/core';
+import type { NewRepo } from '../src/schema.ts';
+import type { RawPr, SyncCheckpoints } from '@bilan/core';
 
 function rawPr(overrides: Partial<RawPr> = {}): RawPr {
   return {
@@ -298,6 +300,39 @@ describe('D1Store', () => {
     expect(row?.reconciledAt).toBe('2026-05-01T00:00:00.000Z');
     expect(row?.syncStartedAt).toBeNull();
   });
+
+  it('round-trips walk checkpoints and leaves the run stamps alone', async () => {
+    const { store } = await freshRepo();
+    await store.markStarted('2026-05-01T00:00:00.000Z');
+    const checkpoints: SyncCheckpoints = {
+      all: {
+        cursor: 'Y3Vyc29yOjI1',
+        reached: '2025-01-02T03:04:05.000Z',
+        from: '2026-05-01T00:00:00.000Z',
+      },
+      open: null,
+    };
+    await store.saveCheckpoints(checkpoints);
+    expect(await store.meta()).toMatchObject({
+      checkpoints,
+      interrupted: true,
+      syncStartedAt: '2026-05-01T00:00:00.000Z',
+      syncedAt: null,
+    });
+    // A later save replaces both walks' checkpoints; markSynced keeps them.
+    const next: SyncCheckpoints = { all: null, open: { ...checkpoints.all!, cursor: 'b3Blbg' } };
+    await store.saveCheckpoints(next);
+    await store.markSynced('2026-05-01T00:05:00.000Z', null, true, true);
+    expect((await store.meta()).checkpoints).toEqual(next);
+  });
+
+  it('reads stored checkpoints that do not parse or validate as none', async () => {
+    const { store, db, repo } = await freshRepo();
+    for (const stored of ['not json', '{"all":{"cursor":1},"open":null}', '[]']) {
+      await db.update(repos).set({ syncCheckpoints: stored }).where(eq(repos.id, repo.id));
+      expect(await store.meta()).not.toHaveProperty('checkpoints');
+    }
+  });
 });
 
 describe('upsertRepo', () => {
@@ -314,6 +349,29 @@ describe('upsertRepo', () => {
     expect(updated.lastSyncedAt).toBe('2026-05-01T00:00:00.000Z');
     expect(updated.coverageSince).toBe('2026-04-01T00:00:00.000Z');
     expect(updated.openPrsSyncedAt).toBe('2026-05-01T00:00:00.000Z');
+  });
+
+  it('never takes walk checkpoints from the caller', async () => {
+    const { db, repo, store } = await freshRepo();
+    const checkpoints: SyncCheckpoints = {
+      all: { cursor: 'c', reached: '2025-01-01T00:00:00.000Z', from: '2026-05-01T00:00:00.000Z' },
+      open: null,
+    };
+    await store.saveCheckpoints(checkpoints);
+    // Not part of the type; a caller that slips it in anyway is ignored.
+    const sneaky = { id: repo.id, owner: 'acme', name: repo.name, syncCheckpoints: null };
+    const updated = await upsertRepo(db, sneaky as Omit<NewRepo, 'syncCheckpoints'>);
+    expect(updated.syncCheckpoints).toBe(JSON.stringify(checkpoints));
+    expect((await store.meta()).checkpoints).toEqual(checkpoints);
+    const fresh = {
+      id: `${repo.id}-fresh`,
+      owner: 'acme',
+      name: `${repo.name}-fresh`,
+      syncCheckpoints: '{}',
+    };
+    expect(
+      (await upsertRepo(db, fresh as Omit<NewRepo, 'syncCheckpoints'>)).syncCheckpoints,
+    ).toBeNull();
   });
 
   it('lets a new repo take over a name and restores the old one when it resurfaces', async () => {
