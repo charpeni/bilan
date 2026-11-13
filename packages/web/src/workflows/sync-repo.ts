@@ -30,6 +30,7 @@ import {
 } from '../lib/domain.ts';
 import { gzip } from '../lib/gzip.ts';
 import { payloadKey } from '../lib/payload-key.ts';
+import { failureReason } from '../lib/sync-failure.ts';
 import { serverToken } from '../lib/token-source.ts';
 import { ReauthRequiredError, useUserToken } from '../lib/tokens.ts';
 
@@ -388,10 +389,11 @@ export class SyncRepoWorkflow extends WorkflowEntrypoint<Env, SyncRepoParams> {
       });
     } catch (error) {
       // Tell the model the run ended; if it cannot be told, its stall check
-      // gives the run up within ten minutes anyway.
+      // gives the run up within ten minutes anyway. The model keeps the reason
+      // forever, so it must not name the repository.
       await reportFailed(env, {
         ...job,
-        error: error instanceof Error ? error.message : String(error),
+        error: failureReason(error, { owner, name }),
         pointsSpent,
       }).catch((reportError: unknown) => {
         console.error(`sync ${jobId}: could not report the failure`, reportError);
@@ -418,11 +420,12 @@ function assertCurrent(reply: DomainReply): void {
  * A token that cannot be refreshed, or that GitHub rejects, fails the job at
  * once: retrying would not bring it back. Nor would it bring back a repo
  * GitHub says does not exist (or that this token cannot see), or a name that
- * now resolves to a different repo.
+ * now resolves to a different repo. Those failures say so without the
+ * repository's name (`failureReason`).
  */
 async function withClientFor<T>(
   env: Env,
-  source: SyncTokenSource,
+  source: SyncRepoParams,
   fn: (client: GithubClient) => Promise<T>,
 ): Promise<T> {
   try {
@@ -436,7 +439,7 @@ async function withClientFor<T>(
       error instanceof RepoNotFoundError ||
       error instanceof RepoChangedError
     ) {
-      throw new NonRetryableError(error.message);
+      throw new NonRetryableError(failureReason(error, source));
     }
     throw error;
   }
