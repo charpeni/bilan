@@ -1,5 +1,5 @@
 import { isQuiet } from './depth.ts';
-import { isMerged, isReady } from './derive.ts';
+import { ignoringReviewers, isMerged, isReady } from './derive.ts';
 import { count, median, ranked, share } from './stats.ts';
 import { DAY } from './time.ts';
 
@@ -63,12 +63,16 @@ export interface BriefStats {
   areas: Map<string, number>;
 }
 
-/** Window stats over `prs` (already excluding bots as authors); bot reviews are dropped here. */
+/**
+ * Window stats over `prs` (already excluding bots as authors); bot reviews are
+ * dropped here, from the counts and from the first review alike.
+ */
 export function briefStats(
-  prs: readonly MetricPr[],
+  all: readonly MetricPr[],
   bots: ReadonlySet<string>,
   inW: InWindow,
 ): BriefStats {
+  const prs = all.map((p) => ignoringReviewers(p, bots));
   const opened = prs.filter((p) => inW(p.c));
   const merged = prs.filter((p): p is MergedPr => isMerged(p) && inW(p.m));
   const closed = prs.filter((p): p is ClosedPr => !p.merged && p.x !== null && inW(p.x));

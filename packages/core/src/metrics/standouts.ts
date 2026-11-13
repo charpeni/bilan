@@ -46,7 +46,7 @@ const nonNull = (v: number | null): v is number => v !== null;
 
 export function standouts(w: Windowed, people: readonly PersonRec[]): Standouts {
   const { opened, merged, readied, stillOpen, last } = w;
-  const mergedWithReview = merged.filter((p) => p.rv.length);
+  const mergedWithReview = merged.filter((p) => !p.unreviewed);
   const approvedMerges = merged.filter((p) => p.rv.some(([, st]) => st === 'APPROVED'));
   const reviewTotals = people
     .filter((r) => r.reviewsGiven)

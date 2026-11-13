@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { DAY_MS, HOUR_MS, T0, payloadPr } from '../testing/fixtures.ts';
+import { COPILOT, DAY_MS, HOUR_MS, T0, botFirstPrs, payloadPr } from '../testing/fixtures.ts';
 import { derive } from './derive.ts';
 import { roster } from './people.ts';
 import { createFilterState, scope, windowed } from './scope.ts';
@@ -58,6 +58,25 @@ describe('standouts', () => {
     ).length;
     expect(s.weekendMerges).toBe(weekend);
     expect(s.weekendShare).toBe(weekend / 2);
+  });
+
+  it('counts a merge reviewed only by a bot as unreviewed while bots are hidden', () => {
+    const prs = derive(botFirstPrs());
+    const at = (hideBots: boolean) => {
+      const w = windowed(
+        scope(prs, new Set([COPILOT]), { ...createFilterState(), hideBots }, LAST),
+        LAST,
+      );
+      return standouts(w, roster(w));
+    };
+    expect(at(true)).toMatchObject({
+      merged: 2,
+      unreviewed: 1,
+      unreviewedShare: 0.5,
+      firstWithinDayShare: 0,
+      p90First: 3 * DAY_MS,
+    });
+    expect(at(false)).toMatchObject({ unreviewed: 0, firstWithinDayShare: 1, p90First: 60e3 });
   });
 
   it('avoids dividing by zero for reverts and leaves other shares NaN when empty', () => {
