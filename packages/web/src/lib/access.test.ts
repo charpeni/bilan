@@ -61,6 +61,9 @@ function setup(options: {
       if (meta instanceof Error) throw meta;
       return {
         id: 'R_priv',
+        // GitHub answers with its own spelling; by default the one asked for.
+        owner: { login: ref.owner },
+        name: ref.name,
         isPrivate: true,
         viewerPermission: 'READ',
         pullRequests: { totalCount: 1 },
@@ -76,6 +79,8 @@ function setup(options: {
             if (meta instanceof Error) throw meta;
             return {
               id: 'R_pub',
+              owner: { login: ref.owner },
+              name: ref.name,
               isPrivate: false,
               viewerPermission: null,
               pullRequests: { totalCount: 1 },
@@ -495,6 +500,44 @@ describe('a different repo at a cached name', () => {
   it('is never decided for signed-out viewers', async () => {
     const deps = setup({ meta: { id: 'R_replacement' }, server: { id: 'R_replacement' } });
     expect(await checkRepoAccess(deps, null, privateRepo)).toEqual(loginRequired);
+    expect(deps.probes).toEqual([]);
+  });
+});
+
+describe("GitHub's spelling of a name", () => {
+  it('a renamed private repo answering for its old name is the same repo, never replaced', async () => {
+    const deps = setup({
+      meta: { id: 'R_priv', owner: { login: 'Acme' }, name: 'vault', viewerPermission: 'READ' },
+    });
+    expect(await checkRepoAccess(deps, user, privateRepo)).toEqual(ok);
+    expect(deps.kv.store.get(accessCacheKey(7, 'R_priv'))?.value).toBe('allowed');
+  });
+
+  it('a renamed public repo answering for its old name stays public', async () => {
+    const deps = setup({ server: { id: 'R_pub', owner: { login: 'Acme' }, name: 'library' } });
+    expect(await checkRepoAccess(deps, user, publicRepo)).toEqual(ok);
+    expect(deps.marked).toEqual([]);
+  });
+
+  it('an unknown name carries the spelling GitHub answered with', async () => {
+    const deps = setup({ meta: { id: 'R_new', owner: { login: 'acme' }, name: 'new' } });
+    const decision = await checkRepoAccess(deps, user, { owner: 'ACME', name: 'New' });
+    expect(decision).toEqual({
+      kind: 'unknown',
+      source: {
+        source: 'user',
+        userId: 7,
+        meta: expect.objectContaining({ owner: { login: 'acme' }, name: 'new' }),
+      },
+    });
+  });
+
+  it('a signed-out viewer never makes GitHub spell an unknown name', async () => {
+    const deps = setup({});
+    expect(await checkRepoAccess(deps, null, { owner: 'ACME', name: 'New' })).toEqual(
+      loginRequired,
+    );
+    expect(deps.calls).toEqual([]);
     expect(deps.probes).toEqual([]);
   });
 });

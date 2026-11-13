@@ -53,6 +53,11 @@ export const repos = sqliteTable(
     syncStartedAt: text('sync_started_at'),
     /** See `RepoMeta.reconciledAt`: the `sync_started_at` of the last complete run. */
     reconciledAt: text('reconciled_at'),
+    /**
+     * See `RepoMeta.checkpoints`: JSON-encoded `SyncCheckpoints`, where the
+     * walks a budget-cut run left off go on from. Null until a run saves one.
+     */
+    syncCheckpoints: text('sync_checkpoints'),
     /** JSON-encoded `AreaRules`, or null to infer areas from the file samples. */
     areasOverride: text('areas_override'),
   },

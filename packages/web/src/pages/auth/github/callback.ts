@@ -64,11 +64,13 @@ export const GET: APIRoute = async ({ url, cookies, redirect }) => {
   const now = new Date().toISOString();
   const userId = viewer.databaseId;
   await upsertUser(db, { id: userId, login: viewer.login, avatarUrl: viewer.avatarUrl, now });
-  await storeUserToken(env, userId, grant, now);
-
+  // The session goes in before the token: sign-out and the nightly sweep drop
+  // a token set only while its user has no unexpired session, so a sign-out of
+  // another session landing in between cannot take the set stored here.
   const sessionId = generateSessionId();
   const expiresAt = sessionExpiry();
   await createSession(db, { id: sessionId, userId, expiresAt });
+  await storeUserToken(env, userId, grant, now);
   cookies.set(sessionCookieName(url), sessionId, sessionCookieOptions(url, expiresAt));
   return redirect(next, 302);
 };

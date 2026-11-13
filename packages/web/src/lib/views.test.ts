@@ -30,6 +30,8 @@ const decisions: Record<string, AccessDecision> = {
       source: 'server',
       meta: {
         id: 'R_new',
+        owner: { login: 'acme' },
+        name: 'new',
         isPrivate: false,
         viewerPermission: null,
         pullRequests: { totalCount: 0 },

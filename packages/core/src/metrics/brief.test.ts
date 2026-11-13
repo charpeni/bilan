@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { DAY_MS, HOUR_MS, T0, payloadPr } from '../testing/fixtures.ts';
+import { COPILOT, DAY_MS, HOUR_MS, T0, botFirstPrs, payloadPr } from '../testing/fixtures.ts';
 import { between, brief, briefStats, change } from './brief.ts';
 import { derive } from './derive.ts';
 
@@ -47,8 +47,8 @@ const prs = derive([
     de: 0,
     ar: ['api'],
     rv: [
-      ['bob', 'APPROVED', LAST - 10 * DAY_MS + 2 * HOUR_MS],
       ['dependabot[bot]', 'COMMENTED', LAST - 10 * DAY_MS + HOUR_MS],
+      ['bob', 'APPROVED', LAST - 10 * DAY_MS + 2 * HOUR_MS],
     ],
   }),
   // Current window: opened, unreviewed for a week, still open and ready.
@@ -329,5 +329,29 @@ describe('brief areas', () => {
     expect(areasOf({ api: [20, 20], web: [5, 9] })).toBeNull();
     // 300 -> 301 (+0.33%) prints as "flat", so it is not a rise.
     expect(areasOf({ api: [300, 301] })).toBeNull();
+  });
+});
+
+describe('brief with a bot reviewing first', () => {
+  const last = T0 + 10 * DAY_MS;
+  const botPrs = derive(botFirstPrs());
+  const withBot = new Set([COPILOT]);
+
+  it('takes the first review from humans only', () => {
+    const A = briefStats(botPrs, withBot, between(last, 30, 0));
+    expect(A.readied).toHaveLength(3);
+    expect(A.medFirst).toBe(3 * DAY_MS);
+    expect(A.within1d).toBe(0);
+    expect(A.small.first).toBe(3 * DAY_MS);
+    expect(A.reviewers).toEqual(new Map([['bob', 1]]));
+    // #2 carries bob's approval; #3 only the bot's, which is not one.
+    expect(A.merged).toHaveLength(2);
+    expect(A.approvedMerges).toBe(0.5);
+  });
+
+  it('agrees with the backlog on which PR still waits for a human', () => {
+    const b = brief(botPrs, withBot, last);
+    expect(b.cur.medFirst).toBe(3 * DAY_MS);
+    expect(b.backlog.waiting.map((p) => p.n)).toEqual([1]);
   });
 });

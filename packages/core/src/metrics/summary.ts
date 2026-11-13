@@ -8,7 +8,7 @@ export interface Headline {
   /** Distinct authors among the PRs opened. */
   authors: number;
   merged: number;
-  /** Merged over merged + closed unmerged; null when nothing was opened. */
+  /** Merged over merged + closed unmerged; null when nothing was resolved. */
   mergedShare: number | null;
   rejected: number;
   stillOpen: number;
@@ -33,11 +33,12 @@ const nonNull = (v: number | null): v is number => v !== null;
 export function headline(w: Windowed): Headline {
   const { opened, merged, rejected, readied, winReviews, stillOpen } = w;
   const toMerge = merged.map((p) => p.toMerge).filter(nonNull);
+  const resolved = merged.length + rejected.length;
   return {
     opened: opened.length,
     authors: new Set(opened.map((p) => p.a)).size,
     merged: merged.length,
-    mergedShare: opened.length ? merged.length / (merged.length + rejected.length) : null,
+    mergedShare: resolved ? merged.length / resolved : null,
     rejected: rejected.length,
     stillOpen: stillOpen.length,
     medMerge: median(toMerge),

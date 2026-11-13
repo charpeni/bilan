@@ -1,4 +1,4 @@
-import { isMerged } from './derive.ts';
+import { ignoringReviewers, isMerged } from './derive.ts';
 import { DAY } from './time.ts';
 
 import type { ReviewState } from '../types.ts';
@@ -52,15 +52,17 @@ export function scope(
   last: number,
 ): Scope {
   const from = state.range === 'all' ? -Infinity : last - Number(state.range) * DAY;
-  const base = prs.filter(
-    (p) => (!state.hideBots || !p.bot) && (!state.area || p.ar.includes(state.area)),
-  );
+  const skip: ReadonlySet<string> = state.hideBots ? bots : new Set();
+  // A skipped reviewer's review is not a first review either, so the PRs it
+  // touched get their review latency and "unreviewed" from the others.
+  const base = prs
+    .filter((p) => (!state.hideBots || !p.bot) && (!state.area || p.ar.includes(state.area)))
+    .map((p) => ignoringReviewers(p, skip));
   // Adjacent periods share a boundary, but never an event: (from, last].
   const inWin: InWindow = (t): t is number =>
     t !== null && t !== undefined && t > from && t <= last;
   const focus = state.person || null;
   const authored = focus ? base.filter((p) => p.a === focus) : base;
-  const skip: ReadonlySet<string> = state.hideBots ? bots : new Set();
   // Review rows, flattened, already excluding self-reviews at build time.
   const reviews: ReviewRow[] = [];
   for (const p of base) {

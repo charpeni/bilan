@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { DAY_MS, HOUR_MS, T0, payloadPr } from '../testing/fixtures.ts';
-import { derive, firstActivity, isMerged, isReady, lastActivity } from './derive.ts';
+import { COPILOT, DAY_MS, HOUR_MS, T0, botFirstPrs, payloadPr } from '../testing/fixtures.ts';
+import {
+  derive,
+  firstActivity,
+  ignoringReviewers,
+  isMerged,
+  isReady,
+  lastActivity,
+} from './derive.ts';
 
 const one = (...args: Parameters<typeof payloadPr>) => derive([payloadPr(...args)])[0]!;
 
@@ -89,5 +96,33 @@ describe('derive', () => {
     ]);
     expect(firstActivity(prs)).toBe(T0 - DAY_MS);
     expect(lastActivity(prs)).toBe(T0 + 10 * DAY_MS);
+  });
+});
+
+describe('ignoringReviewers', () => {
+  const [open, both, botOnly] = derive(botFirstPrs());
+  const skip = new Set([COPILOT]);
+
+  it('takes the first review, its wait, and "unreviewed" from everyone else', () => {
+    expect(both).toMatchObject({ first: T0 + 60e3, toFirst: 60e3, unreviewed: false });
+    expect(ignoringReviewers(both!, skip)).toMatchObject({
+      first: T0 + 3 * DAY_MS,
+      toFirst: 3 * DAY_MS,
+      unreviewed: false,
+      rv: both!.rv,
+    });
+    expect(ignoringReviewers(open!, skip)).toMatchObject({
+      first: null,
+      toFirst: null,
+      unreviewed: false,
+    });
+    expect(botOnly!.unreviewed).toBe(false);
+    expect(ignoringReviewers(botOnly!, skip)).toMatchObject({ first: null, unreviewed: true });
+  });
+
+  it('returns the PR itself when none of its reviewers is skipped', () => {
+    const p = one();
+    expect(ignoringReviewers(p, skip)).toBe(p);
+    expect(ignoringReviewers(both!, new Set())).toBe(both);
   });
 });
