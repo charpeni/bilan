@@ -73,10 +73,19 @@ describe('standouts', () => {
       merged: 2,
       unreviewed: 1,
       unreviewedShare: 0.5,
+      // #3 carries only the bot's approval, so it is not an approved merge either.
+      approved: 1,
+      approvedShare: 0.5,
       firstWithinDayShare: 0,
       p90First: 3 * DAY_MS,
     });
-    expect(at(false)).toMatchObject({ unreviewed: 0, firstWithinDayShare: 1, p90First: 60e3 });
+    expect(at(false)).toMatchObject({
+      unreviewed: 0,
+      approved: 2,
+      approvedShare: 1,
+      firstWithinDayShare: 1,
+      p90First: 60e3,
+    });
   });
 
   it('avoids dividing by zero for reverts and leaves other shares NaN when empty', () => {
