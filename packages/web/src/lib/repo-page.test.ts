@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { allowAutoRefresh, repoPageState } from './repo-page.ts';
+import { allowAutoRefresh, canonicalPath, repoPageState } from './repo-page.ts';
 
 import type { AccessDecision } from './access.ts';
 import type { Repo } from '@bilan/store-d1';
@@ -69,6 +69,62 @@ describe('repository presentation boundary', () => {
       view: 'syncing',
       repo: unsynced,
     });
+  });
+});
+
+/** What GitHub answered on the viewer's token for the name asked. */
+const seen = (kind: 'unknown' | 'replaced', owner: string, name: string): AccessDecision => ({
+  kind,
+  source: {
+    source: 'user',
+    userId: 7,
+    meta: {
+      id: 'R_other',
+      owner: { login: owner },
+      name,
+      isPrivate: true,
+      viewerPermission: 'READ',
+      pullRequests: { totalCount: 1 },
+    },
+  },
+});
+
+describe('the canonical address of a dashboard', () => {
+  const asked = { owner: 'ACME', name: 'Secret' };
+  it('sends an allowed viewer to the spelling the row keeps', () => {
+    expect(canonicalPath(asked, { kind: 'ok' }, privateRepo)).toBe('/acme/secret');
+    expect(canonicalPath({ owner: 'acme', name: 'secret' }, { kind: 'ok' }, privateRepo)).toBe(
+      null,
+    );
+  });
+
+  it.each(['not-found', 'unavailable', 'login-required'] as const)(
+    'never reveals the spelling of a row on %s, so it answers as for an unknown name',
+    (kind) => {
+      expect(canonicalPath(asked, { kind }, privateRepo)).toBeNull();
+      expect(canonicalPath(asked, { kind }, undefined)).toBeNull();
+    },
+  );
+
+  it.each(['unknown', 'replaced'] as const)(
+    "sends a %s name to GitHub's spelling of the repo the viewer's token saw",
+    (kind) => {
+      // Another letter case, then a renamed repo's old name.
+      expect(canonicalPath(asked, seen(kind, 'acme', 'secret'), privateRepo)).toBe('/acme/secret');
+      expect(
+        canonicalPath({ owner: 'acme', name: 'old' }, seen(kind, 'Acme', 'new'), undefined),
+      ).toBe('/Acme/new');
+      expect(canonicalPath(asked, seen(kind, 'ACME', 'Secret'), undefined)).toBeNull();
+    },
+  );
+
+  it('compares spellings exactly, and encodes the path', () => {
+    expect(canonicalPath(asked, { kind: 'ok' }, { owner: 'ACME', name: 'secret' })).toBe(
+      '/ACME/secret',
+    );
+    expect(canonicalPath(asked, { kind: 'ok' }, { owner: 'acme', name: 'a b' })).toBe(
+      '/acme/a%20b',
+    );
   });
 });
 

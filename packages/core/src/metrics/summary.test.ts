@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { DAY_MS, HOUR_MS, T0, payloadPr } from '../testing/fixtures.ts';
+import { COPILOT, DAY_MS, HOUR_MS, T0, botFirstPrs, payloadPr } from '../testing/fixtures.ts';
 import { derive } from './derive.ts';
 import { createFilterState, scope, windowed } from './scope.ts';
 import { headline } from './summary.ts';
@@ -26,8 +26,8 @@ describe('headline', () => {
     const h = headline(win(prs));
     expect(h.merged).toBe(5);
     expect(h.medMerge).toBe(3 * DAY_MS);
-    // Nearest rank: index floor(4 * 0.9) = 3 of the sorted five.
-    expect(h.p90Merge).toBe(4 * DAY_MS);
+    // Nearest rank: the ceil(0.9 * 5) = 5th smallest of the five.
+    expect(h.p90Merge).toBe(10 * DAY_MS);
     expect(h.medFirst).toBe(2 * HOUR_MS);
     expect(h.reviewedShare).toBe(1);
   });
@@ -85,6 +85,18 @@ describe('headline', () => {
     const h = headline(win(prs));
     expect(h).toMatchObject({ opened: 1, merged: 0, rejected: 0, stillOpen: 1 });
     expect(h.mergedShare).toBeNull();
+  });
+
+  it('does not count a bot review as the first review while bots are hidden', () => {
+    const prs = derive(botFirstPrs());
+    const at = (hideBots: boolean) =>
+      headline(
+        windowed(scope(prs, new Set([COPILOT]), { ...createFilterState(), hideBots }, LAST), LAST),
+      );
+    // Only #2 has a human review, three days after it was ready.
+    expect(at(true)).toMatchObject({ medFirst: 3 * DAY_MS, reviews: 1, reviewers: 1 });
+    expect(at(true).reviewedShare).toBeCloseTo(1 / 3);
+    expect(at(false)).toMatchObject({ medFirst: 60e3, reviewedShare: 1, reviews: 4, reviewers: 2 });
   });
 
   it('is all nulls and zeros with nothing in range', () => {

@@ -17,7 +17,7 @@ import {
 } from '../../lib/format.ts';
 import { findActiveJob } from '../../lib/jobs.ts';
 import { isOauthConfigured, loginHref as loginHrefFor } from '../../lib/oauth.ts';
-import { allowAutoRefresh, repoPageState } from '../../lib/repo-page.ts';
+import { allowAutoRefresh, canonicalPath, repoPageState } from '../../lib/repo-page.ts';
 import { isStale, needsRefresh } from '../../lib/stale.ts';
 
 import type { Repo } from '@bilan/store-d1';
@@ -55,6 +55,11 @@ if (example) {
   // the label alone. A viewer whose token is gone throws `ReauthRequiredError`;
   // the middleware sends them to login.
   const access = await checkRepoAccess(accessDeps(env), user, cached ?? { owner, name });
+  // Another letter case, or a renamed repo's old name: send the viewer to the
+  // one spelling bilan keeps, so shared links converge. Only once the check
+  // has shown the viewer may see the repo (see `canonicalPath`).
+  const canonical = canonicalPath({ owner, name }, access, cached);
+  if (canonical !== null) return Astro.redirect(`${canonical}${Astro.url.search}`, 302);
   ({ view, repo } = repoPageState(access, cached, user !== null));
   if (repo) {
     if (user) await touchRepoView(db, { repoId: repo.id, userId: user.id, now });

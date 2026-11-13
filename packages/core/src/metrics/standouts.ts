@@ -46,8 +46,12 @@ const nonNull = (v: number | null): v is number => v !== null;
 
 export function standouts(w: Windowed, people: readonly PersonRec[]): Standouts {
   const { opened, merged, readied, stillOpen, last } = w;
-  const mergedWithReview = merged.filter((p) => p.rv.length);
-  const approvedMerges = merged.filter((p) => p.rv.some(([, st]) => st === 'APPROVED'));
+  const mergedWithReview = merged.filter((p) => !p.unreviewed);
+  // A skipped reviewer's approval is not one: a merge approved only by a bot
+  // must not count as both unreviewed and approved while bots are hidden.
+  const approvedMerges = merged.filter((p) =>
+    p.rv.some(([who, st]) => st === 'APPROVED' && !w.skip.has(who)),
+  );
   const reviewTotals = people
     .filter((r) => r.reviewsGiven)
     .map((r) => r.reviewsGiven)

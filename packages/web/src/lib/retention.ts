@@ -1,6 +1,7 @@
 import {
   deleteExpiredSessions,
   deleteRepoIfExpired,
+  deleteUnusedUserTokens,
   listReposWithLastView,
   repoExpired,
 } from '@bilan/store-d1';
@@ -39,6 +40,8 @@ export interface RetentionResult {
   /** Repos actually removed; a candidate restored or viewed since the scan is not among them. */
   deletedRepos: string[];
   deletedSessions: number;
+  /** Stored GitHub token sets of users with no unexpired session and no queued or running sync. */
+  deletedTokens: number;
 }
 
 /** Everything the sweep touches, so the ordering rules run in plain vitest with fakes. */
@@ -51,6 +54,8 @@ export interface RetentionDeps {
   /** Remove every payload object of the repo; may throw when R2 is unavailable. */
   deletePayloads(repoId: string): Promise<void>;
   deleteExpiredSessions(now: string): Promise<number>;
+  /** See store-d1's `deleteUnusedUserTokens`: one conditional delete, returns how many went. */
+  deleteUnusedTokens(now: string): Promise<number>;
 }
 
 export function retentionDeps(env: Pick<Env, 'DB' | 'PAYLOADS'>): RetentionDeps {
@@ -61,11 +66,14 @@ export function retentionDeps(env: Pick<Env, 'DB' | 'PAYLOADS'>): RetentionDeps 
     deleteRepoIfExpired: (repoId, cutoff) => deleteRepoIfExpired(db, repoId, cutoff),
     deletePayloads: (repoId) => deletePayloads(env.PAYLOADS, repoId),
     deleteExpiredSessions: (now) => deleteExpiredSessions(db, now),
+    deleteUnusedTokens: (now) => deleteUnusedUserTokens(db, now),
   };
 }
 
 /**
- * Drop stale private repos (rows and R2 payloads) and expired sessions. The
+ * Drop stale private repos (rows and R2 payloads), expired sessions, and the
+ * GitHub token sets of users who have no unexpired session left and no sync
+ * queued or running (a sync re-reads its requester's token every step). The
  * scan only nominates candidates: each is removed by `deleteRepoIfExpired`,
  * which re-checks the rule in the delete itself, so a repo that was restored
  * (synced again under its name) or opened between the scan and the delete is
@@ -97,8 +105,10 @@ export async function sweepRetention(
     }
     if (await deps.deleteRepoIfExpired(repoId, cutoff)) deletedRepos.push(repoId);
   }
-  const deletedSessions = await deps.deleteExpiredSessions(new Date(now).toISOString());
-  return { deletedRepos, deletedSessions };
+  const nowIso = new Date(now).toISOString();
+  const deletedSessions = await deps.deleteExpiredSessions(nowIso);
+  const deletedTokens = await deps.deleteUnusedTokens(nowIso);
+  return { deletedRepos, deletedSessions, deletedTokens };
 }
 
 export function runRetention(

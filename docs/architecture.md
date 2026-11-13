@@ -52,7 +52,8 @@ ids only, never by name.
 
 Login is a GitHub App with read-only permissions (Pull requests, Metadata).
 User tokens expire after eight hours; bilan stores them encrypted and refreshes
-them, including mid-sync. Private repositories require the app to be installed
+them, including mid-sync. They are deleted once their user has no unexpired
+session and no sync queued or running: on sign-out, or by the nightly sweep. Private repositories require the app to be installed
 on the organization, once, by an owner; members can request it from the app's
 install page. Public repositories need no install.
 
@@ -77,8 +78,13 @@ hosted on Durable Objects by the `bilan-domain` Worker: a run is requested,
 admitted against those quotas, started on the Workflow, and reports each step
 back. A request not admitted within two minutes expires; a run silent for ten
 minutes is given up and stopped (a rate-limit pause is announced, and held to
-ten minutes after it ends); no run lasts past six hours. `sync_jobs` follows
-the model, so the quotas and the job history read what it decided. A page
+ten minutes after it ends); no run lasts past six hours. A run walks at most
+1,000 pages of 25 pull requests, since Workflows cap the steps of an instance;
+one cut there (or at its pull request limit) ends `partial`, and the next run
+re-checks the pull requests updated since it began, then continues from where
+it stopped, so an "All time" sync of a larger history finishes over several
+runs. `sync_jobs` follows the model, so the quotas and the job history read
+what it decided. A page
 following a sync gets a Server-Sent Event each time the model's status
 changes (`/api/repos/:owner/:name/live`), behind the same access check as the
 dashboard, and reads the job again on each one. bilan-domain reads the status

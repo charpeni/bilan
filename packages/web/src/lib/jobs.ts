@@ -108,8 +108,10 @@ export interface StartedSync {
  * as `GithubError` for the caller to answer 503), then ask the sync model:
  * it refuses while another run of the repo is current, admission checks the
  * requester's and the global quotas in D1, and the model starts the run.
- * The row is keyed by the id GitHub answered with, so syncing a name another
- * repo took over parks the old row (`upsertRepo`) and starts the newcomer's.
+ * The row is keyed by the id GitHub answered with and named as GitHub spells
+ * the repo now, so syncing a name another repo took over parks the old row
+ * (`upsertRepo`) and starts the newcomer's, while syncing a renamed repo by
+ * its old name (or in another letter case) keeps its row under the new name.
  *
  * If this request dies between asking and admitting, the model gives up on
  * the request after two minutes and frees the repo (`ExpireAdmission`).
@@ -129,10 +131,12 @@ export async function startSync(
   const { meta } = source;
 
   const db = getDb(env);
+  // GitHub's spelling, never the one asked for: `ref` may differ in case, or be
+  // the old name of a renamed repo, and the row keeps one spelling.
   const repo = await upsertRepo(db, {
     id: meta.id,
-    owner: ref.owner,
-    name: ref.name,
+    owner: meta.owner.login,
+    name: meta.name,
     isPrivate: meta.isPrivate,
     totalPrs: meta.pullRequests.totalCount,
   });

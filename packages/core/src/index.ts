@@ -13,6 +13,14 @@ export type { GithubRepoMeta, PullRequestNode, RateLimit } from './github/query.
 export { compact } from './github/compact.ts';
 export type { SyncStore } from './sync/store.ts';
 export {
+  advanceWalk,
+  checkpointsOrNothing,
+  forgetsCheckpoint,
+  startWalk,
+  usableCheckpoint,
+} from './sync/checkpoint.ts';
+export type { WalkAdvance, WalkProgress } from './sync/checkpoint.ts';
+export {
   DEFAULT_COVERAGE_DAYS,
   catchUpSince,
   defaultSince,

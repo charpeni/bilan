@@ -21,6 +21,12 @@ import type { Repo } from '@bilan/store-d1';
  *   different repo there (the old one was renamed or deleted). The old row is
  *   never served; the caller starts the newcomer's first sync on `source`,
  *   which parks the old row (`upsertRepo`).
+ *
+ * Names are matched as GitHub matches them: rows are found in any letter case
+ * (`getRepoByName`), and GitHub answers a renamed or transferred repo's old
+ * name with the repo itself. Neither is `replaced`, which compares ids only;
+ * `source.meta` carries GitHub's spelling, which the caller stores and
+ * redirects to (`canonicalPath`).
  */
 export type AccessDecision =
   | { kind: 'ok' }

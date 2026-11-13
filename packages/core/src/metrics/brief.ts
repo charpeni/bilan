@@ -1,5 +1,5 @@
 import { isQuiet } from './depth.ts';
-import { isMerged, isReady } from './derive.ts';
+import { ignoringReviewers, isMerged, isReady } from './derive.ts';
 import { count, median, ranked, share } from './stats.ts';
 import { DAY } from './time.ts';
 
@@ -57,18 +57,22 @@ export interface BriefStats {
   authored: Map<string, number>;
   changesReq: number;
   commentOnly: number;
-  /** Share of merged PRs carrying an approval. */
+  /** Share of merged PRs carrying a human approval. */
   approvedMerges: number;
   /** Merged PRs per area. */
   areas: Map<string, number>;
 }
 
-/** Window stats over `prs` (already excluding bots as authors); bot reviews are dropped here. */
+/**
+ * Window stats over `prs` (already excluding bots as authors); bot reviews are
+ * dropped here, from the counts and from the first review alike.
+ */
 export function briefStats(
-  prs: readonly MetricPr[],
+  all: readonly MetricPr[],
   bots: ReadonlySet<string>,
   inW: InWindow,
 ): BriefStats {
+  const prs = all.map((p) => ignoringReviewers(p, bots));
   const opened = prs.filter((p) => inW(p.c));
   const merged = prs.filter((p): p is MergedPr => isMerged(p) && inW(p.m));
   const closed = prs.filter((p): p is ClosedPr => !p.merged && p.x !== null && inW(p.x));
@@ -108,7 +112,7 @@ export function briefStats(
     changesReq: share(reviews.filter((r) => r.st === 'CHANGES_REQUESTED').length, reviews.length),
     commentOnly: share(reviews.filter((r) => r.st === 'COMMENTED').length, reviews.length),
     approvedMerges: share(
-      merged.filter((p) => p.rv.some(([, st]) => st === 'APPROVED')).length,
+      merged.filter((p) => p.rv.some(([who, st]) => st === 'APPROVED' && !bots.has(who))).length,
       merged.length,
     ),
     areas: count(
