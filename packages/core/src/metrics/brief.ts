@@ -57,7 +57,7 @@ export interface BriefStats {
   authored: Map<string, number>;
   changesReq: number;
   commentOnly: number;
-  /** Share of merged PRs carrying an approval. */
+  /** Share of merged PRs carrying a human approval. */
   approvedMerges: number;
   /** Merged PRs per area. */
   areas: Map<string, number>;
@@ -112,7 +112,7 @@ export function briefStats(
     changesReq: share(reviews.filter((r) => r.st === 'CHANGES_REQUESTED').length, reviews.length),
     commentOnly: share(reviews.filter((r) => r.st === 'COMMENTED').length, reviews.length),
     approvedMerges: share(
-      merged.filter((p) => p.rv.some(([, st]) => st === 'APPROVED')).length,
+      merged.filter((p) => p.rv.some(([who, st]) => st === 'APPROVED' && !bots.has(who))).length,
       merged.length,
     ),
     areas: count(

@@ -269,6 +269,9 @@ describe('brief with a bot reviewing first', () => {
     expect(A.within1d).toBe(0);
     expect(A.small.first).toBe(3 * DAY_MS);
     expect(A.reviewers).toEqual(new Map([['bob', 1]]));
+    // #2 carries bob's approval; #3 only the bot's, which is not one.
+    expect(A.merged).toHaveLength(2);
+    expect(A.approvedMerges).toBe(0.5);
   });
 
   it('agrees with the backlog on which PR still waits for a human', () => {
