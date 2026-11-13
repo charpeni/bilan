@@ -518,7 +518,13 @@ export function render(ctx: DashboardContext): void {
       { key: 'share', label: 'Share', val: (r) => r.share, fmt: pctFmt, cls: 'dim' },
       { key: 'appr', label: 'Approved', val: (r) => r.approvals },
       { key: 'chg', label: 'Changes req.', val: (r) => r.changesReq },
-      { key: 'cmt', label: 'Comment only', val: (r) => r.commentsOnly, cls: 'dim' },
+      {
+        key: 'cmt',
+        label: 'Comment only',
+        help: 'Reviews that commented without a verdict. Dismissed reviews have lost theirs, so they count in Reviews only',
+        val: (r) => r.commentsOnly,
+        cls: 'dim',
+      },
       {
         key: 'strict',
         label: 'Pushback rate',

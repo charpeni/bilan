@@ -4,7 +4,7 @@ import { COPILOT, DAY_MS, HOUR_MS, T0, botFirstPrs, payloadPr } from '../testing
 import { between, brief, briefStats, change } from './brief.ts';
 import { derive } from './derive.ts';
 
-import type { PayloadPr } from '../types.ts';
+import type { PayloadPr, ReviewState } from '../types.ts';
 
 const LAST = T0 + 100 * DAY_MS;
 const bots = new Set(['dependabot[bot]']);
@@ -134,6 +134,19 @@ describe('briefStats', () => {
     expect(A.changesReq).toBe(0);
     expect(A.commentOnly).toBe(0);
     expect(A.approvedMerges).toBe(1);
+    // Only a bot approved #1 here: the brief leaves bot reviews out.
+    const botOnly = derive([
+      payloadPr({
+        n: 1,
+        a: 'alice',
+        c: LAST - 10 * DAY_MS,
+        r: LAST - 10 * DAY_MS,
+        m: LAST - 8 * DAY_MS,
+        x: LAST - 8 * DAY_MS,
+        rv: [['dependabot[bot]', 'APPROVED', LAST - 9 * DAY_MS]],
+      }),
+    ]);
+    expect(briefStats(botOnly, bots, between(LAST, 30, 0)).approvedMerges).toBe(0);
     expect(A.areas).toEqual(new Map([['api', 1]]));
   });
 
@@ -151,6 +164,23 @@ describe('briefStats', () => {
     expect(B.approvedMerges).toBe(0);
   });
 });
+
+const openPr = (n: number, rv: [string, ReviewState, number][]) =>
+  payloadPr({
+    n,
+    a: 'alice',
+    c: LAST - 20 * DAY_MS,
+    r: LAST - 20 * DAY_MS,
+    m: null,
+    x: null,
+    s: 'OPEN',
+    mb: null,
+    rv,
+  });
+const ago = (days: number) => LAST - days * DAY_MS;
+/** The backlog of a lone open PR #1 with these reviews. */
+const approvedIn = (rv: [string, ReviewState, number][]) =>
+  brief(derive([openPr(1, rv)]), bots, LAST).backlog;
 
 describe('brief', () => {
   const b = brief(prs, bots, LAST);
@@ -178,6 +208,104 @@ describe('brief', () => {
     expect(b.backlog).toMatchObject({ open: 1, drafts: 0, oldDrafts: 0, owner: null });
     expect(b.backlog.waiting.map((p) => p.n)).toEqual([2]);
     expect(b.backlog.approved).toEqual([]);
+  });
+
+  describe('approved, unmerged PRs', () => {
+    it('needs a standing human approval and no standing change request', () => {
+      const backlog = brief(
+        derive([
+          // Approved, then blocked by carol and by bob himself.
+          openPr(1, [
+            ['bob', 'APPROVED', ago(10)],
+            ['carol', 'CHANGES_REQUESTED', ago(9)],
+            ['bob', 'CHANGES_REQUESTED', ago(8)],
+          ]),
+          // Approved by a bot only: still waiting for a human review.
+          openPr(2, [['dependabot[bot]', 'APPROVED', ago(10)]]),
+        ]),
+        bots,
+        LAST,
+      ).backlog;
+      expect(backlog.approved).toEqual([]);
+      expect(backlog.waiting.map((p) => p.n)).toEqual([2]);
+    });
+
+    it('keeps an approval through later comments but not through a dismissal', () => {
+      const kept = approvedIn([
+        ['bob', 'APPROVED', ago(10)],
+        ['bob', 'COMMENTED', ago(9)],
+      ]);
+      expect(kept.approved.map(({ pr, since }) => [pr.n, since])).toEqual([[1, 10 * DAY_MS]]);
+      expect(
+        approvedIn([
+          ['bob', 'DISMISSED', ago(10)],
+          ['carol', 'COMMENTED', ago(9)],
+        ]).approved,
+      ).toEqual([]);
+    });
+
+    it('dates the approval from the earliest standing one', () => {
+      const later = approvedIn([
+        ['bob', 'APPROVED', ago(10)],
+        ['carol', 'APPROVED', ago(1)],
+      ]);
+      expect(later.approved.map(({ since }) => since)).toEqual([10 * DAY_MS]);
+      // A dismissed approval no longer dates it; the fresh one is a day old.
+      expect(
+        approvedIn([
+          ['bob', 'DISMISSED', ago(10)],
+          ['bob', 'APPROVED', ago(1)],
+        ]).approved,
+      ).toEqual([]);
+    });
+
+    it('is never also waiting for a human review', () => {
+      const backlog = approvedIn([
+        ['dependabot[bot]', 'COMMENTED', ago(12)],
+        ['bob', 'APPROVED', ago(10)],
+      ]);
+      expect(backlog.approved.map(({ pr }) => pr.n)).toEqual([1]);
+      expect(backlog.waiting).toEqual([]);
+    });
+
+    describe("with GitHub's latest verdict per reviewer (`sv`)", () => {
+      type Reviews = [string, ReviewState, number][];
+      /** A lone open PR #1 whose fetched reviews are `rv` and whose reviewers stand as `sv`. */
+      const standing = (rv: Reviews, sv: Reviews) =>
+        brief(derive([{ ...openPr(1, rv), sv }]), bots, LAST).backlog;
+
+      it('misses no change request given after the reviews that were fetched', () => {
+        const backlog = standing(
+          [['bob', 'APPROVED', ago(10)]],
+          [['bob', 'CHANGES_REQUESTED', ago(2)]],
+        );
+        expect(backlog.approved).toEqual([]);
+      });
+
+      it('finds an approval given after them, dated from when it was given', () => {
+        const backlog = standing(
+          [['carol', 'CHANGES_REQUESTED', ago(10)]],
+          [['carol', 'APPROVED', ago(5)]],
+        );
+        expect(backlog.approved.map(({ pr, since }) => [pr.n, since])).toEqual([[1, 5 * DAY_MS]]);
+      });
+
+      it('still leaves bots and dismissed reviews out', () => {
+        expect(standing([], [['dependabot[bot]', 'APPROVED', ago(10)]]).approved).toEqual([]);
+        expect(
+          standing([['bob', 'APPROVED', ago(10)]], [['bob', 'DISMISSED', ago(10)]]).approved,
+        ).toEqual([]);
+      });
+
+      it('counts a human verdict past the fetched reviews as a human review', () => {
+        const backlog = standing(
+          [['dependabot[bot]', 'COMMENTED', ago(12)]],
+          [['bob', 'APPROVED', ago(10)]],
+        );
+        expect(backlog.approved.map(({ pr }) => pr.n)).toEqual([1]);
+        expect(backlog.waiting).toEqual([]);
+      });
+    });
   });
 
   it('reads churn from the current window only', () => {
@@ -253,9 +381,33 @@ describe('brief', () => {
       mergedShare: 5 / 6,
       medLead: DAY_MS,
       oneIn: 1,
+      ofAll: 6 / 8,
       topMerger: { who: 'alice', merged: 4 },
     });
     expect(a?.medSize).toBe(4);
+  });
+
+  it('counts every PR opened, by humans and every bot, in the automation total', () => {
+    const opened = (n: number, a: string, bot: boolean) =>
+      payloadPr({
+        n,
+        a,
+        bot: bot ? 1 : 0,
+        c: LAST - DAY_MS,
+        r: LAST - DAY_MS,
+        m: null,
+        x: null,
+        s: 'OPEN',
+        mb: null,
+        rv: [],
+      });
+    const many = derive([
+      ...Array.from({ length: 50 }, (_, i) => opened(1000 + i, 'dependabot[bot]', true)),
+      ...Array.from({ length: 40 }, (_, i) => opened(2000 + i, 'renovate[bot]', true)),
+      ...Array.from({ length: 10 }, (_, i) => opened(3000 + i, 'alice', false)),
+    ]);
+    const a = brief(many, new Set(['dependabot[bot]', 'renovate[bot]']), LAST).automation;
+    expect(a).toMatchObject({ who: 'dependabot[bot]', opened: 50, oneIn: 2, ofAll: 0.5 });
   });
 });
 

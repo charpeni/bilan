@@ -2,7 +2,9 @@ import { isQuiet } from './depth.ts';
 import { ignoringReviewers, isMerged, isReady } from './derive.ts';
 import { count, median, ranked, share } from './stats.ts';
 import { DAY } from './time.ts';
+import { standingApproval } from './verdict.ts';
 
+import type { PayloadReview } from '../types.ts';
 import type { ClosedPr, MergedPr, MetricPr, ReadyPr } from './derive.ts';
 import type { InWindow, ReviewRow } from './scope.ts';
 
@@ -144,8 +146,10 @@ export interface BriefAutomation {
   /** Median open -> merge, ms. */
   medLead: number | null;
   medSize: number | null;
-  /** "About 1 in N of all PRs opened". */
+  /** "About 1 in N of all PRs opened", humans and every bot. */
   oneIn: number;
+  /** Share of all PRs opened, humans and every bot. */
+  ofAll: number;
   topMerger: { who: string; merged: number } | null;
 }
 
@@ -188,7 +192,11 @@ export interface BriefBacklog {
   owner: { who: string; drafts: number } | null;
   /** Ready PRs with no human review after 2+ days, longest waiting first. */
   waiting: ReadyPr[];
-  /** Approved, unmerged PRs sitting for 3+ days since approval, longest first. */
+  /**
+   * Unmerged PRs whose standing human verdicts approve them (see
+   * `standingApproval`), sitting for 3+ days since the earliest standing
+   * approval, longest first.
+   */
   approved: { pr: MetricPr; since: number }[];
 }
 
@@ -262,6 +270,7 @@ export function brief(prs: readonly MetricPr[], bots: ReadonlySet<string>, last:
     if (!top || top[1] < 5) return null;
     const [who, n] = top;
     const before = prs.filter((p) => p.a === who && prev(p.c)).length;
+    const all = A.opened.length + botOpened.length;
     const mine = botOpened.filter((p) => p.a === who);
     const merged = mine.filter(isMerged);
     const m0 = ranked(count(merged, (p) => p.mb))[0];
@@ -273,7 +282,8 @@ export function brief(prs: readonly MetricPr[], bots: ReadonlySet<string>, last:
       mergedShare: share(merged.length, n),
       medLead: median(merged.map((p) => p.m - p.c)),
       medSize: median(mine.map((p) => p.size)),
-      oneIn: Math.max(1, Math.round((A.opened.length + n) / n)),
+      oneIn: Math.max(1, Math.round(all / n)),
+      ofAll: share(n, all),
       topMerger: m0 ? { who: m0[0], merged: m0[1] } : null,
     };
   })();
@@ -341,6 +351,9 @@ export function brief(prs: readonly MetricPr[], bots: ReadonlySet<string>, last:
     };
   })();
 
+  // A human's verdict GitHub reports past the first 40 reviews is a human
+  // review too, so a PR it approves is never also listed as waiting for one.
+  const byHuman = (reviews: readonly PayloadReview[]) => reviews.some(([w]) => !bots.has(w));
   const backlog = ((): BriefBacklog => {
     const open = H.filter((p) => p.open);
     const drafts = open.filter((p) => p.dr);
@@ -349,14 +362,17 @@ export function brief(prs: readonly MetricPr[], bots: ReadonlySet<string>, last:
     const waiting = open
       .filter(
         (p): p is ReadyPr =>
-          !p.dr && isReady(p) && !p.rv.some(([w]) => !bots.has(w)) && last - p.r > 2 * DAY,
+          !p.dr && isReady(p) && !byHuman(p.rv) && !byHuman(p.sv ?? []) && last - p.r > 2 * DAY,
       )
       .toSorted((a, b) => a.r - b.r);
     const approved = open
       .filter((p) => !p.dr)
       .map((p) => {
-        const ok = p.rv.filter(([, st]) => st === 'APPROVED').map(([, , at]) => at);
-        return ok.length ? { pr: p, since: Math.max(0, last - Math.max(...ok)) } : null;
+        // GitHub's own latest verdicts when the store has them: `rv` holds
+        // only the first 40 reviews, and a change request or an approval given
+        // after those would be missed.
+        const at = standingApproval(p.sv ?? p.rv, bots);
+        return at === null ? null : { pr: p, since: Math.max(0, last - at) };
       })
       .filter((x): x is { pr: MetricPr; since: number } => x !== null && x.since > 3 * DAY)
       .toSorted((a, b) => b.since - a.since);

@@ -58,6 +58,17 @@ const nullableString = (value: unknown): boolean => value === null || typeof val
 const strings = (value: unknown): boolean =>
   Array.isArray(value) && value.every((item) => typeof item === 'string');
 
+const validReviews = (value: unknown): boolean =>
+  Array.isArray(value) &&
+  value.every(
+    (review) =>
+      record(review) &&
+      nullableString(review.author) &&
+      nullableString(review.authorType) &&
+      nullableString(review.at) &&
+      typeof review.state === 'string',
+  );
+
 function validPr(value: unknown): value is RawPr {
   if (!record(value)) return false;
   return (
@@ -81,15 +92,8 @@ function validPr(value: unknown): value is RawPr {
       'reviewCount',
     ].every((key) => typeof value[key] === 'number' && Number.isFinite(value[key])) &&
     ['labels', 'fileSample', 'readyAt', 'draftedAt'].every((key) => strings(value[key])) &&
-    Array.isArray(value.reviews) &&
-    value.reviews.every(
-      (review) =>
-        record(review) &&
-        nullableString(review.author) &&
-        nullableString(review.authorType) &&
-        nullableString(review.at) &&
-        typeof review.state === 'string',
-    ) &&
+    validReviews(value.reviews) &&
+    (value.verdicts === undefined || validReviews(value.verdicts)) &&
     Array.isArray(value.reviewRequests) &&
     value.reviewRequests.every(
       (request) =>

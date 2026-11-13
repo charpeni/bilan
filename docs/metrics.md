@@ -33,6 +33,7 @@ sample shows as unavailable, and a count rising from zero is labelled “New”.
 | Time to merge            | merged          | ready → merged                                                               |
 | Reviewer turnaround      | review          | review request (or ready, if never requested) → that reviewer's first review |
 | Reviews given            | review          | self-reviews excluded                                                        |
+| Verdict mix              | review          | approved, changes requested, or comment only; dismissed reviews have none    |
 | Review threads per PR    | merged          | review threads ÷ pull requests merged, by size                               |
 | Approved with no threads | merged          | every review was an approval and no review thread was opened                 |
 | Time to approval         | merged          | ready → first approval, by size                                              |
@@ -59,7 +60,9 @@ than which pull requests were opened in them. Up to 40 reviews are captured per
 pull request. While bots are excluded, a bot's review is not a first review
 either: a pull request reviewed only by bots counts as unreviewed, and its time
 to first review runs until a human other than the author reviews it. The briefing always reads
-reviews this way.
+reviews this way. Whether an open pull request stands approved does not depend
+on the 40-review cap: it is read from each reviewer's latest verdict as GitHub
+keeps it.
 
 Review depth groups merged pull requests by size, in lines added + deleted:
 ≤50, 51–250, 251–500, 501–1k, and over 1k. Its thread count is GitHub's total

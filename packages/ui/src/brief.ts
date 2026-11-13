@@ -105,6 +105,13 @@ const writeExpanded = (expanded: boolean): void => {
 /** Mirrors the original's implicit `null -> 0` coercion in arithmetic comparisons. */
 const n0 = (v: number | null): number => v ?? 0;
 const pctInt = (v: number): string => `${Math.round(v * 100)}%`;
+/**
+ * How much of everything opened, humans and every bot, the top bot opened. A
+ * bot that opened most of it reads as a share: "about 1 in 1" would round
+ * away what it says.
+ */
+export const ofAllPrs = (a: { ofAll: number; oneIn: number }): string =>
+  `${a.ofAll >= 0.5 ? pctInt(a.ofAll) : `about 1 in ${a.oneIn}`} of all PRs opened`;
 /** "+12%", "−12%", "flat", or "new"; `unsigned` drops the sign. */
 const changeFmt = (now: number, before: number, unsigned = false): string => {
   const d = change(now, before);
@@ -319,7 +326,7 @@ export function renderBrief(ctx: DashboardContext): BriefHandle {
   if (automation) {
     const { who, opened: n, before, merged, topMerger } = automation;
     const body: Line[] = [
-      `${pctInt(automation.mergedShare)} merged, median ${dur(automation.medLead)} from open to merge, median ${num(automation.medSize)} lines. That is about 1 in ${automation.oneIn} of all PRs opened.`,
+      `${pctInt(automation.mergedShare)} merged, median ${dur(automation.medLead)} from open to merge, median ${num(automation.medSize)} lines. That is ${ofAllPrs(automation)}.`,
     ];
     if (topMerger) {
       body.push([{ who: topMerger.who }, ` merged ${topMerger.merged} of the ${merged}.`]);

@@ -57,11 +57,33 @@ describe('FileStore', () => {
     '{}',
     '{"repo":"acme/widgets","syncedAt":null,"prs":[]}',
     '{"repo":"acme/widgets","syncedAt":null,"prs":{"1":{"number":1}}}',
+    JSON.stringify({
+      repo: 'acme/widgets',
+      syncedAt: null,
+      prs: { 1: { ...pr(1, '2026-01-01T00:00:00Z'), verdicts: [1] } },
+    }),
   ])('names corrupt caches and explains how to replace them: %s', (contents) => {
     mkdirSync(dir, { recursive: true });
     const path = join(dir, 'broken.json');
     writeFileSync(path, contents);
     expect(() => new FileStore(path, 'acme/widgets')).toThrow(/broken\.json.*--no-cache/);
+  });
+
+  it("keeps each reviewer's latest verdict across a reload", async () => {
+    mkdirSync(dir, { recursive: true });
+    const path = join(dir, 'verdicts.json');
+    const verdicts: RawPr['verdicts'] = [
+      { author: 'bob', authorType: 'User', state: 'APPROVED', at: '2026-01-01T00:00:00Z' },
+    ];
+    const written = new FileStore(path, 'acme/widgets');
+    await written.upsert([
+      { ...pr(1, '2026-01-01T00:00:00Z'), verdicts },
+      pr(2, '2026-01-01T00:00:00Z'),
+    ]);
+    await written.markSynced('2026-01-02T00:00:00Z', null, true, true);
+    const loaded = await new FileStore(path, 'acme/widgets').all();
+    expect(loaded.find((p) => p.number === 1)?.verdicts).toEqual(verdicts);
+    expect('verdicts' in (loaded.find((p) => p.number === 2) ?? {})).toBe(false);
   });
 
   it('loads a cache written under another spelling of the same repository', async () => {
