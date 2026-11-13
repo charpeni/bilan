@@ -5,11 +5,16 @@ export function median(xs: readonly number[]): number | null {
   return s.length % 2 ? (s[i] as number) : ((s[i - 1] as number) + (s[i] as number)) / 2;
 }
 
-/** Nearest-rank percentile, `p` in [0, 1]. */
+/**
+ * Nearest-rank percentile, `p` in [0, 1]: the `ceil(p * n)`-th smallest value
+ * (1-based), so `p = 0` is the minimum and `p = 1` the maximum. It is always
+ * one of the values, and for `p >= 0.5` never below `median()` of the same data.
+ */
 export function percentile(xs: readonly number[], p: number): number | null {
   if (xs.length === 0) return null;
   const s = xs.toSorted((a, b) => a - b);
-  return s[Math.min(s.length - 1, Math.floor((s.length - 1) * p))] as number;
+  const rank = Math.min(s.length, Math.max(1, Math.ceil(p * s.length)));
+  return s[rank - 1] as number;
 }
 
 export function sum(xs: readonly number[]): number {
