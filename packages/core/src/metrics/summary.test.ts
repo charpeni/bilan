@@ -63,6 +63,30 @@ describe('headline', () => {
     expect(h.reviewedShare).toBe(0.5);
   });
 
+  it('shares merged over resolved, whatever was opened in the window', () => {
+    // A 7-day window ending at LAST: everything below is resolved inside it.
+    const lastWeek = (prs: ReturnType<typeof derive>) =>
+      windowed(scope(prs, new Set(), { ...createFilterState(), range: '7' }, LAST), LAST);
+    const before = LAST - 10 * DAY_MS;
+    const merged = (n: number) =>
+      payloadPr({ n, c: before, r: before, m: LAST - DAY_MS, x: LAST - DAY_MS });
+    const closed = (n: number) =>
+      payloadPr({ n, c: before, r: before, m: null, x: LAST - DAY_MS, s: 'CLOSED', mb: null });
+
+    const oneMerged = headline(lastWeek(derive([merged(1)])));
+    expect(oneMerged).toMatchObject({ opened: 0, merged: 1, mergedShare: 1 });
+
+    const mixed = headline(lastWeek(derive([merged(1), merged(2), merged(3), closed(4)])));
+    expect(mixed).toMatchObject({ opened: 0, merged: 3, rejected: 1, mergedShare: 0.75 });
+  });
+
+  it('has no merged share when something was opened but nothing resolved', () => {
+    const prs = derive([payloadPr({ m: null, x: null, s: 'OPEN', mb: null, rv: [] })]);
+    const h = headline(win(prs));
+    expect(h).toMatchObject({ opened: 1, merged: 0, rejected: 0, stillOpen: 1 });
+    expect(h.mergedShare).toBeNull();
+  });
+
   it('is all nulls and zeros with nothing in range', () => {
     const h = headline(win([]));
     expect(h).toEqual({
