@@ -8,7 +8,7 @@ export function median(xs: readonly number[]): number | null {
 /**
  * Nearest-rank percentile, `p` in [0, 1]: the `ceil(p * n)`-th smallest value
  * (1-based), so `p = 0` is the minimum and `p = 1` the maximum. It is always
- * one of the values, and for `p >= 0.5` never below `median()` of the same data.
+ * one of the values, and for `p > 0.5` never below `median()` of the same data.
  */
 export function percentile(xs: readonly number[], p: number): number | null {
   if (xs.length === 0) return null;
