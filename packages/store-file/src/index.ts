@@ -15,9 +15,11 @@ import {
 } from 'node:fs';
 import { dirname } from 'node:path';
 
+import { checkpointsOrNothing } from '@bilan/core';
+
 import { writePrivateFile } from './private-file.ts';
 
-import type { RawPr, RepoMeta, SyncCheckpoints, SyncStore, WalkCheckpoint } from '@bilan/core';
+import type { RawPr, RepoMeta, SyncCheckpoints, SyncStore } from '@bilan/core';
 
 export { writePrivateFile } from './private-file.ts';
 
@@ -109,23 +111,6 @@ function validPr(value: unknown): value is RawPr {
  */
 export function sameRepo(stored: unknown, repo: string): boolean {
   return typeof stored === 'string' && stored.toLowerCase() === repo.toLowerCase();
-}
-
-function validCheckpoint(value: unknown): value is WalkCheckpoint | null {
-  return (
-    value === null ||
-    (record(value) &&
-      ['cursor', 'reached', 'from'].every((key) => typeof value[key] === 'string') &&
-      Number.isFinite(Date.parse(String(value.reached))) &&
-      Number.isFinite(Date.parse(String(value.from))))
-  );
-}
-
-/** Checkpoints only save work; ones that do not validate are dropped, not an error. */
-function checkpointsOrNothing(value: unknown): SyncCheckpoints | undefined {
-  return record(value) && validCheckpoint(value.all) && validCheckpoint(value.open)
-    ? { all: value.all, open: value.open }
-    : undefined;
 }
 
 function cacheError(path: string, cause: unknown): Error {

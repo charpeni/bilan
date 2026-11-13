@@ -17,6 +17,8 @@ function meta(
 ): GithubRepoMeta {
   return {
     id: isPrivate ? 'R_priv' : 'R_pub',
+    owner: { login: 'acme' },
+    name: 'lib',
     isPrivate,
     viewerPermission,
     pullRequests: { totalCount: 3 },

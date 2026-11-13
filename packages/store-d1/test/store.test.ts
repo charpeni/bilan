@@ -1,14 +1,16 @@
 import { env } from 'cloudflare:test';
+import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 
 import { upsertUser } from '../src/auth.ts';
 import { createDb } from '../src/db.ts';
 import { getRepoById, getRepoByName, STALE_OWNER, upsertRepo } from '../src/repos.ts';
-import { pullRequests } from '../src/schema.ts';
+import { pullRequests, repos } from '../src/schema.ts';
 import { chunk, D1Store, IN_CHUNK } from '../src/store.ts';
 import { listReposWithLastView, listRepoViews, touchRepoView } from '../src/views.ts';
 
-import type { RawPr } from '@bilan/core';
+import type { NewRepo } from '../src/schema.ts';
+import type { RawPr, SyncCheckpoints } from '@bilan/core';
 
 function rawPr(overrides: Partial<RawPr> = {}): RawPr {
   return {
@@ -47,6 +49,19 @@ async function freshRepo() {
   const id = `R_test_${++seq}`;
   const row = await upsertRepo(db, { id, owner: 'acme', name: `repo-${seq}`, totalPrs: 0 });
   return { db, repo: row, store: new D1Store(db, row.id, `${row.owner}/${row.name}`) };
+}
+
+/** A repo stored as GitHub spells it, with mixed case. */
+async function casedRepo() {
+  const db = createDb(env.DB);
+  const n = ++seq;
+  const row = await upsertRepo(db, {
+    id: `R_case_${n}`,
+    owner: 'Acme',
+    name: `Widgets-${n}`,
+    totalPrs: 0,
+  });
+  return { db, row, n };
 }
 
 describe('chunk', () => {
@@ -285,6 +300,39 @@ describe('D1Store', () => {
     expect(row?.reconciledAt).toBe('2026-05-01T00:00:00.000Z');
     expect(row?.syncStartedAt).toBeNull();
   });
+
+  it('round-trips walk checkpoints and leaves the run stamps alone', async () => {
+    const { store } = await freshRepo();
+    await store.markStarted('2026-05-01T00:00:00.000Z');
+    const checkpoints: SyncCheckpoints = {
+      all: {
+        cursor: 'Y3Vyc29yOjI1',
+        reached: '2025-01-02T03:04:05.000Z',
+        from: '2026-05-01T00:00:00.000Z',
+      },
+      open: null,
+    };
+    await store.saveCheckpoints(checkpoints);
+    expect(await store.meta()).toMatchObject({
+      checkpoints,
+      interrupted: true,
+      syncStartedAt: '2026-05-01T00:00:00.000Z',
+      syncedAt: null,
+    });
+    // A later save replaces both walks' checkpoints; markSynced keeps them.
+    const next: SyncCheckpoints = { all: null, open: { ...checkpoints.all!, cursor: 'b3Blbg' } };
+    await store.saveCheckpoints(next);
+    await store.markSynced('2026-05-01T00:05:00.000Z', null, true, true);
+    expect((await store.meta()).checkpoints).toEqual(next);
+  });
+
+  it('reads stored checkpoints that do not parse or validate as none', async () => {
+    const { store, db, repo } = await freshRepo();
+    for (const stored of ['not json', '{"all":{"cursor":1},"open":null}', '[]']) {
+      await db.update(repos).set({ syncCheckpoints: stored }).where(eq(repos.id, repo.id));
+      expect(await store.meta()).not.toHaveProperty('checkpoints');
+    }
+  });
 });
 
 describe('upsertRepo', () => {
@@ -301,6 +349,29 @@ describe('upsertRepo', () => {
     expect(updated.lastSyncedAt).toBe('2026-05-01T00:00:00.000Z');
     expect(updated.coverageSince).toBe('2026-04-01T00:00:00.000Z');
     expect(updated.openPrsSyncedAt).toBe('2026-05-01T00:00:00.000Z');
+  });
+
+  it('never takes walk checkpoints from the caller', async () => {
+    const { db, repo, store } = await freshRepo();
+    const checkpoints: SyncCheckpoints = {
+      all: { cursor: 'c', reached: '2025-01-01T00:00:00.000Z', from: '2026-05-01T00:00:00.000Z' },
+      open: null,
+    };
+    await store.saveCheckpoints(checkpoints);
+    // Not part of the type; a caller that slips it in anyway is ignored.
+    const sneaky = { id: repo.id, owner: 'acme', name: repo.name, syncCheckpoints: null };
+    const updated = await upsertRepo(db, sneaky as Omit<NewRepo, 'syncCheckpoints'>);
+    expect(updated.syncCheckpoints).toBe(JSON.stringify(checkpoints));
+    expect((await store.meta()).checkpoints).toEqual(checkpoints);
+    const fresh = {
+      id: `${repo.id}-fresh`,
+      owner: 'acme',
+      name: `${repo.name}-fresh`,
+      syncCheckpoints: '{}',
+    };
+    expect(
+      (await upsertRepo(db, fresh as Omit<NewRepo, 'syncCheckpoints'>)).syncCheckpoints,
+    ).toBeNull();
   });
 
   it('lets a new repo take over a name and restores the old one when it resurfaces', async () => {
@@ -333,6 +404,66 @@ describe('upsertRepo', () => {
     expect(restored.name).toBe('renamed');
     expect(restored.lastSyncedAt).toBe('2026-05-01T00:00:00.000Z');
     expect((await getRepoByName(db, old.owner, old.name))?.id).toBe(newcomer.id);
+  });
+});
+
+describe('names in any letter case', () => {
+  it('getRepoByName finds the row however the name is cased', async () => {
+    const { db, row, n } = await casedRepo();
+    for (const [owner, name] of [
+      ['Acme', `Widgets-${n}`],
+      ['acme', `widgets-${n}`],
+      ['ACME', `WIDGETS-${n}`],
+    ] as const) {
+      expect((await getRepoByName(db, owner, name))?.id).toBe(row.id);
+    }
+    expect(await getRepoByName(db, 'acme', `widgets-${n}x`)).toBeUndefined();
+  });
+
+  it('a lookup in another case leaves the stored spelling alone, and an upsert stores the given one', async () => {
+    const { db, row, n } = await casedRepo();
+    // The canonical spelling GitHub answered with is written back as is: the
+    // row keeps one spelling, never the one a lookup was typed in.
+    const found = await getRepoByName(db, 'acme', `widgets-${n}`);
+    const refreshed = await upsertRepo(db, {
+      id: row.id,
+      owner: 'Acme',
+      name: `Widgets-${n}`,
+      totalPrs: 3,
+    });
+    expect(found).toMatchObject({ owner: 'Acme', name: `Widgets-${n}` });
+    expect(refreshed).toMatchObject({ id: row.id, owner: 'Acme', name: `Widgets-${n}` });
+    expect((await getRepoByName(db, 'ACME', `WIDGETS-${n}`))?.id).toBe(row.id);
+  });
+
+  it('a repo renamed only in case keeps its own row, under the new spelling', async () => {
+    const { db, row, n } = await casedRepo();
+    const renamed = await upsertRepo(db, { id: row.id, owner: 'acme', name: `widgets-${n}` });
+    expect(renamed).toMatchObject({ id: row.id, owner: 'acme', name: `widgets-${n}` });
+    expect((await getRepoById(db, row.id))?.owner).toBe('acme');
+  });
+
+  it('parks another repo holding the name in a different case', async () => {
+    const { db, row: old, n } = await casedRepo();
+    const newcomer = await upsertRepo(db, {
+      id: `${old.id}-new`,
+      owner: 'acme',
+      name: `widgets-${n}`,
+      totalPrs: 1,
+    });
+    expect(await getRepoById(db, old.id)).toMatchObject({ owner: STALE_OWNER, name: old.id });
+    expect((await getRepoByName(db, 'Acme', `Widgets-${n}`))?.id).toBe(newcomer.id);
+    // The parked row comes back under its real name when synced again.
+    const restored = await upsertRepo(db, { id: old.id, owner: 'Acme', name: `Moved-${n}` });
+    expect(restored).toMatchObject({ owner: 'Acme', name: `Moved-${n}` });
+    expect((await getRepoByName(db, 'acme', `widgets-${n}`))?.id).toBe(newcomer.id);
+  });
+
+  it('never resolves a parked row by its placeholder, in any case', async () => {
+    const { db, row: old, n } = await casedRepo();
+    await upsertRepo(db, { id: `${old.id}-new`, owner: 'Acme', name: `Widgets-${n}` });
+    expect(await getRepoByName(db, STALE_OWNER.toUpperCase(), old.id)).toBeUndefined();
+    expect(await getRepoByName(db, STALE_OWNER, old.id.toLowerCase())).toBeUndefined();
   });
 });
 

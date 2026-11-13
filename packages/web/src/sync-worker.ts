@@ -16,7 +16,7 @@ export default {
 
   /**
    * Nightly: drop private repos nobody has opened in 90 days and sweep expired
-   * sessions, then prune superseded R2 snapshots. The built-in examples are
+   * sessions and unused GitHub token sets, then prune superseded R2 snapshots. The built-in examples are
    * static snapshots (see `lib/examples.ts`), so nothing is synced here.
    */
   async scheduled(_controller, env, ctx) {

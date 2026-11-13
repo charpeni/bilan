@@ -5,8 +5,8 @@ import { describe, expect, it } from 'vitest';
 import {
   createSession,
   deleteExpiredSessions,
-  deleteSession,
-  deleteUserToken,
+  deleteUnusedUserTokens,
+  endSession,
   getSessionUser,
   getUserToken,
   upsertUser,
@@ -47,7 +47,7 @@ describe('users and tokens', () => {
     expect(again.createdAt).toBe(now);
   });
 
-  it('stores one token set per user, replaces it on upsert, and forgets it on delete', async () => {
+  it('stores one token set per user and replaces it on upsert', async () => {
     const { db, user } = await freshUser();
     expect(await getUserToken(db, user.id)).toBeUndefined();
     await upsertUserToken(db, { userId: user.id, ...noExpiry('a'), now });
@@ -72,8 +72,6 @@ describe('users and tokens', () => {
       refreshExpiresAt: '2026-11-01T12:00:00.000Z',
       scopes: null,
     });
-    await deleteUserToken(db, user.id);
-    expect(await getUserToken(db, user.id)).toBeUndefined();
   });
 });
 
@@ -111,14 +109,119 @@ describe('sessions', () => {
     expect((await getSessionUser(db, `t-${user.id}`, now))?.id).toBe(user.id);
   });
 
-  it('deletes a session by id and sweeps expired ones', async () => {
+  it('ends a session by id and sweeps expired ones', async () => {
     const { db, user } = await freshUser();
     await createSession(db, { id: `d-${user.id}`, userId: user.id, expiresAt: '2026-06-01' });
     await createSession(db, { id: `e-${user.id}`, userId: user.id, expiresAt: '2026-04-01' });
-    await deleteSession(db, `d-${user.id}`);
+    await endSession(db, `d-${user.id}`, now);
     expect(await getSessionUser(db, `d-${user.id}`, now)).toBeUndefined();
     expect(await deleteExpiredSessions(db, now)).toBeGreaterThanOrEqual(1);
     expect(await getSessionUser(db, `e-${user.id}`, '2026-01-01')).toBeUndefined();
+  });
+});
+
+async function syncJob(db: ReturnType<typeof createDb>, userId: number, status: string) {
+  const repo = await upsertRepo(db, { id: `R_t${userId}`, owner: 'acme', name: `t${userId}` });
+  await db.insert(syncJobs).values({
+    id: `job-${userId}`,
+    repoId: repo.id,
+    requestedBy: userId,
+    mode: 'incremental',
+    status,
+    createdAt: now,
+  });
+}
+
+/** A user with a stored token set and an unexpired session `s-<id>`. */
+async function signedIn() {
+  const { db, user } = await freshUser();
+  await createSession(db, { id: `s-${user.id}`, userId: user.id, expiresAt: '2026-06-01' });
+  await upsertUserToken(db, { userId: user.id, ...noExpiry(`tok-${user.id}`), now });
+  return { db, user };
+}
+
+describe('token sets on sign-out', () => {
+  it('go with the last unexpired session', async () => {
+    const { db, user } = await signedIn();
+    // An expired session does not keep the set.
+    await createSession(db, { id: `old-${user.id}`, userId: user.id, expiresAt: '2026-04-01' });
+    await endSession(db, `s-${user.id}`, now);
+    expect(await getSessionUser(db, `s-${user.id}`, now)).toBeUndefined();
+    expect(await getUserToken(db, user.id)).toBeUndefined();
+  });
+
+  it('stay while another session of the user is unexpired', async () => {
+    const { db, user } = await signedIn();
+    await createSession(db, { id: `other-${user.id}`, userId: user.id, expiresAt: '2026-06-01' });
+    await endSession(db, `s-${user.id}`, now);
+    expect(await getSessionUser(db, `s-${user.id}`, now)).toBeUndefined();
+    expect(await getUserToken(db, user.id)).toBeDefined();
+  });
+
+  it.each(['queued', 'running'])('stay while a sync of the user is %s', async (status) => {
+    const { db, user } = await signedIn();
+    await syncJob(db, user.id, status);
+    await endSession(db, `s-${user.id}`, now);
+    expect(await getSessionUser(db, `s-${user.id}`, now)).toBeUndefined();
+    expect(await getUserToken(db, user.id)).toBeDefined();
+  });
+
+  it('go when the user only has finished syncs', async () => {
+    const { db, user } = await signedIn();
+    await syncJob(db, user.id, 'complete');
+    await endSession(db, `s-${user.id}`, now);
+    expect(await getUserToken(db, user.id)).toBeUndefined();
+  });
+
+  it('survive a sign-in that landed concurrently (session stored before the token)', async () => {
+    const { db, user } = await signedIn();
+    await createSession(db, { id: `new-${user.id}`, userId: user.id, expiresAt: '2026-06-01' });
+    await upsertUserToken(db, { userId: user.id, ...noExpiry(`fresh-${user.id}`), now });
+    await endSession(db, `s-${user.id}`, now);
+    expect((await getUserToken(db, user.id))?.encryptedToken).toBe(`fresh-${user.id}`);
+  });
+
+  it('are untouched when the session id is unknown', async () => {
+    const { db, user } = await freshUser();
+    await upsertUserToken(db, { userId: user.id, ...noExpiry('lone'), now });
+    await endSession(db, `unknown-${user.id}`, now);
+    expect(await getUserToken(db, user.id)).toBeDefined();
+  });
+});
+
+describe('deleteUnusedUserTokens', () => {
+  it('drops the sets of users with no unexpired session and no active sync', async () => {
+    const active = await signedIn();
+    const expired = await signedIn();
+    await endSession(expired.db, `s-${expired.user.id}`, '2026-07-01');
+    await createSession(expired.db, {
+      id: `x-${expired.user.id}`,
+      userId: expired.user.id,
+      expiresAt: '2026-04-01',
+    });
+    await upsertUserToken(expired.db, { userId: expired.user.id, ...noExpiry('e'), now });
+    const never = await freshUser();
+    await upsertUserToken(never.db, { userId: never.user.id, ...noExpiry('n'), now });
+    const queued = await freshUser();
+    await upsertUserToken(queued.db, { userId: queued.user.id, ...noExpiry('q'), now });
+    await syncJob(queued.db, queued.user.id, 'queued');
+    const running = await freshUser();
+    await upsertUserToken(running.db, { userId: running.user.id, ...noExpiry('r'), now });
+    await syncJob(running.db, running.user.id, 'running');
+    const done = await freshUser();
+    await upsertUserToken(done.db, { userId: done.user.id, ...noExpiry('d'), now });
+    await syncJob(done.db, done.user.id, 'errored');
+
+    expect(await deleteUnusedUserTokens(active.db, now)).toBeGreaterThanOrEqual(3);
+    expect(await getUserToken(active.db, active.user.id)).toBeDefined();
+    expect(await getUserToken(active.db, queued.user.id)).toBeDefined();
+    expect(await getUserToken(active.db, running.user.id)).toBeDefined();
+    expect(await getUserToken(active.db, expired.user.id)).toBeUndefined();
+    expect(await getUserToken(active.db, never.user.id)).toBeUndefined();
+    expect(await getUserToken(active.db, done.user.id)).toBeUndefined();
+    // Nothing left to drop for these users on a second pass.
+    await deleteUnusedUserTokens(active.db, now);
+    expect(await getUserToken(active.db, queued.user.id)).toBeDefined();
   });
 });
 

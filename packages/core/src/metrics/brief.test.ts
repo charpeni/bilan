@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { DAY_MS, HOUR_MS, T0, payloadPr } from '../testing/fixtures.ts';
+import { COPILOT, DAY_MS, HOUR_MS, T0, botFirstPrs, payloadPr } from '../testing/fixtures.ts';
 import { between, brief, briefStats, change } from './brief.ts';
 import { derive } from './derive.ts';
 
-import type { ReviewState } from '../types.ts';
+import type { PayloadPr, ReviewState } from '../types.ts';
 
 const LAST = T0 + 100 * DAY_MS;
 const bots = new Set(['dependabot[bot]']);
@@ -47,8 +47,8 @@ const prs = derive([
     de: 0,
     ar: ['api'],
     rv: [
-      ['bob', 'APPROVED', LAST - 10 * DAY_MS + 2 * HOUR_MS],
       ['dependabot[bot]', 'COMMENTED', LAST - 10 * DAY_MS + HOUR_MS],
+      ['bob', 'APPROVED', LAST - 10 * DAY_MS + 2 * HOUR_MS],
     ],
   }),
   // Current window: opened, unreviewed for a week, still open and ready.
@@ -199,7 +199,7 @@ describe('brief', () => {
     expect(b.reviewLoad.drop).toBeNull();
   });
 
-  it('only reports automation for bots with 5+ PRs and areas when two moved', () => {
+  it('only reports automation for bots with 5+ PRs and areas with 20+ merges', () => {
     expect(b.automation).toBeNull();
     expect(b.areas).toBeNull();
   });
@@ -408,5 +408,102 @@ describe('brief', () => {
     ]);
     const a = brief(many, new Set(['dependabot[bot]', 'renovate[bot]']), LAST).automation;
     expect(a).toMatchObject({ who: 'dependabot[bot]', opened: 50, oneIn: 2, ofAll: 0.5 });
+  });
+});
+
+/** `counts` maps an area to its merges [before, now]: 45 and 15 days before LAST. */
+const areasOf = (counts: Record<string, [number, number]>) => {
+  const merged: PayloadPr[] = [];
+  const add = (area: string, times: number, daysAgo: number) => {
+    for (let i = 0; i < times; i++) {
+      merged.push(
+        payloadPr({
+          n: merged.length + 1,
+          a: 'alice',
+          c: LAST - (daysAgo + 1) * DAY_MS,
+          r: LAST - (daysAgo + 1) * DAY_MS,
+          m: LAST - daysAgo * DAY_MS,
+          x: LAST - daysAgo * DAY_MS,
+          ar: [area],
+          rv: [],
+          rq: [],
+        }),
+      );
+    }
+  };
+  for (const [area, [before, now]] of Object.entries(counts)) {
+    add(area, before, 45);
+    add(area, now, 15);
+  }
+  return brief(derive(merged), bots, LAST).areas;
+};
+const move = (area: string, before: number, now: number) =>
+  expect.objectContaining({ area, before, now });
+
+describe('brief areas', () => {
+  it('ranks a new area as the top riser, never as the fall', () => {
+    const areas = areasOf({ newpkg: [0, 25], api: [30, 33], web: [40, 20] });
+    expect(areas?.up).toEqual({ area: 'newpkg', before: 0, now: 25, d: null });
+    expect(areas?.down).toEqual({ area: 'web', before: 40, now: 20, d: -0.5 });
+  });
+
+  it('orders several new areas by merges, then by name', () => {
+    const areas = areasOf({ b: [0, 20], a: [0, 20], c: [0, 30] });
+    expect(areas?.up).toEqual(move('c', 0, 30));
+    expect(areas?.down).toBeNull();
+    expect(areasOf({ b: [0, 20], a: [0, 20] })?.up).toEqual(move('a', 0, 20));
+  });
+
+  it('counts an area going to zero as a full fall', () => {
+    const areas = areasOf({ old: [20, 0], web: [40, 20] });
+    expect(areas?.up).toBeNull();
+    expect(areas?.down).toEqual({ area: 'old', before: 20, now: 0, d: -1 });
+  });
+
+  it('has no fall when nothing fell, and no riser when nothing rose', () => {
+    const rose = areasOf({ api: [20, 30], web: [20, 25], docs: [20, 20] });
+    expect(rose?.up).toEqual(move('api', 20, 30));
+    expect(rose?.down).toBeNull();
+    const fell = areasOf({ api: [30, 20], docs: [20, 20] });
+    expect(fell?.up).toBeNull();
+    expect(fell?.down).toEqual(move('api', 30, 20));
+  });
+
+  it('reports a single qualifying area on its own side', () => {
+    expect(areasOf({ api: [20, 30], web: [5, 1] })).toMatchObject({
+      up: move('api', 20, 30),
+      down: null,
+    });
+    expect(areasOf({ api: [30, 20] })).toMatchObject({ up: null, down: move('api', 30, 20) });
+  });
+
+  it('is null when no area rose or fell', () => {
+    expect(areasOf({ api: [20, 20], web: [5, 9] })).toBeNull();
+    // 300 -> 301 (+0.33%) prints as "flat", so it is not a rise.
+    expect(areasOf({ api: [300, 301] })).toBeNull();
+  });
+});
+
+describe('brief with a bot reviewing first', () => {
+  const last = T0 + 10 * DAY_MS;
+  const botPrs = derive(botFirstPrs());
+  const withBot = new Set([COPILOT]);
+
+  it('takes the first review from humans only', () => {
+    const A = briefStats(botPrs, withBot, between(last, 30, 0));
+    expect(A.readied).toHaveLength(3);
+    expect(A.medFirst).toBe(3 * DAY_MS);
+    expect(A.within1d).toBe(0);
+    expect(A.small.first).toBe(3 * DAY_MS);
+    expect(A.reviewers).toEqual(new Map([['bob', 1]]));
+    // #2 carries bob's approval; #3 only the bot's, which is not one.
+    expect(A.merged).toHaveLength(2);
+    expect(A.approvedMerges).toBe(0.5);
+  });
+
+  it('agrees with the backlog on which PR still waits for a human', () => {
+    const b = brief(botPrs, withBot, last);
+    expect(b.cur.medFirst).toBe(3 * DAY_MS);
+    expect(b.backlog.waiting.map((p) => p.n)).toEqual([1]);
   });
 });

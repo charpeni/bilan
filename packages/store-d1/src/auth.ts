@@ -1,6 +1,6 @@
-import { and, eq, gt, lt } from 'drizzle-orm';
+import { and, eq, gt, inArray, lt, ne, notExists, sql } from 'drizzle-orm';
 
-import { sessions, users, userTokens } from './schema.ts';
+import { sessions, syncJobs, users, userTokens } from './schema.ts';
 
 import type { Db } from './db.ts';
 import type { User, UserToken } from './schema.ts';
@@ -59,11 +59,6 @@ export async function upsertUserToken(db: Db, token: StoredTokenInput): Promise<
     .get();
 }
 
-/** Forget a user's tokens, e.g. once GitHub rejects them; the next visit signs in again. */
-export async function deleteUserToken(db: Db, userId: number): Promise<void> {
-  await db.delete(userTokens).where(eq(userTokens.userId, userId));
-}
-
 /**
  * The key a session is stored under: the hex SHA-256 of its id. The id itself
  * lives only in the browser's cookie, so a copy of the table cannot be turned
@@ -85,8 +80,64 @@ export async function createSession(
     .run();
 }
 
-export async function deleteSession(db: Db, id: string): Promise<void> {
-  await db.delete(sessions).where(eq(sessions.id, await sessionKey(id)));
+/**
+ * The conditions under which a stored token set has outlived its use: its user
+ * has no unexpired session (other than `exceptSession`, the hashed id being
+ * ended) and no queued or running sync, which re-reads the token every step.
+ * The sign-in callback creates the session before it stores the token, so a
+ * set stored by a concurrent sign-in always has a session these see.
+ */
+function tokenUnused(db: Db, now: string, exceptSession?: string) {
+  return and(
+    notExists(
+      db
+        .select({ one: sql`1` })
+        .from(sessions)
+        .where(
+          and(
+            eq(sessions.userId, userTokens.userId),
+            gt(sessions.expiresAt, now),
+            exceptSession === undefined ? undefined : ne(sessions.id, exceptSession),
+          ),
+        ),
+    ),
+    notExists(
+      db
+        .select({ one: sql`1` })
+        .from(syncJobs)
+        .where(
+          and(
+            eq(syncJobs.requestedBy, userTokens.userId),
+            inArray(syncJobs.status, ['queued', 'running']),
+          ),
+        ),
+    ),
+  );
+}
+
+/**
+ * Sign out: drop the session (`id` is the cookie value) and, when it was the
+ * user's last unexpired one, their stored token set too. The token delete is
+ * one conditional statement (see `tokenUnused`), run in the same batch before
+ * the session goes, so it finds the user through the session row; a set still
+ * needed by a sync is left for the nightly `deleteUnusedUserTokens`.
+ */
+export async function endSession(db: Db, id: string, now: string): Promise<void> {
+  const key = await sessionKey(id);
+  await db.batch([
+    db
+      .delete(userTokens)
+      .where(
+        and(
+          eq(
+            userTokens.userId,
+            db.select({ userId: sessions.userId }).from(sessions).where(eq(sessions.id, key)),
+          ),
+          tokenUnused(db, now, key),
+        ),
+      ),
+    db.delete(sessions).where(eq(sessions.id, key)),
+  ]);
 }
 
 /** The user behind an unexpired session id (the cookie value), or undefined. */
@@ -111,5 +162,18 @@ export async function getSessionUser(
 /** Drop every session whose expiry is at or before `now`; returns how many went. */
 export async function deleteExpiredSessions(db: Db, now: string): Promise<number> {
   const gone = await db.delete(sessions).where(lt(sessions.expiresAt, now)).returning().all();
+  return gone.length;
+}
+
+/**
+ * Drop the token set of every user with no unexpired session and no queued or
+ * running sync, in one conditional statement; returns how many went.
+ */
+export async function deleteUnusedUserTokens(db: Db, now: string): Promise<number> {
+  const gone = await db
+    .delete(userTokens)
+    .where(tokenUnused(db, now))
+    .returning({ userId: userTokens.userId })
+    .all();
   return gone.length;
 }

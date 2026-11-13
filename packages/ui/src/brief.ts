@@ -6,6 +6,7 @@ import { DAY, dur, el, fmtDate, num, svgEl } from './utils.ts';
 
 import type { Range } from './range.ts';
 import type { DashboardContext } from './state.ts';
+import type { BriefAreaMove, BriefAreas } from '@bilan/core';
 
 /** A piece of a brief line: text, or a login to show as a profile link. */
 export type Frag = string | { who: string };
@@ -118,6 +119,39 @@ const changeFmt = (now: number, before: number, unsigned = false): string => {
   if (d === 0) return 'flat';
   return `${unsigned ? '' : d > 0 ? '+' : '−'}${Math.abs(d)}%`;
 };
+
+/** "(40 → 20)": an area's merges in the previous period, then this one. */
+const fromTo = (m: BriefAreaMove): string => `(${m.before} → ${m.now})`;
+
+/**
+ * "Where work lands": the area that rose most as the title, the one that fell
+ * most underneath. Either may be missing; with no riser, the fall is the title.
+ */
+export function areasItem({ up, down, firstBy }: BriefAreas): BriefItem | null {
+  const body: Line[] = [];
+  let title: string;
+  if (up) {
+    title =
+      up.d === null
+        ? `${up.area} merges are new ${fromTo(up)}`
+        : `${up.area} merges up ${changeFmt(up.now, up.before, true)} ${fromTo(up)}`;
+    if (down) {
+      body.push(`${down.area} fell ${changeFmt(down.now, down.before, true)} ${fromTo(down)}.`);
+    }
+  } else if (down) {
+    title = `${down.area} merges down ${changeFmt(down.now, down.before, true)} ${fromTo(down)}`;
+  } else {
+    return null;
+  }
+  const slowest = firstBy[0];
+  const fastest = firstBy[firstBy.length - 1];
+  if (firstBy.length >= 2 && slowest && fastest) {
+    body.push(
+      `Slowest first review: ${slowest.area} (${dur(slowest.v)}). Fastest: ${fastest.area} (${dur(fastest.v)}).`,
+    );
+  }
+  return { tag: 'Where work lands', title, body, watch: false };
+}
 
 /** The brief compares the last 30 days with the 30 before, so it needs this much history. */
 export const BRIEF_COMPARE_DAYS = 60;
@@ -307,23 +341,8 @@ export function renderBrief(ctx: DashboardContext): BriefHandle {
 
   /* areas: every figure here is a move against the previous period */
   if (compare && areas) {
-    const { up, down, firstBy } = areas;
-    const body = [
-      `${down.area} ${down.d < 0 ? 'fell' : 'grew'} ${changeFmt(down.now, down.before, true)} (${down.before} → ${down.now}).`,
-    ];
-    const slowest = firstBy[0];
-    const fastest = firstBy[firstBy.length - 1];
-    if (firstBy.length >= 2 && slowest && fastest) {
-      body.push(
-        `Slowest first review: ${slowest.area} (${dur(slowest.v)}). Fastest: ${fastest.area} (${dur(fastest.v)}).`,
-      );
-    }
-    items.push({
-      tag: 'Where work lands',
-      title: `${up.area} merges ${up.d >= 0 ? 'up' : 'down'} ${changeFmt(up.now, up.before, true)} (${up.before} → ${up.now})`,
-      body,
-      watch: false,
-    });
+    const item = areasItem(areas);
+    if (item) items.push(item);
   }
 
   /* backlog */

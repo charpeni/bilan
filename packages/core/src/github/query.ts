@@ -72,11 +72,18 @@ query($owner:String!, $name:String!, $number:Int!, $cursor:String) {
   rateLimit { cost remaining resetAt }
 }`;
 
-/** Cheap probe used for access checks and sync sizing. */
+/**
+ * Cheap probe used for access checks and sync sizing. GitHub resolves
+ * `owner/name` case-insensitively and follows renames and transfers, so
+ * `owner { login }` and `name` are GitHub's own spelling of the repo's
+ * current name, whatever spelling was asked for.
+ */
 export const REPO_META_QUERY = `
 query($owner:String!, $name:String!) {
   repository(owner:$owner, name:$name) {
     id isPrivate viewerPermission
+    owner { login }
+    name
     pullRequests { totalCount }
   }
   rateLimit { cost remaining resetAt }
@@ -181,6 +188,10 @@ export interface PullRequestsPage {
 /** What `GithubClient.repoMeta` returns for a repo the token can see. */
 export interface GithubRepoMeta {
   id: string;
+  /** GitHub's spelling of the repo's current owner, which may differ from the one asked for. */
+  owner: { login: string };
+  /** GitHub's spelling of the repo's current name, which may differ from the one asked for. */
+  name: string;
   isPrivate: boolean;
   viewerPermission: 'ADMIN' | 'MAINTAIN' | 'WRITE' | 'TRIAGE' | 'READ' | null;
   pullRequests: { totalCount: number };
