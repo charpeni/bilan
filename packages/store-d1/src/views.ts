@@ -32,12 +32,16 @@ export async function touchRepoView(
 }
 
 /**
- * Every repo a user has opened, most recent first. Rows parked under
- * `STALE_OWNER` are left out: their `owner/name` is a placeholder, so nothing
- * built from it would navigate anywhere.
+ * The repos a user has opened, most recent first: all of them, or the first
+ * `limit`. Rows parked under `STALE_OWNER` are left out: their `owner/name` is
+ * a placeholder, so nothing built from it would navigate anywhere.
  */
-export async function listRepoViews(db: Db, userId: number): Promise<RepoViewRow[]> {
-  return db
+export async function listRepoViews(
+  db: Db,
+  userId: number,
+  limit?: number,
+): Promise<RepoViewRow[]> {
+  const views = db
     .select({
       repoId: repoViews.repoId,
       owner: repos.owner,
@@ -51,8 +55,8 @@ export async function listRepoViews(db: Db, userId: number): Promise<RepoViewRow
     .from(repoViews)
     .innerJoin(repos, eq(repoViews.repoId, repos.id))
     .where(and(eq(repoViews.userId, userId), ne(repos.owner, STALE_OWNER)))
-    .orderBy(desc(repoViews.lastViewedAt))
-    .all();
+    .orderBy(desc(repoViews.lastViewedAt));
+  return limit === undefined ? views.all() : views.limit(limit).all();
 }
 
 export interface RepoLastView {

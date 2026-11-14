@@ -53,7 +53,7 @@ it('lists the repositories the viewer may still see, most recent first', async (
       { owner: 'acme', name: 'repo-2', isPrivate: true, lastViewedAt: '2026-09-28T00:00:00Z' },
     ],
   });
-  expect(mocks.listRepoViews).toHaveBeenCalledWith({}, 7);
+  expect(mocks.listRepoViews).toHaveBeenCalledWith({}, 7, SWITCHER_LIMIT);
   expect(mocks.checkRepoAccess).toHaveBeenCalledWith(
     {},
     { id: 7 },
@@ -61,9 +61,10 @@ it('lists the repositories the viewer may still see, most recent first', async (
   );
 });
 
-it(`checks only the ${SWITCHER_LIMIT} most recent repositories`, async () => {
-  mocks.listRepoViews.mockResolvedValue(
-    Array.from({ length: SWITCHER_LIMIT + 5 }, (_, i) => view(i + 1)),
+it(`reads and checks only the ${SWITCHER_LIMIT} most recent repositories`, async () => {
+  // The store applies the limit it is given.
+  mocks.listRepoViews.mockImplementation(async (_db, _userId, limit: number) =>
+    Array.from({ length: SWITCHER_LIMIT + 5 }, (_, i) => view(i + 1)).slice(0, limit),
   );
   const body = (await (await request()).json()) as { repositories: unknown[] };
   expect(body.repositories).toHaveLength(SWITCHER_LIMIT);

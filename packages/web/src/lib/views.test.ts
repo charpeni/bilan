@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 
-import { filterVisibleViews } from './views.ts';
+import { capViews, filterVisibleViews, REPOSITORIES_LIMIT } from './views.ts';
 
 import type { AccessDecision } from './access.ts';
 
@@ -60,4 +60,15 @@ it('is empty for an empty list without calling the check', async () => {
     }),
   ).toEqual([]);
   expect(calls).toBe(0);
+});
+
+it('shows a list up to the limit and says when it goes on', () => {
+  const rows = Array.from({ length: 4 }, (_, i) => i);
+  expect(capViews(rows, 4)).toEqual({ shown: [0, 1, 2, 3], more: false });
+  expect(capViews(rows, 3)).toEqual({ shown: [0, 1, 2], more: true });
+  expect(capViews([], 3)).toEqual({ shown: [], more: false });
+  // By default, the `/repositories` limit, fetched one past it.
+  const many = Array.from({ length: REPOSITORIES_LIMIT + 1 }, (_, i) => i);
+  expect(capViews(many).shown).toHaveLength(REPOSITORIES_LIMIT);
+  expect(capViews(many).more).toBe(true);
 });

@@ -239,6 +239,9 @@ describe('repo views', () => {
       [b.name, '2026-05-02T00:00:00Z'],
     ]);
     expect(views[0]).toMatchObject({ owner: 'acme', isPrivate: false, lastSyncedAt: null });
+    // With a limit, only the most recently viewed ones.
+    expect((await listRepoViews(db, user.id, 1)).map((v) => v.name)).toEqual([a.name]);
+    expect(await listRepoViews(db, user.id, 5)).toHaveLength(2);
   });
 
   it('reports the last view of every repo, null for never opened', async () => {
