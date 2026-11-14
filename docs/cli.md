@@ -38,8 +38,10 @@ environment are ignored.
 repository root, nested ones included:
 `{ "known": ["docs", "packages/app", "packages/integrations/node"] }`. A changed
 file counts toward the deepest listed folder holding it, other nested files
-toward `other`, and files at the root toward `root`. Lockfiles, `.changeset/`
-and release or dependency pull requests still count toward no area.
+toward `other`, and files at the root toward `root`. A listed folder that is
+itself named `other` or `root` shows as `other/` or `root/`, apart from those
+two. Lockfiles, `.changeset/` and release or dependency pull requests still
+count toward no area.
 
 ## Coverage, rate limits, and the cache
 

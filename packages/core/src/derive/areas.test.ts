@@ -22,6 +22,34 @@ describe('areasOf', () => {
     expect(allAreas(rules)).toEqual(['backend', 'frontend', 'other', 'root']);
   });
 
+  it('keeps a folder called `other` or `root` apart from the area of that name', () => {
+    const named = { known: ['other', 'root', 'src'] };
+    // The folders, a nested path in no known folder, and a file at the root.
+    expect(areasOf(['other/a.ts', 'root/b.ts', 'tools/c.sh', 'README.md'], named)).toEqual([
+      'other/',
+      'root/',
+      'other',
+      'root',
+    ]);
+    const all = allAreas(named);
+    expect(all).toEqual(['other/', 'root/', 'src', 'other', 'root']);
+    expect(new Set(all).size).toBe(all.length);
+    // Only the top-level folders collide: a nested one is named by its path.
+    expect(areasOf(['src/other/a.ts'], { known: ['src/other'] })).toEqual(['src/other']);
+  });
+
+  it('infers such a folder as an area of its own', () => {
+    const samples = [['other/a.ts'], ['other/b.ts'], ['src/c.ts'], ['d.md']];
+    const inferred = inferAreaRules(samples);
+    expect(inferred.known).toEqual(['other', 'src']);
+    expect(samples.map((sample) => areasOf(sample, inferred))).toEqual([
+      ['other/'],
+      ['other/'],
+      ['src'],
+      ['root'],
+    ]);
+  });
+
   it('puts a file in the deepest known folder holding it', () => {
     const nested = { known: ['packages', 'packages/app', 'packages/app/plugins/x'] };
     expect(areasOf(['packages/app/src/a.ts'], nested)).toEqual(['packages/app']);
