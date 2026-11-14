@@ -98,7 +98,11 @@ const hours = (b: number[]): number | null => {
 };
 
 export interface CycleTimeTrend {
-  /** Median hours from ready to first review, by bucket of the review. */
+  /**
+   * Median hours from ready to first review, by bucket of the ready event:
+   * the anchor of time to first review everywhere else, so a bucket holds
+   * what the headline counts for the same days.
+   */
   toFirst: (number | null)[];
   /** Median hours from ready to merge, by bucket of the merge. */
   toMerge: (number | null)[];
@@ -114,8 +118,8 @@ export function cycleTimeTrend(s: Scope, tb: TimeBuckets): CycleTimeTrend {
       const i = idxOf(p.m);
       if (inRange(i)) mergeBuckets[i]?.push(p.toMerge);
     }
-    if (p.toFirst !== null && inWin(p.first)) {
-      const i = idxOf(p.first);
+    if (p.toFirst !== null && inWin(p.r)) {
+      const i = idxOf(p.r);
       if (inRange(i)) reviewBuckets[i]?.push(p.toFirst);
     }
   }

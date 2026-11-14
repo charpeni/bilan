@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { COPILOT, DAY_MS, HOUR_MS, T0, botFirstPrs, payloadPr } from '../testing/fixtures.ts';
 import { derive } from './derive.ts';
-import { createFilterState, scope } from './scope.ts';
+import { createFilterState, scope, windowed } from './scope.ts';
+import { headline } from './summary.ts';
 import { dayStart, weekStart } from './time.ts';
 import { cycleTimeTrend, openBacklog, throughput, timeBuckets } from './weekly.ts';
 
@@ -174,8 +175,41 @@ describe('openBacklog', () => {
 describe('cycleTimeTrend', () => {
   it('reports weekly median hours, null where a week has no data', () => {
     const t = cycleTimeTrend(sc(), timeBuckets(sc(), LAST));
-    expect(t.toFirst).toEqual([null, 1, null, null]);
+    // #1 became ready on the Sunday of week 0 and was reviewed and merged on
+    // the Monday of week 1: its wait for a review belongs to the week it
+    // became ready, its time to merge to the week it merged.
+    expect(t.toFirst).toEqual([1, null, null, null]);
     expect(t.toMerge).toEqual([null, 2, null, null]);
+  });
+
+  it('counts a first review for the same days the headline does', () => {
+    // Ready in week 0, first reviewed two weeks later.
+    const slow = derive([
+      payloadPr({
+        n: 9,
+        c: W0 + DAY_MS,
+        r: W0 + DAY_MS,
+        m: null,
+        x: null,
+        s: 'OPEN',
+        mb: null,
+        rv: [['bob', 'APPROVED', W0 + 15 * DAY_MS]],
+      }),
+    ]);
+    const all = scope(slow, new Set(), createFilterState(), LAST);
+    expect(cycleTimeTrend(all, timeBuckets(all, LAST)).toFirst).toEqual([
+      14 * 24,
+      null,
+      null,
+      null,
+    ]);
+    // In the last 7 days it was reviewed but did not become ready: the
+    // headline has no time to first review for it, and neither has the trend.
+    const week = scope(slow, new Set(), { ...createFilterState(), range: '7' }, LAST);
+    expect(headline(windowed(week, LAST)).medFirst).toBeNull();
+    expect(cycleTimeTrend(week, timeBuckets(week, LAST)).toFirst.every((v) => v === null)).toBe(
+      true,
+    );
   });
 });
 
