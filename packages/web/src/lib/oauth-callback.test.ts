@@ -29,9 +29,15 @@ vi.mock('./oauth.ts', async (original) => ({
 
 import { GET } from '../pages/auth/github/callback.ts';
 
-function callback(query: string, stored?: { state: string; next: string }) {
+/** `stored` is the browser's OAuth cookie, under the name `storedAs`. */
+function callback(
+  query: string,
+  stored?: { state: string; next: string },
+  storedAs = '__Host-bilan_oauth',
+) {
   const cookies = {
-    get: () => (stored ? { value: JSON.stringify(stored) } : undefined),
+    get: (name: string) =>
+      stored && name === storedAs ? { value: JSON.stringify(stored) } : undefined,
     delete: vi.fn(),
     set: vi.fn(),
   };
@@ -81,6 +87,18 @@ describe('OAuth callback browser binding', () => {
     expect(cookies.set).not.toHaveBeenCalled();
   });
 
+  it('ignores a state under the name another host of the domain could set', async () => {
+    const { result, cookies } = callback(
+      'code=attacker-code&state=planted-state',
+      { state: 'planted-state', next: '/repositories' },
+      'bilan_oauth',
+    );
+    expect((await result).status).toBe(400);
+    expect(mocks.exchange).not.toHaveBeenCalled();
+    expect(mocks.createSession).not.toHaveBeenCalled();
+    expect(cookies.set).not.toHaveBeenCalled();
+  });
+
   it('exchanges a browser-bound code and issues a new session', async () => {
     const { result, cookies } = callback('code=real-code&state=browser-state', {
       state: 'browser-state',
@@ -90,6 +108,11 @@ describe('OAuth callback browser binding', () => {
     expect(response.status).toBe(302);
     expect(response.headers.get('location')).toBe('/acme/repo');
     expect(mocks.exchange).toHaveBeenCalledWith('real-code');
+    // A `__Host-` cookie is only deleted by a Secure `Path=/` one.
+    expect(cookies.delete).toHaveBeenCalledWith(
+      '__Host-bilan_oauth',
+      expect.objectContaining({ secure: true, path: '/' }),
+    );
     expect(mocks.createSession).toHaveBeenCalledOnce();
     // Session first, so a concurrent sign-out never sees the new token without a session.
     expect(mocks.createSession.mock.invocationCallOrder[0]).toBeLessThan(

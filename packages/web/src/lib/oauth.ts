@@ -3,7 +3,16 @@ import { GitHub } from 'arctic';
 import type { OAuth2Tokens } from 'arctic';
 import type { AstroCookieSetOptions } from 'astro';
 
-export const OAUTH_COOKIE = 'bilan_oauth';
+/**
+ * The cookie that carries a sign-in's state and landing page over https. Like
+ * the session cookie it has the `__Host-` prefix, which browsers only accept
+ * from this very host: another host under the site's domain cannot plant a
+ * state of its choosing and so sign a visitor in to an account that is not
+ * theirs (login CSRF by cookie tossing).
+ */
+export const OAUTH_COOKIE = '__Host-bilan_oauth';
+/** The same cookie over plain http in local development, where a `__Host-` cookie cannot be set. */
+export const PLAIN_HTTP_OAUTH_COOKIE = 'bilan_oauth';
 export const OAUTH_COOKIE_TTL_S = 10 * 60;
 
 export interface OauthState {
@@ -102,8 +111,21 @@ export function decodeOauthState(text: string | undefined): OauthState | null {
   }
 }
 
+/** The name the OAuth cookie is set and read under; `secure` is false only over plain http. */
+export function oauthCookieName(secure: boolean): string {
+  return secure ? OAUTH_COOKIE : PLAIN_HTTP_OAUTH_COOKIE;
+}
+
 export function oauthCookieOptions(secure: boolean): AstroCookieSetOptions {
-  return { httpOnly: true, secure, sameSite: 'lax', path: '/', maxAge: OAUTH_COOKIE_TTL_S };
+  return { ...clearedOauthCookieOptions(secure), maxAge: OAUTH_COOKIE_TTL_S };
+}
+
+/**
+ * What deleting the cookie has to carry: browsers ignore a `__Host-` cookie,
+ * its deletion included, unless it is Secure with `Path=/`.
+ */
+export function clearedOauthCookieOptions(secure: boolean): AstroCookieSetOptions {
+  return { httpOnly: true, secure, sameSite: 'lax', path: '/' };
 }
 
 /** Constant-time comparison of the state echoed by GitHub with the one in the cookie. */

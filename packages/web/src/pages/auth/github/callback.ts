@@ -6,14 +6,16 @@ import { getDb } from '../../../lib/db.ts';
 import { json } from '../../../lib/http.ts';
 import {
   callbackFlow,
+  clearedOauthCookieOptions,
   decodeOauthState,
   githubProvider,
   loginHref,
-  OAUTH_COOKIE,
+  oauthCookieName,
   tokenGrant,
 } from '../../../lib/oauth.ts';
 import {
   generateSessionId,
+  isPlainHttp,
   sessionCookieName,
   sessionCookieOptions,
   sessionExpiry,
@@ -23,8 +25,9 @@ import { storeUserToken, tokenKey } from '../../../lib/tokens.ts';
 import type { APIRoute } from 'astro';
 
 export const GET: APIRoute = async ({ url, cookies, redirect }) => {
-  const stored = decodeOauthState(cookies.get(OAUTH_COOKIE)?.value);
-  cookies.delete(OAUTH_COOKIE, { path: '/' });
+  const secure = !isPlainHttp(url);
+  const stored = decodeOauthState(cookies.get(oauthCookieName(secure))?.value);
+  cookies.delete(oauthCookieName(secure), clearedOauthCookieOptions(secure));
   const code = url.searchParams.get('code');
   const flow = callbackFlow({
     code,

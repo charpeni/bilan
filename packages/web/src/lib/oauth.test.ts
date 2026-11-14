@@ -5,12 +5,15 @@ import {
   LOGIN_SCOPES,
   callbackFlow,
   callbackUrl,
+  clearedOauthCookieOptions,
   decodeOauthState,
   encodeOauthState,
   githubProvider,
   installUrl,
   isOauthConfigured,
   loginHref,
+  oauthCookieName,
+  oauthCookieOptions,
   safeNext,
   statesMatch,
   tokenGrant,
@@ -77,6 +80,19 @@ describe('oauth state cookie', () => {
       state: 'abc',
       next: '/',
     });
+  });
+
+  it('is host-only over https, and plain over http where `__Host-` cannot be set', () => {
+    expect(oauthCookieName(true)).toBe('__Host-bilan_oauth');
+    expect(oauthCookieName(false)).toBe('bilan_oauth');
+    // What browsers require of a `__Host-` cookie, when set and when deleted.
+    for (const options of [oauthCookieOptions(true), clearedOauthCookieOptions(true)]) {
+      expect(options).toMatchObject({ secure: true, path: '/', httpOnly: true, sameSite: 'lax' });
+      expect(options).not.toHaveProperty('domain');
+    }
+    expect(oauthCookieOptions(true).maxAge).toBe(600);
+    expect(clearedOauthCookieOptions(true)).not.toHaveProperty('maxAge');
+    expect(oauthCookieOptions(false).secure).toBe(false);
   });
 
   it('rejects garbage', () => {
