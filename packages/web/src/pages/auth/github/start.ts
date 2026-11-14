@@ -7,7 +7,7 @@ import {
   githubProvider,
   isOauthConfigured,
   LOGIN_SCOPES,
-  OAUTH_COOKIE,
+  oauthCookieName,
   oauthCookieOptions,
   safeNext,
 } from '../../../lib/oauth.ts';
@@ -26,10 +26,11 @@ export const GET: APIRoute = ({ url, cookies, redirect }) => {
   }
   const next = safeNext(url.searchParams.get('next'));
   const state = generateState();
+  const secure = !isPlainHttp(url);
   cookies.set(
-    OAUTH_COOKIE,
+    oauthCookieName(secure),
     encodeOauthState({ state, next }),
-    oauthCookieOptions(!isPlainHttp(url)),
+    oauthCookieOptions(secure),
   );
   const authorize = githubProvider(env, url.origin).createAuthorizationURL(state, [
     ...LOGIN_SCOPES,
