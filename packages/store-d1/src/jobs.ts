@@ -32,11 +32,38 @@ export interface SyncAdmission {
  * window by repository retention.
  */
 export async function admitSyncJob(db: Db, job: SyncAdmission): Promise<boolean> {
-  const dayStart = new Date(Date.parse(job.createdAt) - 24 * 3600e3).toISOString();
   const admitted = await db.get<{ id: string }>(sql`
     INSERT INTO sync_jobs (id, repo_id, requested_by, mode, max_prs, status, created_at)
     SELECT ${job.id}, ${job.repoId}, ${job.requestedBy}, ${job.mode}, ${job.maxPrs}, 'queued', ${job.createdAt}
-    WHERE NOT EXISTS (
+    WHERE ${fitsCapacity(job)}
+    ON CONFLICT (id) DO NOTHING
+    RETURNING id
+  `);
+  return admitted !== undefined;
+}
+
+/** What admission weighs a job on: everything but the row it would insert. */
+export type SyncAdmissionCheck = Pick<
+  SyncAdmission,
+  'repoId' | 'requestedBy' | 'createdAt' | 'cooldownAfter'
+>;
+
+/**
+ * Would `admitSyncJob` admit this job right now? The same conditions, read
+ * without writing, so a request that is over quota can be refused before it
+ * writes anything at all (a repository row, the sync model's events). Only a
+ * hint: between this read and the insert another request may take the
+ * capacity, which `admitSyncJob` then refuses on its own.
+ */
+export async function syncJobAdmissible(db: Db, job: SyncAdmissionCheck): Promise<boolean> {
+  const row = await db.get<{ ok: number }>(sql`SELECT 1 AS ok WHERE ${fitsCapacity(job)}`);
+  return row !== undefined;
+}
+
+/** The repository is free, the requester and bilan have capacity left, and the cooldown has passed. */
+function fitsCapacity(job: SyncAdmissionCheck) {
+  const dayStart = new Date(Date.parse(job.createdAt) - 24 * 3600e3).toISOString();
+  return sql`NOT EXISTS (
       SELECT 1 FROM sync_jobs WHERE repo_id = ${job.repoId} AND status IN ('queued', 'running')
     )
     AND (SELECT count(*) FROM sync_jobs WHERE requested_by = ${job.requestedBy}
@@ -48,11 +75,7 @@ export async function admitSyncJob(db: Db, job: SyncAdmission): Promise<boolean>
     AND (${job.cooldownAfter} IS NULL OR NOT EXISTS (
       SELECT 1 FROM sync_jobs WHERE requested_by = ${job.requestedBy} AND repo_id = ${job.repoId}
         AND created_at > ${job.cooldownAfter}
-    ))
-    ON CONFLICT (id) DO NOTHING
-    RETURNING id
-  `);
-  return admitted !== undefined;
+    ))`;
 }
 
 /**
