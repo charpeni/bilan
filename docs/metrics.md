@@ -49,7 +49,9 @@ at most three deep, holding a sampled `package.json`, `Cargo.toml`, `go.mod` or
 when one piece would still hold more than 90% of its pull requests. Lockfiles
 and `.changeset/` count toward no area, and neither does a pull request whose
 sampled files are only those, manifests and changelogs, as release and
-dependency pull requests are. Files at the repository root count as `root`.
+dependency pull requests are. Files at the repository root count as `root`. A
+top-level folder that is itself named `root` or `other` shows as `root/` or
+`other/`, apart from those two.
 
 ## Drafts, anchors, and review depth
 

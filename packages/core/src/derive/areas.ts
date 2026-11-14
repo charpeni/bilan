@@ -11,6 +11,14 @@ export interface AreaRules {
 export const OTHER_AREA = 'other';
 export const ROOT_AREA = 'root';
 
+/**
+ * The area a known folder shows as: its path. A top-level folder that is
+ * itself called `other` or `root` keeps a trailing slash (`other/`), so it
+ * stays apart from the area of that name instead of merging with it.
+ */
+const areaName = (folder: string): string =>
+  folder === OTHER_AREA || folder === ROOT_AREA ? `${folder}/` : folder;
+
 /** Written by package managers, so they say nothing about where the work is. */
 const LOCKFILES = new Set([
   'Cargo.lock',
@@ -79,7 +87,7 @@ function areaOf(path: string, known: ReadonlySet<string>): string {
   if (end < 0) return ROOT_AREA;
   for (; end > 0; end = path.lastIndexOf('/', end - 1)) {
     const dir = path.slice(0, end);
-    if (known.has(dir)) return dir;
+    if (known.has(dir)) return areaName(dir);
   }
   return OTHER_AREA;
 }
@@ -91,7 +99,7 @@ export function areasOf(paths: Iterable<string>, rules: AreaRules): string[] {
 
 /** Every area a payload can contain, in display order. */
 export function allAreas(rules: AreaRules): string[] {
-  return [...rules.known, OTHER_AREA, ROOT_AREA];
+  return [...rules.known.map(areaName), OTHER_AREA, ROOT_AREA];
 }
 
 /**
