@@ -120,6 +120,14 @@ const changeFmt = (now: number, before: number, unsigned = false): string => {
   return `${unsigned ? '' : d > 0 ? '+' : '−'}${Math.abs(d)}%`;
 };
 
+/**
+ * Whether merges fell enough against the previous period to flag: by more
+ * than 15%. A period that merged nothing has nothing to fall from, so merges
+ * after it are "new", never a fall.
+ */
+export const mergesFell = (now: number, before: number): boolean =>
+  before > 0 && now / before - 1 < -0.15;
+
 /** "(40 → 20)": an area's merges in the previous period, then this one. */
 const fromTo = (m: BriefAreaMove): string => `(${m.before} → ${m.now})`;
 
@@ -210,7 +218,6 @@ export function renderBrief(ctx: DashboardContext): BriefHandle {
 
   /* throughput */
   {
-    const dm = (B.merged.length ? A.merged.length / B.merged.length : 0) - 1;
     items.push({
       tag: 'Throughput',
       title: compare
@@ -219,7 +226,8 @@ export function renderBrief(ctx: DashboardContext): BriefHandle {
       body: [
         `${num(A.opened.length)} opened by ${A.authors} authors${vs(` (${B.authors} before)`)}. ${num(A.closed.length)} closed without merging.`,
       ],
-      watch: compare && (dm < -0.15 || A.authors < B.authors * 0.8),
+      watch:
+        compare && (mergesFell(A.merged.length, B.merged.length) || A.authors < B.authors * 0.8),
     });
   }
 

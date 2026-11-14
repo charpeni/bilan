@@ -5,6 +5,7 @@ import {
   areasItem,
   collapsedHeight,
   firstRowCount,
+  mergesFell,
   ofAllPrs,
   toggleText,
 } from './brief.ts';
@@ -174,5 +175,19 @@ describe('areasItem', () => {
 
   it('is null with neither side', () => {
     expect(areasItem({ up: null, down: null, firstBy })).toBeNull();
+  });
+});
+
+describe('mergesFell', () => {
+  it('flags a drop of more than 15% on the previous period', () => {
+    expect(mergesFell(80, 100)).toBe(true);
+    expect(mergesFell(90, 100)).toBe(false);
+    expect(mergesFell(100, 100)).toBe(false);
+    expect(mergesFell(0, 10)).toBe(true);
+  });
+
+  it('never calls merges after a period without any a fall', () => {
+    expect(mergesFell(25, 0)).toBe(false);
+    expect(mergesFell(0, 0)).toBe(false);
   });
 });
