@@ -36,7 +36,7 @@ sample shows as unavailable, and a count rising from zero is labelled “New”.
 | Verdict mix              | review          | approved, changes requested, or comment only; dismissed reviews have none    |
 | Review threads per PR    | merged          | review threads ÷ pull requests merged, by size                               |
 | Approved with no threads | merged          | every review was an approval and no review thread was opened                 |
-| Time to approval         | merged          | ready → first approval, by size                                              |
+| Time to approval         | merged          | ready → first approval that still stands, by size                            |
 
 ## Areas
 
@@ -68,5 +68,9 @@ Review depth groups merged pull requests by size, in lines added + deleted:
 ≤50, 51–250, 251–500, 501–1k, and over 1k. Its thread count is GitHub's total
 per pull request, which does not say who opened each thread, so threads opened
 by bot reviewers (such as Copilot) count too and overstate human discussion.
+A dismissed review has lost its verdict on GitHub, typically an approval a
+later push made stale, so review depth leaves it out: it neither makes a pull
+request approved nor counts against "approved with no threads", and time to
+approval runs to the first approval that still stands.
 
 Draft transitions are fetched separately from review requests, and review-request histories are paginated without a fixed event limit. Run `--full` to refresh all cached PR metadata after upgrading.

@@ -16,9 +16,14 @@ const DEPTH_LABELS = ['≤50', '51–250', '251–500', '501–1k', '1k+'];
  * Approved with no review threads: the PR has reviews (leaving out `skip`),
  * every one an approval, and no review threads. `th` counts the threads of
  * every reviewer, bots included: the payload does not say who opened them.
+ *
+ * A dismissed review is left out like a skipped reviewer's. GitHub rewrites
+ * its state, so what it said is gone; most are approvals a later push made
+ * stale, and one must not make an approved PR look as if it had drawn
+ * pushback. The approval that counts is one that still stands.
  */
 export function isQuiet(p: MetricPr, skip: ReadonlySet<string>): boolean {
-  const rv = p.rv.filter(([who]) => !skip.has(who));
+  const rv = p.rv.filter(([who, st]) => !skip.has(who) && st !== 'DISMISSED');
   return p.th === 0 && rv.length > 0 && rv.every(([, st]) => st === 'APPROVED');
 }
 
@@ -33,7 +38,7 @@ export interface DepthBand {
   quiet: number;
   /** `quiet` over `merged`; null when none merged. */
   quietShare: number | null;
-  /** Median ready -> first approval, ms. */
+  /** Median ready -> first approval that still stands (a dismissed one has no verdict left), ms. */
   medApproval: number | null;
 }
 

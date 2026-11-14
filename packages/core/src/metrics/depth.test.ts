@@ -31,6 +31,39 @@ describe('isQuiet', () => {
     ).toBe(false);
   });
 
+  it('leaves a dismissed review out: it has no verdict left to count either way', () => {
+    // A push made bob's first approval stale; he approved again.
+    expect(
+      quiet({
+        rv: [
+          ['bob', 'DISMISSED', T0 + HOUR_MS],
+          ['bob', 'APPROVED', T0 + 2 * HOUR_MS],
+        ],
+      }),
+    ).toBe(true);
+    // Nothing still stands as an approval.
+    expect(quiet({ rv: [['bob', 'DISMISSED', T0 + HOUR_MS]] })).toBe(false);
+    // Real pushback is still pushback, dismissed review or not.
+    expect(
+      quiet({
+        rv: [
+          ['bob', 'DISMISSED', T0 + HOUR_MS],
+          ['carol', 'CHANGES_REQUESTED', T0 + 2 * HOUR_MS],
+          ['bob', 'APPROVED', T0 + 3 * HOUR_MS],
+        ],
+      }),
+    ).toBe(false);
+    expect(
+      quiet({
+        th: 2,
+        rv: [
+          ['bob', 'DISMISSED', T0 + HOUR_MS],
+          ['bob', 'APPROVED', T0 + 2 * HOUR_MS],
+        ],
+      }),
+    ).toBe(false);
+  });
+
   it('leaves out the skipped reviewers', () => {
     const rv: PayloadReview[] = [
       ['copilot[bot]', 'COMMENTED', T0 + HOUR_MS],
@@ -94,6 +127,21 @@ describe('reviewDepth', () => {
     });
     expect(mid).toMatchObject({ threads: 0, quiet: 0, quietShare: 0, medApproval: null });
     expect(large).toMatchObject({ threads: 2, quiet: 0, quietShare: 0, medApproval: DAY_MS });
+  });
+
+  it('counts a re-approved PR as approved, timed to the approval that still stands', () => {
+    // A push made bob's approval at +2h stale; he approved again at +20h.
+    const again = derive([
+      payloadPr({
+        th: 0,
+        rv: [
+          ['bob', 'DISMISSED', T0 + 2 * HOUR_MS],
+          ['bob', 'APPROVED', T0 + 20 * HOUR_MS],
+        ],
+      }),
+    ]);
+    const band = reviewDepth(win(again)).find((b) => b.merged === 1);
+    expect(band).toMatchObject({ quiet: 1, quietShare: 1, medApproval: 20 * HOUR_MS });
   });
 
   it('leaves empty bands without averages', () => {
