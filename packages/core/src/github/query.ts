@@ -1,4 +1,14 @@
 /**
+ * How many of a pull request's reviews are kept, oldest first. GitHub records
+ * every standalone inline comment, and every reply in a review thread, as a
+ * review of its own, the author's replies included, so a long discussion uses
+ * them up well before the reviewers' verdicts: one busy PR had 19 replies
+ * among its 42 reviews. A page costs the same rate-limit points at 100 as at
+ * 40, and only the few PRs past 40 grow.
+ */
+export const REVIEWS_PER_PR = 100;
+
+/**
  * Pull requests newest-updated first, with just enough nested data for the
  * metrics. `$states` narrows to those states; omit it (or pass null) for all.
  * The repository `id` tells the caller which repo the name resolved to.
@@ -20,7 +30,7 @@ query($owner:String!, $name:String!, $page:Int!, $cursor:String, $states:[PullRe
         comments { totalCount }
         reviewThreads { totalCount }
         files(first:30) { totalCount nodes { path } }
-        reviews(first:40) {
+        reviews(first:${REVIEWS_PER_PR}) {
           totalCount
           nodes { author { login __typename } state submittedAt }
         }

@@ -58,12 +58,15 @@ top-level folder that is itself named `root` or `other` shows as `root/` or
 A pull request that opened as a draft becomes reviewable at its first
 ready-for-review event; later re-drafts are ignored. Each metric is scoped by
 its own anchor, so "last 30 days" means what happened in those 30 days rather
-than which pull requests were opened in them. Up to 40 reviews are captured per
-pull request. While bots are excluded, a bot's review is not a first review
+than which pull requests were opened in them. Up to 100 reviews are captured
+per pull request, oldest first. GitHub records every standalone inline comment,
+and every reply in a review thread, as a review of its own: each counts in
+reviews given and as comment only, except the author's own, which are
+self-reviews. While bots are excluded, a bot's review is not a first review
 either: a pull request reviewed only by bots counts as unreviewed, and its time
 to first review runs until a human other than the author reviews it. The briefing always reads
 reviews this way. Whether an open pull request stands approved does not depend
-on the 40-review cap: it is read from each reviewer's latest verdict as GitHub
+on the 100-review cap: it is read from each reviewer's latest verdict as GitHub
 keeps it.
 
 Review depth groups merged pull requests by size, in lines added + deleted:

@@ -4,7 +4,7 @@ import { readyInfo } from '../derive/ready.ts';
 import { timelineGithub } from '../testing/timeline.ts';
 import { GithubRateLimitError, RepoChangedError } from './client.ts';
 import { compact } from './compact.ts';
-import { PULL_REQUESTS_QUERY, PULL_REQUEST_TIMELINE_QUERY } from './query.ts';
+import { PULL_REQUESTS_QUERY, PULL_REQUEST_TIMELINE_QUERY, REVIEWS_PER_PR } from './query.ts';
 
 const repo = { owner: 'acme', name: 'widgets' };
 
@@ -18,6 +18,12 @@ describe('pull request timelines', () => {
         expect(query).toContain(`... on ${team} { name }`);
       }
     }
+  });
+
+  it('asks for enough reviews that thread replies do not crowd out the verdicts', () => {
+    // Every reply in a review thread is a review on GitHub; see `REVIEWS_PER_PR`.
+    expect(REVIEWS_PER_PR).toBe(100);
+    expect(PULL_REQUESTS_QUERY).toContain('reviews(first:100) {');
   });
 
   it('keeps draft readiness independent of requests and follows every request page', async () => {

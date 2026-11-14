@@ -351,7 +351,7 @@ export function brief(prs: readonly MetricPr[], bots: ReadonlySet<string>, last:
     };
   })();
 
-  // A human's verdict GitHub reports past the first 40 reviews is a human
+  // A human's verdict GitHub reports past the first 100 reviews is a human
   // review too, so a PR it approves is never also listed as waiting for one.
   const byHuman = (reviews: readonly PayloadReview[]) => reviews.some(([w]) => !bots.has(w));
   const backlog = ((): BriefBacklog => {
@@ -369,7 +369,7 @@ export function brief(prs: readonly MetricPr[], bots: ReadonlySet<string>, last:
       .filter((p) => !p.dr)
       .map((p) => {
         // GitHub's own latest verdicts when the store has them: `rv` holds
-        // only the first 40 reviews, and a change request or an approval given
+        // only the first 100 reviews, and a change request or an approval given
         // after those would be missed.
         const at = standingApproval(p.sv ?? p.rv, bots);
         return at === null ? null : { pr: p, since: Math.max(0, last - at) };
