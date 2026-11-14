@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { PRS_STORED_HEADER, SYNC_ACTIVE_HEADER, SYNCED_AT_HEADER } from './poll.ts';
-import { STOPPED_MESSAGE, SyncWatchError, watchSync } from './sync-watch.ts';
+import {
+  RETRY_LIMIT,
+  STOPPED_MESSAGE,
+  SyncWatchError,
+  UNREACHABLE_MESSAGE,
+  watchSync,
+} from './sync-watch.ts';
 
 const T1 = '2026-05-01T12:00:00.000Z';
 const T2 = '2026-05-01T12:05:00.000Z';
@@ -25,6 +31,7 @@ function fakeFetch(answers: Answer[]) {
 }
 
 const sleep = () => Promise.resolve();
+const times = <T>(n: number, value: T): T[] => Array.from({ length: n }, () => value);
 
 /** A staged first sync's job row, in stage `current` of two. */
 const staged = (current: number) => ({
@@ -184,6 +191,81 @@ describe('watchSync', () => {
     }).catch((e: unknown) => e);
     expect((error as SyncWatchError).kind).toBe('stopped');
     expect((error as SyncWatchError).message).toBe(STOPPED_MESSAGE);
+  });
+});
+
+describe('watchSync through an outage', () => {
+  const running = { status: 200, body: { status: 'running', settled: false } };
+  const done = { status: 200, body: { status: 'complete', settled: true } };
+  const down = { status: 503 };
+  const job = { kind: 'job', jobId: 'j1' } as const;
+
+  it('keeps following a sync while its status briefly cannot be read', async () => {
+    const { fetch, calls } = fakeFetch([running, down, { status: 502 }, { status: 429 }, done]);
+    await watchSync(job, null, { apiBase: API, fetch, sleep });
+    expect(calls).toHaveLength(5);
+  });
+
+  it('does the same for the payload endpoint and for a request that never got an answer', async () => {
+    const answers: Answer[] = [
+      { status: 200, headers: { [SYNCED_AT_HEADER]: T1, [SYNC_ACTIVE_HEADER]: '1' } },
+      down,
+      { status: 200, headers: { [SYNCED_AT_HEADER]: T2, [SYNC_ACTIVE_HEADER]: '0' } },
+    ];
+    let offline = true;
+    const fetch = vi.fn(async () => {
+      // The first request is lost; the rest are answered from the queue.
+      if (offline) {
+        offline = false;
+        throw new TypeError('Failed to fetch');
+      }
+      const next = answers.shift();
+      if (!next) throw new Error('unexpected call');
+      return new Response(null, { status: next.status, headers: next.headers ?? {} });
+    });
+    await watchSync({ kind: 'payload', baseline: T1 }, T1, { apiBase: API, fetch, sleep });
+    expect(fetch).toHaveBeenCalledTimes(4);
+  });
+
+  it('gives up once the status has been unreadable for too long, saying which status', async () => {
+    const { fetch, calls } = fakeFetch([running, ...times(RETRY_LIMIT + 1, down)]);
+    const error = await watchSync(job, null, { apiBase: API, fetch, sleep }).catch(
+      (e: unknown) => e,
+    );
+    expect(error).toBeInstanceOf(SyncWatchError);
+    expect((error as SyncWatchError).kind).toBe('failed');
+    expect((error as SyncWatchError).message).toBe('Could not read job status (503).');
+    expect(calls).toHaveLength(RETRY_LIMIT + 2);
+  });
+
+  it('says it lost contact when no request gets through', async () => {
+    const fetch = vi.fn(async () => {
+      throw new TypeError('Failed to fetch');
+    });
+    const error = await watchSync(job, null, { apiBase: API, fetch, sleep }).catch(
+      (e: unknown) => e,
+    );
+    expect((error as SyncWatchError).message).toBe(UNREACHABLE_MESSAGE);
+    expect(fetch).toHaveBeenCalledTimes(RETRY_LIMIT + 1);
+  });
+
+  it('counts only failures in a row: one good answer starts the count again', async () => {
+    const { fetch } = fakeFetch([
+      ...times(RETRY_LIMIT, down),
+      running,
+      ...times(RETRY_LIMIT, down),
+      done,
+    ]);
+    await expect(watchSync(job, null, { apiBase: API, fetch, sleep })).resolves.toBeUndefined();
+  });
+
+  it('still fails at once on an answer that will not pass', async () => {
+    const { fetch, calls } = fakeFetch([{ status: 401 }]);
+    const error = await watchSync(job, null, { apiBase: API, fetch, sleep }).catch(
+      (e: unknown) => e,
+    );
+    expect((error as SyncWatchError).message).toBe('Could not read job status (401).');
+    expect(calls).toHaveLength(1);
   });
 });
 

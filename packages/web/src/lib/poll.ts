@@ -36,7 +36,22 @@ export type PollOutcome =
   | { kind: 'stopped' }
   /** The job cannot be read here (not this viewer's, or gone); watch the payload instead. */
   | { kind: 'watch-payload' }
-  | { kind: 'failed'; message: string };
+  | { kind: 'failed'; message: string }
+  /**
+   * The status could not be read this time: bilan or GitHub was briefly
+   * unavailable, which says nothing about the sync, so probe again.
+   * `message` is what to say should it keep happening.
+   */
+  | { kind: 'retry'; message: string };
+
+/** Answers that pass on their own (an outage, a deploy, a rate limit), unlike a 401 or a 403. */
+const isTransient = (status: number): boolean => status >= 500 || status === 429;
+
+/** `failed` for good, or `retry` when the status only says the answer is unavailable right now. */
+const unreadable = (status: number, message: string): PollOutcome => ({
+  kind: isTransient(status) ? 'retry' : 'failed',
+  message,
+});
 
 /**
  * Which endpoint to watch after `POST /sync`: a 202 carries the job this
@@ -86,7 +101,7 @@ export function payloadPollOutcome(probe: PayloadProbe, baseline: string | null)
   }
   if (probe.status === 202) return { kind: 'wait' };
   if (probe.status === 404) return probe.syncActive ? { kind: 'wait' } : { kind: 'stopped' };
-  return { kind: 'failed', message: `Could not read sync status (${probe.status}).` };
+  return unreadable(probe.status, `Could not read sync status (${probe.status}).`);
 }
 
 /** A non-negative integer header or field, else null. */
@@ -177,7 +192,7 @@ export function payloadProgress(probe: PayloadProbe): SyncProgress {
 export function jobPollOutcome(status: number, job: JobProbe | null): PollOutcome {
   if (status === 404) return { kind: 'watch-payload' };
   if (status !== 200 || job === null) {
-    return { kind: 'failed', message: `Could not read job status (${status}).` };
+    return unreadable(status, `Could not read job status (${status}).`);
   }
   if (job.settled) return { kind: 'ready' };
   if (job.status === 'errored') return { kind: 'failed', message: syncErrorText(job.error) };
@@ -190,7 +205,7 @@ export function nextWatch(
   outcome: PollOutcome,
   baseline: string | null,
 ): SyncWatch | null {
-  if (outcome.kind === 'wait') return watch;
+  if (outcome.kind === 'wait' || outcome.kind === 'retry') return watch;
   if (outcome.kind === 'watch-payload') return { kind: 'payload', baseline };
   return null;
 }
