@@ -21,3 +21,13 @@ export function githubUnavailable(): Response {
     'cache-control': 'no-store',
   });
 }
+
+/**
+ * A failure nothing above accounts for. What went wrong goes to the Worker's
+ * log and never to the client: its message can quote another Worker's reply,
+ * a SQL error, or an internal id. The client gets `message`, written for it.
+ */
+export function serverError(message: string, cause: unknown): Response {
+  console.error(message, cause);
+  return json({ message }, 500, { 'cache-control': 'no-store' });
+}

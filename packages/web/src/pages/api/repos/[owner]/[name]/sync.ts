@@ -10,6 +10,7 @@ import {
   githubUnavailable,
   json,
   loginRequired,
+  serverError,
   unknownRepository,
 } from '../../../../../lib/http.ts';
 import {
@@ -100,6 +101,7 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
     if (error instanceof RepoNotFoundError) return unknownRepository();
     // GitHub failed on the first read (outage or transport): nothing is decided.
     if (error instanceof GithubError) return githubUnavailable();
-    return json({ message: error instanceof Error ? error.message : String(error) }, 500);
+    // Anything else is ours (the sync model, D1): logged, and not repeated to the client.
+    return serverError('The sync could not start. Try again in a moment.', error);
   }
 };
