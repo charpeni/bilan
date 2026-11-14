@@ -50,7 +50,7 @@ export interface RawPr {
   fileSample: string[];
   fileCount: number;
   reviewCount: number;
-  /** Up to the first 40 reviews; `reviewCount` is the true total. */
+  /** Up to the first 100 reviews (`REVIEWS_PER_PR`); `reviewCount` is the true total. */
   reviews: RawReview[];
   /**
    * Each reviewer's latest approval, change request, or dismissed review, as
