@@ -224,17 +224,26 @@ describe('payloadPollOutcome', () => {
     });
   });
 
-  it('fails on any other status', () => {
-    for (const status of [401, 403, 500, 503]) {
-      expect(
-        payloadPollOutcome({ status, syncedAt: null, syncActive: false, prsStored: null }, T1),
-      ).toEqual({
+  it('fails on a status that will not pass, and asks again on one that will', () => {
+    for (const status of [401, 403]) {
+      expect(statusOnly(status)).toEqual({
         kind: 'failed',
+        message: `Could not read sync status (${status}).`,
+      });
+    }
+    for (const status of [429, 500, 502, 503]) {
+      expect(statusOnly(status)).toEqual({
+        kind: 'retry',
         message: `Could not read sync status (${status}).`,
       });
     }
   });
 });
+
+/** The payload endpoint answering `status` and nothing else. */
+function statusOnly(status: number) {
+  return payloadPollOutcome({ status, syncedAt: null, syncActive: false, prsStored: null }, T1);
+}
 
 describe('jobPollOutcome', () => {
   it('is ready once the job settled, whether complete or partial', () => {
@@ -262,23 +271,26 @@ describe('jobPollOutcome', () => {
     expect(jobPollOutcome(404, null)).toEqual({ kind: 'watch-payload' });
   });
 
-  it('fails on any other status', () => {
+  it('fails on a status that will not pass, and asks again on one that will', () => {
     expect(jobPollOutcome(401, null)).toEqual({
       kind: 'failed',
       message: 'Could not read job status (401).',
     });
-    expect(jobPollOutcome(500, null)).toEqual({
-      kind: 'failed',
-      message: 'Could not read job status (500).',
-    });
+    for (const status of [429, 500, 503]) {
+      expect(jobPollOutcome(status, null)).toEqual({
+        kind: 'retry',
+        message: `Could not read job status (${status}).`,
+      });
+    }
   });
 });
 
 describe('nextWatch', () => {
   const job = { kind: 'job', jobId: 'j1' } as const;
 
-  it('keeps watching on wait', () => {
+  it('keeps watching on wait, and when the status could not be read this time', () => {
     expect(nextWatch(job, { kind: 'wait' }, T1)).toBe(job);
+    expect(nextWatch(job, { kind: 'retry', message: 'x' }, T1)).toBe(job);
   });
 
   it('switches an unreadable job to the payload, keeping the baseline', () => {

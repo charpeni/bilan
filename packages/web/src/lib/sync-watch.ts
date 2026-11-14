@@ -25,6 +25,18 @@ export class SyncWatchError extends Error {
 
 export const STOPPED_MESSAGE = 'The sync ended without publishing new data. Try again.';
 
+/**
+ * Probes in a row that may fail to read the status before the watch gives up:
+ * about a minute at `POLL_INTERVAL_MS`. An outage that short, of bilan or of
+ * GitHub (the status endpoints check access there), must not end the watch of
+ * a sync that is still running.
+ */
+export const RETRY_LIMIT = 15;
+
+/** What a watch that lost the network for that long says. */
+export const UNREACHABLE_MESSAGE =
+  'Lost contact while following the sync. It may still be running: reload to check.';
+
 export interface SyncWatchDeps {
   /** `/api/repos/:owner/:name` of the repository being watched. */
   apiBase: string;
@@ -96,8 +108,10 @@ export async function watchSync(
       ? liveSync(`${deps.apiBase}/live`, deps.live === true ? {} : deps.live)
       : null;
   const sleep = deps.sleep ?? live?.wait ?? defaultSleep;
+  // Between retries, a plain pause: a status event does not say the outage is over.
+  const pause = deps.sleep ?? defaultSleep;
   try {
-    await follow(initial, baseline, deps, sleep);
+    await follow(initial, baseline, deps, sleep, pause);
   } finally {
     live?.close();
   }
@@ -108,16 +122,36 @@ async function follow(
   baseline: string | null,
   deps: SyncWatchDeps,
   sleep: (ms: number) => Promise<void>,
+  pause: (ms: number) => Promise<void>,
 ): Promise<void> {
   let watch: SyncWatch | null = initial;
+  /** Probes in a row that could not read the status. */
+  let misses = 0;
   while (watch !== null) {
-    const { outcome, progress } = await probe(watch, deps);
+    // A request that never got an answer (offline, a dropped connection) is as
+    // inconclusive as a 503.
+    const { outcome, progress } = await probe(watch, deps).catch(() => ({
+      outcome: { kind: 'retry', message: UNREACHABLE_MESSAGE } satisfies PollOutcome,
+      progress: null,
+    }));
+    if (outcome.kind === 'retry') {
+      if (++misses > RETRY_LIMIT) throw new SyncWatchError('failed', outcome.message);
+      await pause(POLL_INTERVAL_MS);
+      continue;
+    }
+    misses = 0;
     if (outcome.kind === 'ready') return;
     if (outcome.kind === 'failed') throw new SyncWatchError('failed', outcome.message);
     if (outcome.kind === 'stopped') throw new SyncWatchError('stopped', STOPPED_MESSAGE);
     if (outcome.kind === 'wait' && progress) {
       // A staged run says it published; confirm the payload is actually on offer before handing over.
-      if (deps.untilFirstPayload && progress.interim && (await payloadOnOffer(deps))) return;
+      if (
+        deps.untilFirstPayload &&
+        progress.interim &&
+        (await payloadOnOffer(deps).catch(() => false))
+      ) {
+        return;
+      }
       deps.onProgress?.(progress);
     }
     watch = nextWatch(watch, outcome, baseline);
