@@ -4,7 +4,12 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { upsertUser } from '../src/auth.ts';
 import { createDb } from '../src/db.ts';
-import { admitSyncJob, applySyncJobChanges, SYNC_CAPACITY } from '../src/jobs.ts';
+import {
+  admitSyncJob,
+  applySyncJobChanges,
+  SYNC_CAPACITY,
+  syncJobAdmissible,
+} from '../src/jobs.ts';
 import { upsertRepo } from '../src/repos.ts';
 import { syncJobs } from '../src/schema.ts';
 
@@ -121,6 +126,59 @@ describe('atomic sync admission', () => {
 });
 
 const row = (id: string) => db.select().from(syncJobs).where(eq(syncJobs.id, id)).get();
+
+const count = async () => (await db.select().from(syncJobs)).length;
+
+describe('checking the quotas without writing', () => {
+  it('answers as admission would, and inserts nothing', async () => {
+    const job = await candidate();
+    expect(await syncJobAdmissible(db, job)).toBe(true);
+    expect(await count()).toBe(0);
+    expect(await admitSyncJob(db, job)).toBe(true);
+
+    // The repository is busy now, for anyone.
+    const other = await candidate();
+    expect(await syncJobAdmissible(db, { ...other, repoId: job.repoId })).toBe(false);
+    expect(await admitSyncJob(db, { ...other, repoId: job.repoId })).toBe(false);
+    expect(await count()).toBe(1);
+  });
+
+  it("refuses once the requester's concurrent or daily capacity is used up", async () => {
+    const first = await candidate();
+    const userId = first.requestedBy;
+    expect(await admitSyncJob(db, first)).toBe(true);
+    for (let i = 1; i < SYNC_CAPACITY.userConcurrent; i++) {
+      expect(await admitSyncJob(db, await candidate(userId))).toBe(true);
+    }
+    const over = await candidate(userId);
+    expect(await syncJobAdmissible(db, over)).toBe(false);
+
+    // Finished runs free the concurrent capacity but still count toward the day.
+    const rows = await db.select().from(syncJobs);
+    for (const admitted of rows) await finish(admitted.id);
+    expect(await syncJobAdmissible(db, over)).toBe(true);
+    for (let i = rows.length; i < SYNC_CAPACITY.userDaily; i++) {
+      const next = await candidate(userId);
+      expect(await admitSyncJob(db, next)).toBe(true);
+      await finish(next.id);
+    }
+    expect(await syncJobAdmissible(db, over)).toBe(false);
+    expect(await admitSyncJob(db, over)).toBe(false);
+    expect(await count()).toBe(SYNC_CAPACITY.userDaily);
+  });
+
+  it('honours the cooldown the same way', async () => {
+    const job = await candidate();
+    expect(await admitSyncJob(db, job)).toBe(true);
+    await finish(job.id);
+    const again = { ...job, id: `${job.id}-again` };
+    const cooling = { ...again, cooldownAfter: '2026-09-29T11:50:00.000Z' };
+    expect(await syncJobAdmissible(db, cooling)).toBe(false);
+    expect(await admitSyncJob(db, cooling)).toBe(false);
+    // A deeper sync carries no cooldown.
+    expect(await syncJobAdmissible(db, again)).toBe(true);
+  });
+});
 
 describe("the sync model's changes to sync_jobs", () => {
   const ended = { status: 'errored', error: 'lost: never admitted', finishedAt: now } as const;

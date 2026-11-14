@@ -1,5 +1,12 @@
 import { RepoNotFoundError, catchUpSince } from '@bilan/core';
-import { admitSyncJob, schema, touchRepoView, upsertRepo } from '@bilan/store-d1';
+import {
+  admitSyncJob,
+  getRepoById,
+  schema,
+  syncJobAdmissible,
+  touchRepoView,
+  upsertRepo,
+} from '@bilan/store-d1';
 import { and, count, desc, eq, inArray } from 'drizzle-orm';
 
 import { getDb } from './db.ts';
@@ -74,6 +81,36 @@ export function getJob(db: Db, id: string): Promise<SyncJob | undefined> {
   return db.select().from(schema.syncJobs).where(eq(schema.syncJobs.id, id)).get();
 }
 
+/**
+ * When the same requester may sync the repository again at `depth`: jobs they
+ * created after this instant refuse a new one. Null when `depth` reaches
+ * further back than what is stored (or nothing is), which no cooldown holds up.
+ */
+function cooldownStart(
+  depth: SyncDepth,
+  stored: { lastSyncedAt: string | null; coverageSince: string | null } | undefined,
+  now: number,
+): string | null {
+  const coverage = {
+    syncedAt: stored?.lastSyncedAt ?? null,
+    coverageSince: stored?.coverageSince ?? null,
+  };
+  return isDeeperThanCoverage(depth, coverage, now)
+    ? null
+    : new Date(now - SYNC_LIMIT_TTL_S * 1000).toISOString();
+}
+
+/**
+ * Why the quotas refused: a run of the repository `sync_jobs` lists as active
+ * (it may be one the model just saw end, whose update is on the way; either
+ * way it ends shortly and can be followed), else the requester's or bilan's
+ * capacity or the cooldown.
+ */
+async function refusal(db: Db, repoId: string): Promise<Error> {
+  const existing = await findActiveJob(db, repoId);
+  return existing ? new SyncAlreadyRunningError(existing.id) : new SyncRateLimitedError(60);
+}
+
 export interface StartSyncOptions {
   mode?: SyncRepoParams['mode'];
   /** How far back to guarantee activity; defaults to `'30d'`. Open PRs are always included. */
@@ -131,6 +168,27 @@ export async function startSync(
   const { meta } = source;
 
   const db = getDb(env);
+  const mode = options.mode ?? 'incremental';
+  const depth = options.depth ?? DEFAULT_DEPTH;
+
+  // Before anything is written: a request the quotas would refuse leaves no
+  // repository row behind and nothing in the sync model's history, however
+  // often it is repeated. Admission below still decides; this only reads the
+  // same conditions first.
+  const now = Date.now();
+  const createdAt = new Date(now).toISOString();
+  const cooldownAfter = cooldownStart(depth, await getRepoById(db, meta.id), now);
+  if (
+    !(await syncJobAdmissible(db, {
+      repoId: meta.id,
+      requestedBy: userId,
+      createdAt,
+      cooldownAfter,
+    }))
+  ) {
+    throw await refusal(db, meta.id);
+  }
+
   // GitHub's spelling, never the one asked for: `ref` may differ in case, or be
   // the old name of a renamed repo, and the row keeps one spelling.
   const repo = await upsertRepo(db, {
@@ -140,9 +198,6 @@ export async function startSync(
     isPrivate: meta.isPrivate,
     totalPrs: meta.pullRequests.totalCount,
   });
-
-  const mode = options.mode ?? 'incremental';
-  const depth = options.depth ?? DEFAULT_DEPTH;
 
   // Walk back at least to the start of the last complete run so nothing
   // updated since it (including during a partial run cut by the budget) is
@@ -181,36 +236,23 @@ export async function startSync(
     throw new Error(`The sync model refused the request: ${requested.rejected}`);
   }
 
-  const now = Date.now();
   const admitted = await admitSyncJob(db, {
     id: jobId,
     repoId: repo.id,
     requestedBy: userId,
     mode,
     maxPrs: options.maxPrs ?? null,
-    createdAt: new Date(now).toISOString(),
-    cooldownAfter: isDeeperThanCoverage(
-      depth,
-      {
-        syncedAt: repo.lastSyncedAt,
-        coverageSince: repo.coverageSince,
-      },
-      now,
-    )
-      ? null
-      : new Date(now - SYNC_LIMIT_TTL_S * 1000).toISOString(),
+    createdAt,
+    cooldownAfter,
   });
   if (!admitted) {
+    // Another request took the capacity since the check above.
     await releaseSync(env, { ...job, reason: 'quota' });
-    // `sync_jobs` may still list a run the model just saw end (its update is
-    // on the way): report it like a run in progress, which ends shortly.
-    const existing = await findActiveJob(db, repo.id);
-    if (existing) throw new SyncAlreadyRunningError(existing.id);
-    throw new SyncRateLimitedError(60);
+    throw await refusal(db, repo.id);
   }
   // Preserve the explicit import intent even if dispatch fails. Otherwise a
   // never-viewed private repo can be swept with its recent quota history.
-  await touchRepoView(db, { repoId: repo.id, userId, now: new Date(now).toISOString() });
+  await touchRepoView(db, { repoId: repo.id, userId, now: createdAt });
 
   // The model starts the Workflow once it records the admission (`StartSyncRun`).
   const started = await admitSync(env, job);

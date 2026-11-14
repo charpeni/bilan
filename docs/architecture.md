@@ -68,8 +68,9 @@ Sync admission is atomic in D1: one active job per repository, at most two
 active jobs and 20 starts per account in a rolling 24 hours, and at most 20
 active jobs and 200 starts globally. Deepening history still consumes these
 budgets; failed attempts count toward the daily budget. A repeated sync of the
-same depth has a 10-minute cooldown. The limits live in
-`packages/store-d1/src/jobs.ts`.
+same depth has a 10-minute cooldown. A request these limits would refuse is
+turned away before anything is written: no repository row, and nothing in the
+sync model's history. The limits live in `packages/store-d1/src/jobs.ts`.
 
 ## The sync model
 

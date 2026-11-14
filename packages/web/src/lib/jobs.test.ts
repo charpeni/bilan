@@ -4,6 +4,8 @@ import type * as Store from '@bilan/store-d1';
 
 const mocks = vi.hoisted(() => ({
   admit: vi.fn(),
+  admissible: vi.fn(),
+  stored: vi.fn(),
   touch: vi.fn(),
   upsert: vi.fn(),
   active: vi.fn(),
@@ -13,6 +15,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@bilan/store-d1', async (original) => ({
   ...(await original<typeof Store>()),
   admitSyncJob: mocks.admit,
+  syncJobAdmissible: mocks.admissible,
+  getRepoById: mocks.stored,
   touchRepoView: mocks.touch,
   upsertRepo: mocks.upsert,
 }));
@@ -74,6 +78,8 @@ beforeEach(() => {
   domain();
   mocks.active.mockResolvedValue(undefined);
   mocks.admit.mockResolvedValue(true);
+  mocks.admissible.mockResolvedValue(true);
+  mocks.stored.mockResolvedValue(undefined);
   mocks.upsert.mockResolvedValue({ id: 'R_private', lastSyncedAt: null, coverageSince: null });
 });
 
@@ -141,7 +147,48 @@ describe('starting a sync', () => {
     expect(paths()).toEqual(['/sync/request']);
   });
 
-  it('releases the repository when the quotas refuse, and never starts the run', async () => {
+  it('refuses a request over quota before writing anything', async () => {
+    mocks.admissible.mockResolvedValue(false);
+    await expect(startSync(env, ref, options)).rejects.toBeInstanceOf(SyncRateLimitedError);
+    // No repository row, nothing in the sync model's history, no job.
+    expect(mocks.upsert).not.toHaveBeenCalled();
+    expect(domainCalls()).toEqual([]);
+    expect(mocks.admit).not.toHaveBeenCalled();
+    expect(mocks.touch).not.toHaveBeenCalled();
+  });
+
+  it('points at the run in progress when that is why it is refused, still writing nothing', async () => {
+    mocks.admissible.mockResolvedValue(false);
+    mocks.active.mockResolvedValue({ id: 'running-job' });
+    const error = await startSync(env, ref, options).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(SyncAlreadyRunningError);
+    expect(error).toMatchObject({ jobId: 'running-job' });
+    expect(mocks.upsert).not.toHaveBeenCalled();
+    expect(domainCalls()).toEqual([]);
+  });
+
+  it('checks and admits on the same terms: the stored coverage decides the cooldown', async () => {
+    const terms = () =>
+      [mocks.admissible, mocks.admit].map((mock) => {
+        const [, job] = mock.mock.calls[0] as [unknown, Record<string, unknown>];
+        const { repoId, requestedBy, createdAt, cooldownAfter } = job;
+        return { repoId, requestedBy, createdAt, cooldownAfter };
+      });
+    // Never synced: nothing to cool down from.
+    await startSync(env, ref, options);
+    expect(terms()[0]).toMatchObject({ repoId: 'R_private', requestedBy: 7, cooldownAfter: null });
+    expect(terms()[1]).toEqual(terms()[0]);
+
+    // Synced in full a moment ago: the same depth again waits out the cooldown.
+    vi.clearAllMocks();
+    domain();
+    mocks.stored.mockResolvedValue({ lastSyncedAt: '2026-01-01T00:00:00Z', coverageSince: null });
+    await startSync(env, ref, options);
+    expect(terms()[0]?.cooldownAfter).toEqual(expect.any(String));
+    expect(terms()[1]).toEqual(terms()[0]);
+  });
+
+  it('releases the repository when the quotas refuse at admission, and never starts the run', async () => {
     mocks.admit.mockResolvedValue(false);
     await expect(startSync(env, ref, options)).rejects.toBeInstanceOf(SyncRateLimitedError);
     const [request, release] = domainCalls();
