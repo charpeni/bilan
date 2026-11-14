@@ -12,7 +12,7 @@ import { countStoredPrs, findActiveJob, findLastJob } from '../lib/jobs.ts';
 import { installUrl, loginHref } from '../lib/oauth.ts';
 import { repoRowStatus } from '../lib/repo-row-status.ts';
 import { parseRepoInput, REPO_INPUT_HINT } from '../lib/repo-input.ts';
-import { filterVisibleViews } from '../lib/views.ts';
+import { capViews, filterVisibleViews, REPOSITORIES_LIMIT } from '../lib/views.ts';
 
 const user = Astro.locals.user;
 if (!user) return Astro.redirect(loginHref('/repositories'), 302);
@@ -38,7 +38,10 @@ if (requested !== null) {
 // (and per repo for the public visibility probe).
 const deps = accessDeps(env);
 const db = getDb(env);
-const views = await filterVisibleViews(await listRepoViews(db, user.id), (view) =>
+// Only the most recently opened ones: each row costs an access check and a few
+// queries, so the list is bounded (see `REPOSITORIES_LIMIT`).
+const { shown, more } = capViews(await listRepoViews(db, user.id, REPOSITORIES_LIMIT + 1));
+const views = await filterVisibleViews(shown, (view) =>
   checkRepoAccess(deps, user, {
     id: view.repoId,
     owner: view.owner,
@@ -169,6 +172,13 @@ const rows = await Promise.all(
         )
       }
     </div>
+    {
+      more && (
+        <p class="muted small me-foot">
+          Showing only the repositories you opened most recently. Open any other by name above.
+        </p>
+      )
+    }
     <p class="muted small me-foot">
       Public repositories work right away. Private repositories need bilan installed on your
       organization{install && <> (<a href={install}>install it on GitHub</a>)</>}.

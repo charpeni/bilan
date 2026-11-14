@@ -20,7 +20,7 @@ export const GET: APIRoute = async ({ locals }) => {
   const user = locals.user;
   if (!user) return loginRequired();
   const deps = accessDeps(env);
-  const recent = (await listRepoViews(getDb(env), user.id)).slice(0, SWITCHER_LIMIT);
+  const recent = await listRepoViews(getDb(env), user.id, SWITCHER_LIMIT);
   const views = await filterVisibleViews(recent, (view) =>
     checkRepoAccess(deps, user, {
       id: view.repoId,
