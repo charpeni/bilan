@@ -14,6 +14,12 @@ export const COVERAGE_SLACK = DAY;
 export const isRange = (value: unknown): value is Range =>
   typeof value === 'string' && (RANGES as readonly string[]).includes(value);
 
+/**
+ * Whether the trend charts read a range day by day: seven days would be two
+ * partial weeks. Only then are there weekends to hide, as every week holds one.
+ */
+export const readsByDay = (range: string): boolean => range === '7';
+
 /** Epoch ms where a range's window starts; `-Infinity` for `'all'`. */
 export const rangeStart = (range: Range, last: number): number =>
   range === 'all' ? -Infinity : last - Number(range) * DAY;

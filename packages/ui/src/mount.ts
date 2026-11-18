@@ -1,7 +1,7 @@
 import { createFilterState, derive, filterOptions, firstActivity, lastActivity } from '@bilan/core';
 
 import { renderBrief } from './brief.ts';
-import { DEFAULT_RANGE, isCovered, isRange, rangeSinceDate } from './range.ts';
+import { DEFAULT_RANGE, isCovered, isRange, rangeSinceDate, readsByDay } from './range.ts';
 import { render } from './render.ts';
 import { createTooltip } from './tooltip.ts';
 import { el, fmtDate, holdHeight } from './utils.ts';
@@ -65,6 +65,10 @@ const THEME_SEG = `<div class="seg" role="group" aria-label="Theme">
       <button type="button" data-theme-set="dark" aria-pressed="false">Dark</button>
     </div>`;
 
+/** What "Hide weekends" does, and where it is offered. */
+const WEEKENDS_DESC =
+  'Leaves Saturdays and Sundays (UTC) out of the daily charts. Available on the 7-day view, where each point is one UTC day.';
+
 /** The static shell: same ids and classes as the original report body. */
 const shell = (themeControl: boolean): string => `<div class="wrap">
   <header class="page">
@@ -90,9 +94,11 @@ const shell = (themeControl: boolean): string => `<div class="wrap">
     <select class="dim" id="area-filter" aria-label="Area"></select>
     <select class="dim" id="person-filter" aria-label="Contributor"></select>
     <label class="check"><input type="checkbox" id="hide-bots" checked> Exclude bots</label>
+    <label class="check" title="${WEEKENDS_DESC}"><input type="checkbox" id="hide-weekends" aria-describedby="weekends-desc"> Hide weekends</label>
     <span class="note load-note" id="load-note" role="status" aria-live="polite" hidden></span>
     <span class="note" id="scope-note"></span>
     <span class="sr-only" id="load-desc"></span>
+    <span class="sr-only" id="weekends-desc">${WEEKENDS_DESC}</span>
   </div>
 
   <main id="app"></main>
@@ -155,6 +161,7 @@ export function mount(root: HTMLElement, payload: Payload, options: MountOptions
   const areaSel = must<HTMLSelectElement>('#area-filter');
   const personSel = must<HTMLSelectElement>('#person-filter');
   const hideBots = must<HTMLInputElement>('#hide-bots');
+  const hideWeekends = must<HTMLInputElement>('#hide-weekends');
   {
     const opts = filterOptions(prs, bots);
     areaSel.append(el('option', { value: '', text: 'All areas' }));
@@ -166,7 +173,14 @@ export function mount(root: HTMLElement, payload: Payload, options: MountOptions
     areaSel.value = state.area;
     personSel.value = state.person;
     hideBots.checked = state.hideBots;
+    hideWeekends.checked = state.hideWeekends;
   }
+  // Only a day-by-day read has weekends of its own to hide; the choice is kept
+  // for when the reader comes back to it.
+  const offerWeekends = (): void => {
+    hideWeekends.disabled = !readsByDay(state.range);
+  };
+  offerWeekends();
 
   const press = (value: string, attr: string): void => {
     for (const b of root.querySelectorAll(`[${attr}]`)) {
@@ -202,6 +216,7 @@ export function mount(root: HTMLElement, payload: Payload, options: MountOptions
   const setRange = (range: Range): void => {
     state.range = covered(range) ? range : DEFAULT_RANGE;
     press(state.range, 'data-range');
+    offerWeekends();
     draw();
   };
 
@@ -289,6 +304,10 @@ export function mount(root: HTMLElement, payload: Payload, options: MountOptions
   });
   hideBots.addEventListener('change', () => {
     state.hideBots = hideBots.checked;
+    draw();
+  });
+  hideWeekends.addEventListener('change', () => {
+    state.hideWeekends = hideWeekends.checked;
     draw();
   });
 

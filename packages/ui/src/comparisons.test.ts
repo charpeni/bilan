@@ -165,7 +165,13 @@ describe('selected-period comparisons', () => {
     root.querySelector<HTMLButtonElement>('.period-load')!.click();
     expect(onLoadMore).toHaveBeenCalledWith('90', { preserveRange: true });
     const selection = handle.filters();
-    expect(selection).toEqual({ range: '30', area: 'api', person: 'alice', hideBots: true });
+    expect(selection).toEqual({
+      range: '30',
+      area: 'api',
+      person: 'alice',
+      hideBots: true,
+      hideWeekends: false,
+    });
     handle.destroy();
     handle = mount(root, data(), { initialFilters: selection });
     expect(handle.filters()).toEqual(selection);

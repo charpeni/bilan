@@ -17,6 +17,7 @@ import {
   scope,
   sizeBins,
   standouts,
+  sum,
   throughput,
   timeBuckets,
   topReviewers,
@@ -26,7 +27,7 @@ import {
 import { DASH, barChart, columnChart, heatmap, legend, timeChart } from './charts.ts';
 import { comparisonText, periodComparison } from './comparison.ts';
 import { person, prLink, svgPerson } from './person.ts';
-import { canCompare } from './range.ts';
+import { canCompare, readsByDay } from './range.ts';
 import { table } from './table.ts';
 import {
   HOUR,
@@ -96,9 +97,19 @@ export const hoursFmt = (v: number): string => {
   return years >= 1 ? `${years.toFixed(1)}y` : dur(v * HOUR);
 };
 
+interface BucketWords {
+  name: string;
+  every: string;
+  many: string;
+}
+
+/** A weekday is a day like any other in a description; the card says weekends are hidden. */
+const DAILY: BucketWords = { name: 'UTC day', every: 'Daily', many: 'Days' };
+
 /** How the trend charts' descriptions name a bucket. */
-const BUCKET_WORDS: Record<TimeUnit, { name: string; every: string; many: string }> = {
-  day: { name: 'UTC day', every: 'Daily', many: 'Days' },
+const BUCKET_WORDS: Record<TimeUnit, BucketWords> = {
+  day: DAILY,
+  weekday: DAILY,
   week: { name: 'ISO week', every: 'Weekly', many: 'Weeks' },
 };
 
@@ -109,26 +120,37 @@ interface PeriodNames {
   tick: (t: number) => string;
   /** What the columns are, above the row labels. */
   title: string;
+  /** The period in a sentence: `day`, `week`, `month`. */
+  noun: string;
 }
+
+const DAY_NAMES: PeriodNames = {
+  label: (t) => fmtUtc(t, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
+  tick: (t) => fmtUtc(t, { month: 'short', day: 'numeric' }),
+  title: 'Day',
+  noun: 'day',
+};
 
 /** Periods are UTC buckets, so they are named in UTC. */
 const PERIOD_NAMES: Record<Period, PeriodNames> = {
-  day: {
-    label: (t) => fmtUtc(t, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
-    tick: (t) => fmtUtc(t, { month: 'short', day: 'numeric' }),
-    title: 'Day',
-  },
+  day: DAY_NAMES,
+  weekday: DAY_NAMES,
   week: {
     label: (t) => `week of ${fmtUtc(t, { month: 'short', day: 'numeric', year: 'numeric' })}`,
     tick: (t) => fmtUtc(t, { month: 'short', day: 'numeric' }),
     title: 'Week of',
+    noun: 'week',
   },
   month: {
     label: (t) => fmtUtc(t, { month: 'short', year: 'numeric' }),
     tick: (t) => fmtUtc(t, { month: 'short', year: 'numeric' }),
     title: 'Month',
+    noun: 'month',
   },
 };
+
+/** What a daily chart says once weekends are hidden: they are UTC days, like its buckets. */
+const WEEKENDS_HIDDEN = 'Saturdays and Sundays (UTC) are hidden';
 
 interface Insight {
   text: string;
@@ -235,21 +257,31 @@ export function render(ctx: DashboardContext): void {
   app.append(grid);
 
   /* ---- time buckets shared by the trend charts ---- */
-  // Seven days would be two partial weeks, so that range is read day by day.
-  const bucket: TimeUnit = ctx.state.range === '7' ? 'day' : 'week';
+  const daily = readsByDay(ctx.state.range);
+  const bucket: TimeUnit = daily ? (ctx.state.hideWeekends ? 'weekday' : 'day') : 'week';
+  const hidden = bucket === 'weekday';
   const words = BUCKET_WORDS[bucket];
+  const { noun } = PERIOD_NAMES[bucket];
   const tb = timeBuckets(w, LAST, bucket);
   const xs = tb.starts;
   // A day is named outright in the crosshair; a week keeps the chart's `Week of …`.
-  const xLabel = bucket === 'day' ? PERIOD_NAMES.day.label : undefined;
+  const xLabel = daily ? PERIOD_NAMES.day.label : undefined;
+  // The last bucket holds the snapshot, so it is still filling, unless the
+  // snapshot fell on a hidden weekend: the last point is then a whole Friday.
+  const partial = tb.inRange(tb.idxOf(LAST));
+  const lastPoint = partial ? ` The last point is the current, partial ${noun}.` : '';
 
   /* 1. throughput */
   {
     const t = throughput(w, tb);
+    // The tiles count every day, so the card says what its chart leaves out.
+    const off = hidden
+      ? ` ${WEEKENDS_HIDDEN}, along with what happened on them: ${plural(opened.length - sum(t.opened), 'PR')} opened, ${num(merged.length - sum(t.merged))} merged, ${num(w.rejected.length - sum(t.closed))} closed unmerged.`
+      : '';
     const c = card(
       'twothirds',
       'Throughput',
-      `PRs opened, merged, and closed without merging, bucketed by ${words.name}. The last point is the current, partial ${bucket}.`,
+      `PRs opened, merged, and closed without merging, bucketed by ${words.name}.${lastPoint}${off}`,
     );
     legend(c, [
       { name: 'Opened', ...L1() },
@@ -279,7 +311,7 @@ export function render(ctx: DashboardContext): void {
     const c = card(
       'third',
       'Open PR backlog',
-      `PRs still open at the end of each ${bucket}, and how many of those were still drafts. Drafts are counted from the ready-for-review event, so they are part of the open line, not in addition to it.`,
+      `PRs still open at the end of each ${noun}, and how many of those were still drafts. Drafts are counted from the ready-for-review event, so they are part of the open line, not in addition to it.${hidden ? ` ${WEEKENDS_HIDDEN}.` : ''}`,
     );
     legend(c, [
       { name: 'Open', ...L1() },
@@ -307,7 +339,7 @@ export function render(ctx: DashboardContext): void {
     const c = card(
       '',
       'Cycle time trend',
-      `${words.every} median time from ready-for-review to first review, and to merge. ${words.many} with no data are skipped; the last point is the current, partial ${bucket}.`,
+      `${words.every} median time from ready-for-review to first review, and to merge. ${words.many} with no data are skipped${partial ? `; the last point is the current, partial ${noun}` : ''}.${hidden ? ` ${WEEKENDS_HIDDEN}: a PR that became ready on one leaves the first-review line, and a PR merged on one leaves the merge line. A wait that spans a weekend still counts its hours.` : ''}`,
     );
     legend(c, [
       { name: 'Ready → first review', ...L2() },
@@ -417,7 +449,7 @@ export function render(ctx: DashboardContext): void {
     const c = card(
       '',
       'Where the work moves',
-      `Merged PRs per ${unit} in the busiest areas, with each area's total in range. Color follows the square root of the count, so quieter areas still show beside the busiest. With an area selected, the other rows are areas its PRs also touched. The last column is the current, partial ${unit}.`,
+      `Merged PRs per ${names.noun} in the busiest areas, with each area's total in range. Color follows the square root of the count, so quieter areas still show beside the busiest. With an area selected, the other rows are areas its PRs also touched.${partial ? ` The last column is the current, partial ${names.noun}.` : ''}${hidden ? ` ${WEEKENDS_HIDDEN}, and the totals leave out their merges.` : ''}`,
     );
     const h = chartHost(c);
     grid.append(c);
@@ -722,7 +754,7 @@ export function render(ctx: DashboardContext): void {
       },
       s.merged && {
         text: `${pctFmt(s.weekendShare)} of merges happened on a weekend`,
-        detail: `${s.weekendMerges} merges on Sat/Sun`,
+        detail: `${s.weekendMerges} merges on Sat/Sun, local time`,
         bad: s.weekendShare > 0.1,
       },
       s.stale && {

@@ -38,6 +38,16 @@ describe('areaActivity', () => {
     expect(act.rows).toEqual([{ area: 'api', counts: [0, 0, 0, 0, 0, 0, 1, 0], total: 1 }]);
   });
 
+  it('leaves weekends out of a daily read on weekdays', () => {
+    // A docs merge on the Saturday of week 1 shows by day, and not on weekdays.
+    const withSaturday = [...prs, mergedAt(6, W0 + 12 * DAY_MS + HOUR_MS, ['docs'])];
+    const days = areaActivity(win(withSaturday, LAST, { range: '7' }), 'day');
+    expect(days.rows.map((r) => r.area)).toEqual(['api', 'docs']);
+    const act = areaActivity(win(withSaturday, LAST, { range: '7' }), 'weekday');
+    expect(act.periods).toEqual([8, 9, 10, 11, 14, 15].map((n) => W0 + n * DAY_MS));
+    expect(act.rows).toEqual([{ area: 'api', counts: [0, 0, 0, 0, 1, 0], total: 1 }]);
+  });
+
   it('counts merged PRs per area and ISO week, busiest area first', () => {
     const act = areaActivity(win(prs, LAST), 'week');
     expect(act.periods).toEqual([W0, W0 + WEEK, W0 + 2 * WEEK]);

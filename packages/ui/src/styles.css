@@ -421,6 +421,15 @@ select.dim:hover,
 label.check:hover {
   background-color: var(--wash);
 }
+/* A toggle the current range has no use for (weekends, beyond 7 days) stays in place, inert. */
+label.check:has(input:disabled) {
+  color: var(--muted);
+  background-color: var(--field);
+  cursor: default;
+}
+label.check input:disabled {
+  cursor: default;
+}
 .filters .note {
   color: var(--muted);
   font: 400 12px/1.4 var(--font-mono);

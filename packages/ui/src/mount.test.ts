@@ -119,6 +119,38 @@ const bigQuietPr = (n: number): PayloadPr => ({
   rq: [],
 });
 
+/** UTC `hour` on `day` April 2026: the 11th is a Saturday. */
+const april = (day: number, hour = 0): number => Date.UTC(2026, 3, day, hour);
+
+/** alice's PR opened at `c`, then merged at `m`, closed unmerged at `x`, or still open. */
+const prAt = (n: number, c: number, end: { m?: number; x?: number } = {}): PayloadPr => {
+  const m = end.m ?? null;
+  const x = m ?? end.x ?? null;
+  return {
+    n,
+    t: `Change ${n}`,
+    a: 'alice',
+    bot: 0,
+    c,
+    r: c,
+    d: 0,
+    m,
+    x,
+    s: m !== null ? 'MERGED' : x !== null ? 'CLOSED' : 'OPEN',
+    dr: 0,
+    mb: m === null ? null : 'alice',
+    ad: 10,
+    de: 0,
+    cf: 1,
+    ar: ['api'],
+    cm: 0,
+    th: 0,
+    rc: 0,
+    rv: [],
+    rq: [],
+  };
+};
+
 const texts = (root: ParentNode, sel: string): string[] =>
   [...root.querySelectorAll(sel)].map((n) => n.textContent ?? '');
 
@@ -171,6 +203,23 @@ describe('mount', () => {
   };
   const shown = (): number => cards().filter((c) => !c.hasAttribute('inert')).length;
   const firstCard = (): Element | null => root.querySelector('#app .card');
+  /** The "Hide weekends" checkbox. */
+  const weekendsBox = (): HTMLInputElement => {
+    const node = root.querySelector<HTMLInputElement>('#hide-weekends');
+    if (!node) throw new Error('no weekends checkbox');
+    return node;
+  };
+  const hideWeekends = (checked: boolean): void => {
+    weekendsBox().checked = checked;
+    weekendsBox().dispatchEvent(new Event('change'));
+  };
+  const descOf = (title: string): string =>
+    cardNamed(root, title)?.querySelector('.desc')?.textContent ?? '';
+  /** The dates under a chart: its x-axis ticks, not its y-axis figures. */
+  const datesUnder = (title: string): string[] =>
+    texts(cardNamed(root, title) ?? root, 'svg text.tick').filter((t) =>
+      /^[A-Z][a-z]{2} \d+$/.test(t),
+    );
 
   it('renders the header, tiles, every card, and the brief', async () => {
     setup();
@@ -270,6 +319,109 @@ describe('mount', () => {
     expect(root.querySelector('.card .desc')?.textContent).toContain('bucketed by UTC day');
     click('30');
     expect(root.querySelector('.card .desc')?.textContent).toContain('bucketed by ISO week');
+  });
+
+  describe('hiding weekends', () => {
+    it('is offered on the 7-day range only, and kept across ranges', () => {
+      setup();
+      expect(weekendsBox().disabled).toBe(true);
+      expect(weekendsBox().checked).toBe(false);
+      click('7');
+      expect(weekendsBox().disabled).toBe(false);
+      hideWeekends(true);
+      click('30');
+      expect(weekendsBox().disabled).toBe(true);
+      expect(weekendsBox().checked).toBe(true);
+      // Weeks each hold their weekend: nothing is hidden on them.
+      expect(descOf('Throughput')).toContain('bucketed by ISO week');
+      expect(root.querySelector('#app')?.textContent).not.toContain('Saturdays and Sundays');
+      click('7');
+      expect(weekendsBox().disabled).toBe(false);
+      expect(descOf('Throughput')).toContain('Saturdays and Sundays (UTC) are hidden');
+    });
+
+    it('leaves Saturdays and Sundays out of the daily charts, and in the tiles', async () => {
+      setup();
+      click('7');
+      await flush();
+      const week = ['Apr 6', 'Apr 7', 'Apr 8', 'Apr 9', 'Apr 10', 'Apr 11', 'Apr 12', 'Apr 13'];
+      expect(datesUnder('Throughput')).toEqual(week);
+      hideWeekends(true);
+      await flush();
+      const weekdays = ['Apr 6', 'Apr 7', 'Apr 8', 'Apr 9', 'Apr 10', 'Apr 13'];
+      expect(datesUnder('Throughput')).toEqual(weekdays);
+      expect(datesUnder('Open PR backlog')).toEqual(weekdays);
+      expect(datesUnder('Cycle time trend')).toEqual(weekdays);
+      expect(texts(cardNamed(root, 'Where the work moves') ?? root, 'svg text.tick')).toContain(
+        'Apr 13',
+      );
+      expect(texts(cardNamed(root, 'Where the work moves') ?? root, 'svg text.tick')).not.toContain(
+        'Apr 11',
+      );
+      // #13, the weekend hotfix, was opened and merged on Saturday, Apr 11.
+      expect(descOf('Throughput')).toContain(
+        'Saturdays and Sundays (UTC) are hidden, along with what happened on them: 1 PR opened, 1 merged, 0 closed unmerged.',
+      );
+      expect(descOf('Throughput')).toContain('The last point is the current, partial day.');
+      expect(descOf('Cycle time trend')).toContain(
+        'a PR that became ready on one leaves the first-review line, and a PR merged on one leaves the merge line. A wait that spans a weekend still counts its hours.',
+      );
+      expect(descOf('Where the work moves')).toContain('the totals leave out their merges');
+      // The tiles still count the weekend: PRs #12 and #13.
+      expect(heroValue(root)).toBe('2');
+      expect(handle?.filters().hideWeekends).toBe(true);
+    });
+
+    it('ends on a whole Friday when the snapshot falls on a weekend', async () => {
+      // Sunday, Apr 12: the last 7 days start on a Sunday too.
+      setup({ ...payload(), syncedAt: new Date(Date.UTC(2026, 3, 12, 12)).toISOString() });
+      click('7');
+      expect(descOf('Throughput')).toContain('The last point is the current, partial day.');
+      hideWeekends(true);
+      await flush();
+      expect(datesUnder('Throughput')).toEqual(['Apr 6', 'Apr 7', 'Apr 8', 'Apr 9', 'Apr 10']);
+      expect(descOf('Throughput')).not.toContain('partial');
+      expect(descOf('Cycle time trend')).not.toContain('partial');
+      expect(descOf('Where the work moves')).not.toContain('partial');
+    });
+
+    it('counts what it hides by event, from after the window start to the snapshot', () => {
+      // Sunday noon: the window runs from the Sunday before, noon excluded, to now, included.
+      setup({
+        ...payload(),
+        syncedAt: new Date(april(12, 12)).toISOString(),
+        prs: [
+          prAt(1, april(11, 10)), // opened Saturday, still open
+          prAt(2, april(5, 15)), // opened on the first Sunday, inside the window
+          prAt(3, april(12, 12)), // opened at the snapshot instant
+          prAt(4, april(9, 9), { m: april(11, 14) }), // merged Saturday
+          prAt(5, april(8, 9), { x: april(12, 12) }), // closed at the snapshot instant
+          prAt(6, april(6, 9), { x: april(11, 9) }), // closed Saturday
+          prAt(7, april(3, 9), { x: april(5, 12) }), // closed at the window start: the period before
+          prAt(8, april(7, 9), { m: april(8, 9) }), // opened and merged on weekdays, shown
+        ],
+      });
+      click('7');
+      hideWeekends(true);
+      expect(descOf('Throughput')).toContain(
+        'along with what happened on them: 3 PRs opened, 1 merged, 2 closed unmerged.',
+      );
+      // The tiles count every day: #1 to #6 and #8 were opened in the window.
+      expect(heroValue(root)).toBe('7');
+    });
+
+    it('comes back with the selection when a host mounts again', () => {
+      setup();
+      click('7');
+      hideWeekends(true);
+      if (!handle) throw new Error('not mounted');
+      const selection = handle.filters();
+      handle.destroy();
+      handle = mount(root, payload(), { initialFilters: selection });
+      expect(weekendsBox().checked).toBe(true);
+      expect(weekendsBox().disabled).toBe(false);
+      expect(descOf('Throughput')).toContain('Saturdays and Sundays (UTC) are hidden');
+    });
   });
 
   it('honours initialRange when the payload covers it', () => {
