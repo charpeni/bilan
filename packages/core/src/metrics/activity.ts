@@ -6,7 +6,7 @@ import { timeBuckets } from './weekly.ts';
 import type { Windowed } from './scope.ts';
 import type { TimeUnit } from './weekly.ts';
 
-/** The heatmap's columns: the trend charts' days or weeks, or months for a whole history. */
+/** The heatmap's columns: the trend charts' days, weekdays, or weeks, or months for a whole history. */
 export type Period = TimeUnit | 'month';
 
 export interface AreaActivityRow {

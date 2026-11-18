@@ -48,7 +48,7 @@ export type { BuildPayloadOptions } from './derive/payload.ts';
 export { median, percentile, sum } from './metrics/stats.ts';
 export { parseRepo } from './repo.ts';
 export { count, ranked, share } from './metrics/stats.ts';
-export { DAY, HOUR, dayStart, weekStart } from './metrics/time.ts';
+export { DAY, HOUR, dayStart, isWeekend, weekStart } from './metrics/time.ts';
 export { derive, firstActivity, isMerged, isReady, lastActivity } from './metrics/derive.ts';
 export type { ClosedPr, MergedPr, MetricPr, ReadyPr } from './metrics/derive.ts';
 export { createFilterState, filterOptions, scope, windowed } from './metrics/scope.ts';

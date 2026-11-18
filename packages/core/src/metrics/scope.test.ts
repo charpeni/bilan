@@ -67,8 +67,14 @@ const state = (over: Partial<FilterState> = {}): FilterState => ({
 });
 
 describe('createFilterState', () => {
-  it('starts on all time, everyone, every area, bots hidden', () => {
-    expect(createFilterState()).toEqual({ range: 'all', area: '', person: '', hideBots: true });
+  it('starts on all time, everyone, every area, bots hidden, weekends shown', () => {
+    expect(createFilterState()).toEqual({
+      range: 'all',
+      area: '',
+      person: '',
+      hideBots: true,
+      hideWeekends: false,
+    });
   });
 });
 

@@ -38,6 +38,20 @@ sample shows as unavailable, and a count rising from zero is labelled “New”.
 | Approved with no threads | merged          | every review was an approval and no review thread was opened                 |
 | Time to approval         | merged          | ready → first approval that still stands, by size                            |
 
+## Trend charts
+
+The trend charts read the 7-day view day by day and longer views by ISO week,
+starting on Monday; over all time, where the work moves reads by month. Every
+bucket is UTC, and the last point is the current, partial day, week, or month.
+
+On the 7-day view, **Hide weekends** leaves Saturdays and Sundays (UTC) out of
+the daily charts, along with the PRs opened, merged, closed, or made ready on
+them; each chart's description says what it left out, and the tiles and tables
+still count them. A wait that spans a weekend still counts it, so a PR made
+ready on a Friday can still stand out. A snapshot taken on a weekend then ends
+on a whole Friday. Longer views chart whole weeks, each holding its weekend,
+so the option has no effect on them and is unavailable.
+
 ## Areas
 
 Areas are folders, read from up to 30 changed file paths per pull request; a

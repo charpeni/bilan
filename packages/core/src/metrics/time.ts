@@ -21,3 +21,9 @@ export function monthStart(t: number): number {
   const d = new Date(t);
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);
 }
+
+/** Saturday or Sunday, in UTC like `dayStart`. */
+export function isWeekend(t: number): boolean {
+  const day = new Date(t).getUTCDay();
+  return day === 0 || day === 6;
+}

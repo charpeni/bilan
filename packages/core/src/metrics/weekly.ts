@@ -1,38 +1,45 @@
 import { firstActivity } from './derive.ts';
 import { median } from './stats.ts';
-import { DAY, HOUR, dayStart, weekStart } from './time.ts';
+import { DAY, HOUR, dayStart, isWeekend, weekStart } from './time.ts';
 
 import type { Scope } from './scope.ts';
 
-/** What a trend bucket spans: a UTC day, or an ISO week. */
-export type TimeUnit = 'day' | 'week';
+/**
+ * What a trend bucket spans: a UTC day; a UTC day from Monday to Friday, with
+ * no bucket for Saturdays and Sundays, so nothing on them is counted; or an
+ * ISO week.
+ */
+export type TimeUnit = 'day' | 'weekday' | 'week';
 
 /** Buckets of one `TimeUnit` from the start of the window (or of the data) to `last`. */
 export interface TimeBuckets {
+  /** The first day or week covered; on weekdays, possibly a weekend day with no bucket. */
   start: number;
   /** Length of one bucket, ms. */
   size: number;
   /** Bucket start timestamps, oldest first. */
   starts: number[];
-  /** Bucket index of a timestamp; may be out of range. */
+  /** Bucket index of a timestamp; out of range past either end, and on a weekend on weekdays. */
   idxOf: (t: number) => number;
   inRange: (i: number) => boolean;
 }
 
 export function timeBuckets(s: Scope, last: number, unit: TimeUnit = 'week'): TimeBuckets {
   const { from, authored } = s;
-  const floor = unit === 'day' ? dayStart : weekStart;
-  const size = unit === 'day' ? DAY : 7 * DAY;
+  const floor = unit === 'week' ? weekStart : dayStart;
+  const size = unit === 'week' ? 7 * DAY : DAY;
   const start = floor(from === -Infinity ? firstActivity(authored) : from);
   const starts: number[] = [];
-  for (let b = start; b <= last; b += size) starts.push(b);
-  return {
-    start,
-    size,
-    starts,
-    idxOf: (t) => Math.floor((floor(t) - start) / size),
-    inRange: (i) => i >= 0 && i < starts.length,
-  };
+  for (let b = start; b <= last; b += size) {
+    if (unit !== 'weekday' || !isWeekend(b)) starts.push(b);
+  }
+  const inRange = (i: number): boolean => i >= 0 && i < starts.length;
+  if (unit === 'weekday') {
+    // A weekend has no bucket to count, so a day's index is looked up instead.
+    const index = new Map(starts.map((b, i) => [b, i]));
+    return { start, size, starts, idxOf: (t) => index.get(dayStart(t)) ?? -1, inRange };
+  }
+  return { start, size, starts, idxOf: (t) => Math.floor((floor(t) - start) / size), inRange };
 }
 
 const bump = (arr: number[], i: number): void => {

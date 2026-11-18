@@ -213,6 +213,70 @@ describe('cycleTimeTrend', () => {
   });
 });
 
+/** `n` days after W0 (a Monday), at 00:00 UTC. */
+const day = (n: number) => W0 + n * DAY_MS;
+
+describe('weekday buckets', () => {
+  // The last 7 days run from Tuesday (day 15) to Tuesday (day 22), over a weekend.
+  const weekend = derive([
+    // Opened and ready on Saturday, reviewed and merged on Monday.
+    payloadPr({
+      n: 1,
+      c: day(19) + 10 * HOUR_MS,
+      r: day(19) + 10 * HOUR_MS,
+      m: day(21) + HOUR_MS,
+      x: day(21) + HOUR_MS,
+      rv: [['bob', 'APPROVED', day(21)]],
+    }),
+    // Opened on Friday, closed unmerged on Sunday.
+    payloadPr({
+      n: 2,
+      c: day(18) + 9 * HOUR_MS,
+      r: day(18) + 9 * HOUR_MS,
+      m: null,
+      x: day(20) + 9 * HOUR_MS,
+      s: 'CLOSED',
+      mb: null,
+      rv: [],
+    }),
+  ]);
+  const week = scope(weekend, new Set(), { ...createFilterState(), range: '7' }, LAST);
+
+  it('have no bucket for Saturdays and Sundays', () => {
+    const wd = timeBuckets(week, LAST, 'weekday');
+    expect(wd.starts).toEqual([15, 16, 17, 18, 21, 22].map(day));
+    expect(wd.size).toBe(DAY_MS);
+    expect(wd.idxOf(day(18) + 23 * HOUR_MS)).toBe(3);
+    expect(wd.inRange(wd.idxOf(day(19)))).toBe(false);
+    expect(wd.inRange(wd.idxOf(day(20) + 23 * HOUR_MS))).toBe(false);
+    expect(wd.idxOf(day(21))).toBe(4);
+    expect(wd.inRange(wd.idxOf(day(23)))).toBe(false);
+  });
+
+  it('leave out what happened on a weekend, where days keep it', () => {
+    const t = throughput(week, timeBuckets(week, LAST, 'day'));
+    expect(t.opened).toEqual([0, 0, 0, 1, 1, 0, 0, 0]);
+    expect(t.closed).toEqual([0, 0, 0, 0, 0, 1, 0, 0]);
+    const wd = throughput(week, timeBuckets(week, LAST, 'weekday'));
+    expect(wd.opened).toEqual([0, 0, 0, 1, 0, 0]);
+    expect(wd.merged).toEqual([0, 0, 0, 0, 1, 0]);
+    expect(wd.closed).toEqual([0, 0, 0, 0, 0, 0]);
+  });
+
+  it('read the backlog at the end of each weekday', () => {
+    // #2 is open at the end of Friday; by Monday's end both are closed.
+    expect(openBacklog(week, timeBuckets(week, LAST, 'weekday')).open).toEqual([0, 0, 0, 1, 0, 0]);
+  });
+
+  it('drop a wait that began on a weekend, but keep a weekend in a wait', () => {
+    const t = cycleTimeTrend(week, timeBuckets(week, LAST, 'weekday'));
+    // #1 became ready on Saturday, so its wait for a review has no bucket;
+    // its merge lands on Monday, the weekend still counted in its 39 hours.
+    expect(t.toFirst).toEqual([null, null, null, null, null, null]);
+    expect(t.toMerge).toEqual([null, null, null, null, 39, null]);
+  });
+});
+
 describe('cycleTimeTrend with bot reviewers', () => {
   it('buckets the first human review while bots are hidden', () => {
     const botPrs = derive(botFirstPrs());

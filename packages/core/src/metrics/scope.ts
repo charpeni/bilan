@@ -10,6 +10,12 @@ export interface FilterState {
   area: string;
   person: string;
   hideBots: boolean;
+  /**
+   * Leave Saturdays and Sundays (UTC) out of the trend charts that read day
+   * by day (the `weekday` unit). It scopes no metric: `scope` ignores it, and
+   * the tiles and tables still count weekends.
+   */
+  hideWeekends: boolean;
 }
 
 export const createFilterState = (): FilterState => ({
@@ -17,6 +23,7 @@ export const createFilterState = (): FilterState => ({
   area: '',
   person: '',
   hideBots: true,
+  hideWeekends: false,
 });
 
 export interface ReviewRow {
