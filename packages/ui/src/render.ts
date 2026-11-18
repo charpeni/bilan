@@ -339,7 +339,7 @@ export function render(ctx: DashboardContext): void {
     const c = card(
       '',
       'Cycle time trend',
-      `${words.every} median time from ready-for-review to first review, and to merge. ${words.many} with no data are skipped${partial ? `; the last point is the current, partial ${noun}` : ''}.${hidden ? ` ${WEEKENDS_HIDDEN}, with the PRs that became ready or merged on them; a wait over a weekend still counts it.` : ''}`,
+      `${words.every} median time from ready-for-review to first review, and to merge. ${words.many} with no data are skipped${partial ? `; the last point is the current, partial ${noun}` : ''}.${hidden ? ` ${WEEKENDS_HIDDEN}: a PR that became ready on one leaves the first-review line, and a PR merged on one leaves the merge line. A wait that spans a weekend still counts its hours.` : ''}`,
     );
     legend(c, [
       { name: 'Ready → first review', ...L2() },
@@ -754,7 +754,7 @@ export function render(ctx: DashboardContext): void {
       },
       s.merged && {
         text: `${pctFmt(s.weekendShare)} of merges happened on a weekend`,
-        detail: `${s.weekendMerges} merges on Sat/Sun`,
+        detail: `${s.weekendMerges} merges on Sat/Sun, local time`,
         bad: s.weekendShare > 0.1,
       },
       s.stale && {

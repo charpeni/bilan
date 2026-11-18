@@ -65,9 +65,9 @@ const THEME_SEG = `<div class="seg" role="group" aria-label="Theme">
       <button type="button" data-theme-set="dark" aria-pressed="false">Dark</button>
     </div>`;
 
-/** What "Hide weekends" does, and why only one range offers it. */
+/** What "Hide weekends" does, and where it is offered. */
 const WEEKENDS_DESC =
-  'Leaves Saturdays and Sundays (UTC) out of the day-by-day charts of the last 7 days. Longer ranges chart whole weeks.';
+  'Leaves Saturdays and Sundays (UTC) out of the daily charts. Available on the 7-day view, where each point is one UTC day.';
 
 /** The static shell: same ids and classes as the original report body. */
 const shell = (themeControl: boolean): string => `<div class="wrap">

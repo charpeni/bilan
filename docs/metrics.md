@@ -27,7 +27,7 @@ sample shows as unavailable, and a count rising from zero is labelled “New”.
 | ------------------------ | --------------- | ---------------------------------------------------------------------------- |
 | PRs opened               | created         |                                                                              |
 | Merged / closed unmerged | merged / closed |                                                                              |
-| Merged PRs by area       | merged          | per area and week, or month over all time; counted in every area touched     |
+| Merged PRs by area       | merged          | per area and day (7 days), week, or month (all time); in every area touched  |
 | Time in draft            | created         | opened → marked ready (draft-opened pull requests only)                      |
 | Time to first review     | ready           | ready → first review by someone other than the author                        |
 | Time to merge            | merged          | ready → merged                                                               |
@@ -42,15 +42,23 @@ sample shows as unavailable, and a count rising from zero is labelled “New”.
 
 The trend charts read the 7-day view day by day and longer views by ISO week,
 starting on Monday; over all time, where the work moves reads by month. Every
-bucket is UTC, and the last point is the current, partial day, week, or month.
+bucket is UTC. The last one is the current, partial day, week, or month, and on
+a bounded range the first holds only the part of it inside the range.
 
 On the 7-day view, **Hide weekends** leaves Saturdays and Sundays (UTC) out of
-the daily charts, along with the PRs opened, merged, closed, or made ready on
-them; each chart's description says what it left out, and the tiles and tables
-still count them. A wait that spans a weekend still counts it, so a PR made
-ready on a Friday can still stand out. A snapshot taken on a weekend then ends
-on a whole Friday. Longer views chart whole weeks, each holding its weekend,
-so the option has no effect on them and is unavailable.
+the daily charts, along with every event on them: a PR opened, merged, or
+closed on one, and in the cycle time trend, a PR that became ready on one.
+Each chart's description says what it left out, and the tiles and tables still
+count it. Only the event on the weekend leaves: a PR made ready on a Saturday
+and merged on Monday still counts in Monday's time to merge. A wait that spans
+a weekend still counts its hours, so a PR made ready on a Friday can still
+stand out. A snapshot taken on a weekend ends on a whole Friday. Longer views
+chart by week or month, where a weekend sits inside a bucket rather than on a
+point of its own, so the option is unavailable there.
+
+The weekend share of merges under "What stands out" reads the viewer's local
+time, as "When PRs get merged" does, so it can count a different set of merges
+from the UTC weekends the daily charts hide.
 
 ## Areas
 

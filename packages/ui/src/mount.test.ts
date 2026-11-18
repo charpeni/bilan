@@ -119,6 +119,38 @@ const bigQuietPr = (n: number): PayloadPr => ({
   rq: [],
 });
 
+/** UTC `hour` on `day` April 2026: the 11th is a Saturday. */
+const april = (day: number, hour = 0): number => Date.UTC(2026, 3, day, hour);
+
+/** alice's PR opened at `c`, then merged at `m`, closed unmerged at `x`, or still open. */
+const prAt = (n: number, c: number, end: { m?: number; x?: number } = {}): PayloadPr => {
+  const m = end.m ?? null;
+  const x = m ?? end.x ?? null;
+  return {
+    n,
+    t: `Change ${n}`,
+    a: 'alice',
+    bot: 0,
+    c,
+    r: c,
+    d: 0,
+    m,
+    x,
+    s: m !== null ? 'MERGED' : x !== null ? 'CLOSED' : 'OPEN',
+    dr: 0,
+    mb: m === null ? null : 'alice',
+    ad: 10,
+    de: 0,
+    cf: 1,
+    ar: ['api'],
+    cm: 0,
+    th: 0,
+    rc: 0,
+    rv: [],
+    rq: [],
+  };
+};
+
 const texts = (root: ParentNode, sel: string): string[] =>
   [...root.querySelectorAll(sel)].map((n) => n.textContent ?? '');
 
@@ -331,7 +363,9 @@ describe('mount', () => {
         'Saturdays and Sundays (UTC) are hidden, along with what happened on them: 1 PR opened, 1 merged, 0 closed unmerged.',
       );
       expect(descOf('Throughput')).toContain('The last point is the current, partial day.');
-      expect(descOf('Cycle time trend')).toContain('a wait over a weekend still counts it');
+      expect(descOf('Cycle time trend')).toContain(
+        'a PR that became ready on one leaves the first-review line, and a PR merged on one leaves the merge line. A wait that spans a weekend still counts its hours.',
+      );
       expect(descOf('Where the work moves')).toContain('the totals leave out their merges');
       // The tiles still count the weekend: PRs #12 and #13.
       expect(heroValue(root)).toBe('2');
@@ -349,6 +383,31 @@ describe('mount', () => {
       expect(descOf('Throughput')).not.toContain('partial');
       expect(descOf('Cycle time trend')).not.toContain('partial');
       expect(descOf('Where the work moves')).not.toContain('partial');
+    });
+
+    it('counts what it hides by event, from after the window start to the snapshot', () => {
+      // Sunday noon: the window runs from the Sunday before, noon excluded, to now, included.
+      setup({
+        ...payload(),
+        syncedAt: new Date(april(12, 12)).toISOString(),
+        prs: [
+          prAt(1, april(11, 10)), // opened Saturday, still open
+          prAt(2, april(5, 15)), // opened on the first Sunday, inside the window
+          prAt(3, april(12, 12)), // opened at the snapshot instant
+          prAt(4, april(9, 9), { m: april(11, 14) }), // merged Saturday
+          prAt(5, april(8, 9), { x: april(12, 12) }), // closed at the snapshot instant
+          prAt(6, april(6, 9), { x: april(11, 9) }), // closed Saturday
+          prAt(7, april(3, 9), { x: april(5, 12) }), // closed at the window start: the period before
+          prAt(8, april(7, 9), { m: april(8, 9) }), // opened and merged on weekdays, shown
+        ],
+      });
+      click('7');
+      hideWeekends(true);
+      expect(descOf('Throughput')).toContain(
+        'along with what happened on them: 3 PRs opened, 1 merged, 2 closed unmerged.',
+      );
+      // The tiles count every day: #1 to #6 and #8 were opened in the window.
+      expect(heroValue(root)).toBe('7');
     });
 
     it('comes back with the selection when a host mounts again', () => {
